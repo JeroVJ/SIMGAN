@@ -18,7 +18,12 @@ import java.awt.image.RenderedImage;
 import java.io.File;
 import java.time.LocalDate;
 import java.util.*;
-import java.util.stream.Collectors;
+import org.geotools.api.referencing.crs.CoordinateReferenceSystem;
+import org.geotools.api.referencing.operation.MathTransform;
+import org.geotools.referencing.CRS;
+import org.geotools.geometry.jts.JTS;
+import org.locationtech.jts.geom.*;
+
 
 /**
  * Procesa GeoTIFF de PlanetScope 4-band para calcular NDVI por parcela.
@@ -130,34 +135,57 @@ public class NdviProcessingService {
             Geometry parcelGeom, Parcel parcel, Terrain terrain,
             LocalDate captureDate, String sceneId) {
 
-        Envelope env = parcelGeom.getEnvelopeInternal();
         List<Double> ndviValues = new ArrayList<>();
 
-        // Sample points within the parcel geometry
-        double resolution = 0.00003; // ~3m en grados (PlanetScope)
-        for (double x = env.getMinX(); x <= env.getMaxX(); x += resolution) {
-            for (double y = env.getMinY(); y <= env.getMaxY(); y += resolution) {
-                Point point = parcelGeom.getFactory().createPoint(new Coordinate(x, y));
-                if (parcelGeom.contains(point)) {
-                    try {
-                        Point2D pos = new Point2D.Double(x, y);
-                        double[] values = coverage.evaluate(pos, (double[]) null);
+        try {
+            // 1. Obtener el CRS de la imagen (usa la interfaz de org.geotools.api)
+            CoordinateReferenceSystem tiffCrs = coverage.getCoordinateReferenceSystem();
 
-                        if (values != null && values.length >= 4) {
-                            double red = values[2];  // Band 3
-                            double nir = values[3];  // Band 4
+            // 2. Definir el CRS de la parcela
+            CoordinateReferenceSystem parcelCrs = CRS.decode("EPSG:4326", true);
 
-                            if (red + nir > 0) {
-                                double ndvi = (nir - red) / (nir + red);
-                                ndvi = Math.max(-1.0, Math.min(1.0, ndvi));
-                                ndviValues.add(ndvi);
+            // 3. Crear la transformación (esto ahora devolverá org.geotools.api.referencing.operation.MathTransform)
+            MathTransform transform = CRS.findMathTransform(parcelCrs, tiffCrs, true);
+
+            // 4. Transformar la geometría
+            Geometry projectedParcel = JTS.transform(parcelGeom, transform);
+
+            org.locationtech.jts.geom.Envelope env = projectedParcel.getEnvelopeInternal();
+            double step = 3.0;
+            GeometryFactory factory = projectedParcel.getFactory();
+
+            for (double x = env.getMinX(); x <= env.getMaxX(); x += step) {
+                for (double y = env.getMinY(); y <= env.getMaxY(); y += step) {
+                    Point point = factory.createPoint(new Coordinate(x, y));
+
+                    if (projectedParcel.contains(point)) {
+                        try {
+                            Point2D pos = new Point2D.Double(x, y);
+                            double[] values = coverage.evaluate(pos, (double[]) null);
+
+                            if (values != null && values.length >= 4) {
+                                double red = values[2];
+                                double nir = values[3];
+
+                                if (red > 0 || nir > 0) {
+                                    double ndvi = (nir - red) / (nir + red);
+                                    if (ndvi >= -1.0 && ndvi <= 1.0) {
+                                        ndviValues.add(ndvi);
+                                    }
+                                }
                             }
+                        } catch (Exception e) {
+                            // Punto fuera de la cobertura física de la imagen
                         }
-                    } catch (Exception e) {
-                        // Point outside raster extent, skip
                     }
                 }
             }
+
+            log.info("Parcela {}: {} pixeles válidos extraídos", parcel.getId(), ndviValues.size());
+
+        } catch (Exception e) {
+            log.error("Error proyectando coordenadas para parcela {}: {}", parcel.getId(), e.getMessage());
+            return null;
         }
 
         if (ndviValues.isEmpty()) {
@@ -269,7 +297,21 @@ public class NdviProcessingService {
 
     private Geometry parseGeoJsonGeometry(String geoJson) throws Exception {
         JsonNode node = objectMapper.readTree(geoJson);
-        JsonNode geometry = node.has("geometry") ? node.get("geometry") : node;
+        JsonNode geometry;
+
+        // --- NUEVA LÓGICA PARA EXTRAER EL POLÍGONO ---
+        if (node.has("features") && node.get("features").isArray() && node.get("features").size() > 0) {
+            // Viene como FeatureCollection (típico de Leaflet/Mapbox)
+            geometry = node.get("features").get(0).get("geometry");
+        } else if (node.has("geometry")) {
+            // Viene como un Feature único
+            geometry = node.get("geometry");
+        } else {
+            // Viene directo como Polygon o MultiPolygon
+            geometry = node;
+        }
+        // ---------------------------------------------
+
         String type = geometry.get("type").asText();
         JsonNode coords = geometry.get("coordinates");
 

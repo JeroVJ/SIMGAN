@@ -65,7 +65,7 @@ public class AnalysisOrchestrator {
 
         String geoJson = terrain.getGeoJson();
         LocalDate endDate = LocalDate.now();
-        LocalDate startDate = endDate.minusDays(30);
+        LocalDate startDate = endDate.minusDays(90);
 
         // ===== 1. Try Planet Labs =====
         if (planetApi.isConfigured()) {
@@ -73,60 +73,77 @@ public class AnalysisOrchestrator {
             result.put("source", "PLANET");
 
             try {
-                List<Map<String, Object>> scenes = planetApi.searchScenes(geoJson, startDate, endDate, 0.3);
+
+                // Buscamos escenas con un umbral de nubes aceptable (ej: 20%)
+                List<Map<String, Object>> scenes = planetApi.searchScenes(terrain.getGeoJson(), startDate, endDate, 0.2);
 
                 if (!scenes.isEmpty()) {
                     result.put("scenesFound", scenes.size());
-                    log.info("Planet: {} escenas encontradas", scenes.size());
+                    log.info("Planet: {} escenas encontradas en los últimos 15 días", scenes.size());
 
-                    // Select best scene (lowest cloud cover)
-                    Map<String, Object> bestScene = scenes.stream()
-                            .min(Comparator.comparingDouble(s -> (Double) s.getOrDefault("cloud_cover", 100.0)))
-                            .orElse(scenes.get(0));
+                    // Ordenamos las escenas por fecha de adquisición (la más reciente primero)
+                    scenes.sort((a, b) -> ((String) b.get("acquired")).compareTo((String) a.get("acquired")));
 
-                    String sceneId = (String) bestScene.get("id");
-                    result.put("selectedScene", sceneId);
-                    result.put("cloudCover", bestScene.get("cloud_cover"));
-                    log.info("Planet: mejor escena = {} (nubes: {}%)", sceneId, bestScene.get("cloud_cover"));
+                    boolean processedSuccess = false;
 
-                    // Activate and download
-                    String downloadUrl = planetApi.activateAndGetDownloadUrl(sceneId);
+                    // Lógica de reintento: Intentamos con las 3 más recientes por si la última aún no tiene assets listos
+                    for (int i = 0; i < Math.min(scenes.size(), 3); i++) {
+                        Map<String, Object> currentScene = scenes.get(i);
+                        String sceneId = (String) currentScene.get("id");
+                        Double cloudCover = (Double) currentScene.get("cloud_cover");
+                        String acquiredStr = (String) currentScene.get("acquired");
 
-                    if (downloadUrl != null) {
-                        File geotiff = planetApi.downloadGeoTiff(downloadUrl, sceneId);
+                        log.info("Planet: Evaluando escena {}/{} -> ID: {} (Fecha: {}, Nubes: {}%)",
+                                (i + 1), Math.min(scenes.size(), 3), sceneId, acquiredStr, cloudCover);
 
-                        if (geotiff != null && geotiff.exists()) {
-                            // Process!
-                            LocalDate captureDate = LocalDate.parse(
-                                    ((String) bestScene.getOrDefault("acquired", endDate.toString())).substring(0, 10));
+                        // Proceso de activación y obtención de URL de descarga
+                        String downloadUrl = planetApi.activateAndGetDownloadUrl(sceneId);
 
-                            List<NdviRecord> records = processingService.processGeoTiff(
-                                    geotiff, terrainId, captureDate, sceneId);
+                        if (downloadUrl != null) {
+                            File geotiff = planetApi.downloadGeoTiff(downloadUrl, sceneId);
 
-                            result.put("recordsProcessed", records.size());
-                            result.put("message", String.format(
-                                    "✅ Análisis Planet Labs completado. %d parcelas procesadas. Escena: %s",
-                                    records.size(), sceneId));
+                            if (geotiff != null && geotiff.exists()) {
+                                // Extraer la fecha real de captura para el registro
+                                LocalDate captureDate = LocalDate.parse(acquiredStr.substring(0, 10));
 
-                            // Clean up
-                            geotiff.delete();
-                            return result;
+                                // Procesar GeoTIFF (con soporte de coordenadas GeoTools corregido)
+                                List<NdviRecord> records = processingService.processGeoTiff(
+                                        geotiff, terrainId, captureDate, sceneId);
+
+                                if (records != null && !records.isEmpty()) {
+                                    result.put("selectedScene", sceneId);
+                                    result.put("cloudCover", cloudCover);
+                                    result.put("recordsProcessed", records.size());
+                                    result.put("message", String.format(
+                                            "✅ Monitoreo en tiempo real completado. %d parcelas analizadas. Fecha: %s",
+                                            records.size(), captureDate));
+
+                                    // Limpieza del archivo temporal y marcamos como éxito
+                                    geotiff.delete();
+                                    processedSuccess = true;
+                                    break;
+                                }
+                                geotiff.delete();
+                            }
                         } else {
-                            log.warn("Planet: no se pudo descargar GeoTIFF");
-                            result.put("planetNote", "Descarga de GeoTIFF falló. Intentando Sentinel-2...");
+                            log.warn("Planet: Asset no disponible para escena {}. Intentando con la siguiente más reciente...", sceneId);
                         }
-                    } else {
-                        log.warn("Planet: asset no se activó a tiempo");
-                        result.put("planetNote", "Asset aún activándose (puede tomar minutos). Intentando Sentinel-2...");
                     }
+
+                    if (processedSuccess) {
+                        return result;
+                    } else {
+                        result.put("planetNote", "Escenas recientes encontradas pero sus assets aún están en preparación.");
+                    }
+
                 } else {
-                    log.info("Planet: sin escenas disponibles en los últimos 30 días");
-                    result.put("planetNote", "Sin imágenes disponibles en los últimos 30 días. Intentando Sentinel-2...");
+                    log.info("Planet: no hay fotos recientes (últimos 15 días)");
+                    result.put("planetNote", "Sin imágenes recientes disponibles. Intentando Sentinel-2...");
                 }
             } catch (Exception e) {
                 log.error("Error en pipeline Planet: {}", e.getMessage(), e);
                 result.put("planetError", e.getMessage());
-                result.put("planetNote", "Error con Planet Labs. Intentando Sentinel-2...");
+                result.put("planetNote", "Error técnico con Planet Labs. Intentando Sentinel-2...");
             }
         }
 
