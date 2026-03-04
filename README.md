@@ -207,3 +207,8 @@ simgan-demo/
    - Crear finca → Dibujar terreno sobre satélite → Crear 3 parcelas → Ir a vista de rotación → Alternar estados
 
 3. **El mapa usa Esri World Imagery** (gratuito, no necesita API key)
+
+
+## Diagrama de clase v4 
+
+![Diagrama de clases SIMGAN](diagramaClaseSimganV3.jpg)
