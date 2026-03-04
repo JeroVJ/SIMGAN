@@ -211,4 +211,10 @@ simgan-demo/
 
 ## Diagrama de clase v4 
 
-![Diagrama de clases SIMGAN](diagramaClaseSimganV3.jpg)
+![Diagrama de clases SIMGAN](diagramaClaseSimganV3.jpg)  
+
+
+
+## Diagrama de ER v2
+![Diagrama ER SIMGAN](diagrama_er_v2_Simgan.jpg) 
+
