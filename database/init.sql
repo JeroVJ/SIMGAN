@@ -4,11 +4,39 @@
 -- this is reference only.
 -- =============================================
 
+-- Ganaderos
+CREATE TABLE IF NOT EXISTS ganaderos (
+    id BIGSERIAL PRIMARY KEY,
+    nombre_completo VARCHAR(255) NOT NULL,
+    apellido_completo VARCHAR(255) NOT NULL,
+    correo VARCHAR(255) UNIQUE NOT NULL,
+    contrasena VARCHAR(255) NOT NULL,
+    tipo_documento VARCHAR(10),
+    id_documento INTEGER,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Auth Tokens (Stateful token management)
+CREATE TABLE IF NOT EXISTS auth_tokens (
+    id BIGSERIAL PRIMARY KEY,
+    ganadero_id BIGINT NOT NULL REFERENCES ganaderos(id) ON DELETE CASCADE,
+    token TEXT NOT NULL UNIQUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP,
+    is_revoked BOOLEAN DEFAULT FALSE,
+    CONSTRAINT idx_auth_token_ganadero UNIQUE (ganadero_id, token)
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_ganadero_id ON auth_tokens(ganadero_id);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_token ON auth_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_auth_tokens_revoked ON auth_tokens(is_revoked);
+
 -- Farms
 CREATE TABLE IF NOT EXISTS farms (
     id BIGSERIAL PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
-    owner VARCHAR(255) NOT NULL,
+    ganadero_id BIGINT NOT NULL REFERENCES ganaderos(id) ON DELETE CASCADE,
     department VARCHAR(255),
     municipality VARCHAR(255),
     center_lat DOUBLE PRECISION,

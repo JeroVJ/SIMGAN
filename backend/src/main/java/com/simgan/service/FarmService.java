@@ -2,7 +2,9 @@ package com.simgan.service;
 
 import com.simgan.dto.FarmDto;
 import com.simgan.entity.Farm;
+import com.simgan.entity.Ganadero;
 import com.simgan.repository.FarmRepository;
+import com.simgan.repository.GanaderoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -14,11 +16,15 @@ import java.util.stream.Collectors;
 public class FarmService {
 
     private final FarmRepository farmRepository;
+    private final GanaderoRepository ganaderoRepository;
 
     public FarmDto.Response create(FarmDto.CreateRequest request) {
+        Ganadero ganadero = ganaderoRepository.findById(request.getGanaderoId())
+                .orElseThrow(() -> new RuntimeException("Ganadero no encontrado con id: " + request.getGanaderoId()));
+
         Farm farm = Farm.builder()
                 .name(request.getName())
-                .owner(request.getOwner())
+                .ganadero(ganadero)
                 .department(request.getDepartment())
                 .municipality(request.getMunicipality())
                 .centerLat(request.getCenterLat())
@@ -49,7 +55,7 @@ public class FarmService {
         return FarmDto.Response.builder()
                 .id(farm.getId())
                 .name(farm.getName())
-                .owner(farm.getOwner())
+                .ganaderoId(farm.getGanadero() != null ? farm.getGanadero().getId() : null)
                 .department(farm.getDepartment())
                 .municipality(farm.getMunicipality())
                 .centerLat(farm.getCenterLat())

@@ -9,6 +9,11 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
+      # host port changed to 5433 because Windows already has a local
+      # Postgres service listening on 5432; using the default value
+      # caused Spring Boot to connect to the wrong server (Spanish
+      # locale error, database not found).  Use 5433 so the container
+      # can be reached unambiguously.
       - "5432:5432"
     volumes:
       - simgan_data:/var/lib/postgresql/data

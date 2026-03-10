@@ -12,8 +12,7 @@ public class FarmDto {
         @NotBlank(message = "El nombre es obligatorio")
         private String name;
 
-        @NotBlank(message = "El propietario es obligatorio")
-        private String owner;
+        private Long ganaderoId;
 
         private String department;
         private String municipality;
@@ -27,7 +26,7 @@ public class FarmDto {
     public static class Response {
         private Long id;
         private String name;
-        private String owner;
+        private Long ganaderoId;
         private String department;
         private String municipality;
         private Double centerLat;
