@@ -24,8 +24,9 @@ public class Farm {
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false)
-    private String owner;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "ganadero_id", nullable = false)
+    private Ganadero ganadero;
 
     private String department;
 

@@ -17,7 +17,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/ndvi")
+@RequestMapping("/ndvi")
 @RequiredArgsConstructor
 @Slf4j
 public class NdviController {

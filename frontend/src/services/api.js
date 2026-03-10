@@ -5,6 +5,38 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' }
 })
 
+// Add token to requests
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('token')
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+})
+
+// Handle 401 responses
+api.interceptors.response.use(
+  response => response,
+  error => {
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+      window.location.href = '/'
+    }
+    return Promise.reject(error)
+  }
+)
+
+// ===== AUTH ENDPOINTS =====
+export const authApi = {
+  login: (email, password) => api.post('/auth/login', { email, password }).then(r => r.data),
+  register: (firstName, lastName, email, password) => api.post('/auth/register', { firstName, lastName, email, password }).then(r => r.data),
+  me: () => api.get('/auth/me').then(r => r.data),
+  logout: () => api.post('/auth/logout').then(r => r.data),
+  getSessions: () => api.get('/auth/sessions').then(r => r.data),
+  revokeAll: () => api.post('/auth/revoke-all').then(r => r.data)
+}
+
 // ===== FARMS =====
 export const farmApi = {
   getAll: () => api.get('/farms').then(r => r.data),
