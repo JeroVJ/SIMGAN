@@ -1,0 +1,467 @@
+/* ============================================================
+   PHASE 4 — Visual Design Upgrades
+   Enhances existing classes without breaking existing styles
+   ============================================================ */
+
+/* ── Transitions & Keyframes ── */
+@keyframes p4-fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes p4-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+:root {
+  --transition-fast: 0.12s ease;
+  --transition-base: 0.2s ease;
+  --transition-slow: 0.35s ease;
+  --glow-green:  0 0 24px rgba(74, 222, 128, 0.14);
+  --glow-amber:  0 0 24px rgba(245, 158, 11, 0.14);
+  --glow-blue:   0 0 24px rgba(59, 130, 246, 0.14);
+  --glow-red:    0 0 24px rgba(239, 68, 68, 0.14);
+}
+
+/* ── Page entrance animation ── */
+.page-header,
+.two-col,
+.card {
+  animation: p4-fade-up 0.3s var(--transition-base) both;
+}
+.two-col { animation-delay: 0.05s; }
+
+/* ============================================================
+   STAT CARDS — top-border accent + hover lift
+   ============================================================ */
+
+.comp-stat-card {
+  position: relative;
+  transition: transform var(--transition-base), box-shadow var(--transition-base);
+  overflow: hidden;
+}
+.comp-stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--color-border);
+  transition: background var(--transition-base);
+}
+.comp-stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+}
+
+/* Accent variants */
+.comp-stat-card--green::before  { background: #4ade80; box-shadow: var(--glow-green); }
+.comp-stat-card--amber::before  { background: #f59e0b; box-shadow: var(--glow-amber); }
+.comp-stat-card--blue::before   { background: #3b82f6; box-shadow: var(--glow-blue); }
+.comp-stat-card--red::before    { background: #ef4444; box-shadow: var(--glow-red); }
+.comp-stat-card--purple::before { background: #a855f7; }
+
+.comp-stat-card--green:hover  { box-shadow: var(--glow-green), 0 8px 24px rgba(0,0,0,0.25); }
+.comp-stat-card--amber:hover  { box-shadow: var(--glow-amber), 0 8px 24px rgba(0,0,0,0.25); }
+.comp-stat-card--blue:hover   { box-shadow: var(--glow-blue),  0 8px 24px rgba(0,0,0,0.25); }
+.comp-stat-card--red:hover    { box-shadow: var(--glow-red),   0 8px 24px rgba(0,0,0,0.25); }
+
+/* Stats grid layout */
+.p4-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+@media (max-width: 1200px) {
+  .p4-stats-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 768px) {
+  .p4-stats-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ============================================================
+   FARM CARDS — gradient accent strip + initial badge
+   ============================================================ */
+
+.farm-card {
+  position: relative;
+  transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+}
+.farm-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--color-primary);
+  box-shadow: var(--glow-green), 0 8px 20px rgba(0,0,0,0.2);
+}
+.farm-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-primary), #22c55e, transparent);
+  border-radius: var(--radius) var(--radius) 0 0;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+.farm-card:hover::before { opacity: 1; }
+
+/* Farm initial badge */
+.farm-card__initial {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-primary), #22c55e);
+  color: #0f1a12;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: var(--font-display);
+  flex-shrink: 0;
+  margin-right: 10px;
+  text-transform: uppercase;
+}
+
+.farm-card__header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.farm-card__header .farm-card__title {
+  margin: 0;
+  font-size: 18px;
+  font-family: var(--font-display);
+  color: var(--color-text);
+}
+
+/* ============================================================
+   TERRAIN CARDS — visual status + hover lift
+   ============================================================ */
+
+.terrain-card {
+  transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+  cursor: pointer;
+}
+.terrain-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  box-shadow: var(--glow-green);
+}
+
+/* Parcel status bar — taller, color-coded */
+.parcel-status-bar {
+  height: 6px !important;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--color-border);
+  margin-top: 8px;
+  display: flex;
+}
+.parcel-status-bar__segment {
+  height: 100%;
+  transition: width var(--transition-slow);
+}
+
+/* ============================================================
+   NDVI TABS — pill / segment control style
+   ============================================================ */
+
+.ndvi-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 4px;
+  width: fit-content;
+  margin-bottom: 20px;
+}
+
+.ndvi-tab {
+  padding: 7px 18px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+  white-space: nowrap;
+  font-family: var(--font-body);
+}
+.ndvi-tab:hover:not(.ndvi-tab--active) {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.ndvi-tab--active {
+  background: var(--color-primary) !important;
+  color: #0f1a12 !important;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.25);
+}
+
+/* ============================================================
+   TABLES — zebra striping, sticky headers, better readability
+   ============================================================ */
+
+.ganado-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  width: 100%;
+}
+
+.ganado-table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--color-surface);
+  z-index: 1;
+  padding: 10px 14px;
+  font-size: 11px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  border-bottom: 1px solid var(--color-border);
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+.ganado-table thead th.sortable {
+  cursor: pointer;
+}
+.ganado-table thead th.sortable:hover {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+}
+
+.ganado-table tbody tr {
+  transition: background var(--transition-fast);
+}
+.ganado-table tbody tr:nth-child(even) {
+  background: rgba(255,255,255,0.015);
+}
+.ganado-table tbody tr:hover {
+  background: var(--color-surface-2);
+}
+
+.ganado-table tbody td {
+  padding: 10px 14px;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  vertical-align: middle;
+}
+
+/* ============================================================
+   FORM INPUTS — validation feedback
+   ============================================================ */
+
+.input-field {
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+.input-field:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.12);
+  outline: none;
+}
+.input-field--error {
+  border-color: #ef4444 !important;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.12) !important;
+}
+.input-field--valid {
+  border-color: #4ade80 !important;
+  box-shadow: 0 0 0 3px rgba(74, 222, 128, 0.12) !important;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.form-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.form-field__error {
+  font-size: 12px;
+  color: #ef4444;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  animation: p4-fade-in 0.15s ease;
+}
+.form-field__hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* ============================================================
+   SIDEBAR — gradient active state, divider
+   ============================================================ */
+
+.sidebar-nav__item--active {
+  background: linear-gradient(90deg, rgba(74,222,128,0.15), rgba(74,222,128,0.05)) !important;
+  border-left: 3px solid var(--color-primary);
+  padding-left: calc(var(--sidebar-item-px, 14px) - 3px);
+}
+
+.sidebar-nav__divider {
+  height: 1px;
+  background: var(--color-border);
+  margin: 8px 12px;
+  opacity: 0.6;
+}
+
+.sidebar-nav__item {
+  transition: background var(--transition-fast), color var(--transition-fast);
+  border-left: 3px solid transparent;
+}
+.sidebar-nav__item:hover:not(.sidebar-nav__item--active) {
+  background: var(--color-surface-2);
+  border-left-color: var(--color-border);
+}
+
+/* ============================================================
+   GRAZING ALERTS — left accent border
+   ============================================================ */
+
+.grazing-alert {
+  border-left: 3px solid transparent;
+  transition: border-color var(--transition-fast), transform var(--transition-fast);
+}
+.grazing-alert:hover { transform: translateX(2px); }
+
+.grazing-alert--critical  { border-left-color: #ef4444; }
+.grazing-alert--warning   { border-left-color: #f59e0b; }
+.grazing-alert--info      { border-left-color: #3b82f6; }
+.grazing-alert--success   { border-left-color: #4ade80; }
+
+/* ============================================================
+   LOTE CARDS — full definition & hover
+   ============================================================ */
+
+.lote-card-v2 {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  transition: transform var(--transition-base), border-color var(--transition-base), box-shadow var(--transition-base);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.lote-card-v2::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 3px; height: 100%;
+  background: var(--color-primary);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+}
+.lote-card-v2:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-primary);
+  box-shadow: var(--glow-green);
+}
+.lote-card-v2:hover::before { opacity: 1; }
+
+.lote-card-v2__name {
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--font-display);
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+.lote-card-v2__meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.lote-card-v2__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(74,222,128,0.1);
+  color: var(--color-primary);
+}
+
+/* ============================================================
+   ACTION BUTTONS — micro-interactions
+   ============================================================ */
+
+.action-btn {
+  transition: background var(--transition-fast), color var(--transition-fast),
+              transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+.action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+.action-btn:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+.action-btn--primary:hover:not(:disabled) {
+  box-shadow: var(--glow-green);
+}
+
+/* ============================================================
+   BREADCRUMB — improved spacing
+   ============================================================ */
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+.breadcrumb a {
+  color: var(--color-text-secondary);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+.breadcrumb a:hover { color: var(--color-primary); }
+.breadcrumb span:last-child { color: var(--color-text); }
+
+/* ============================================================
+   CARD — subtle hover lift when inside a list
+   ============================================================ */
+
+.parcel-item {
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.parcel-item:hover {
+  background: var(--color-surface-2);
+}
+
+/* ============================================================
+   STATUS SELECT — match design system
+   ============================================================ */
+
+.status-select {
+  transition: border-color var(--transition-fast);
+}
+.status-select:focus {
+  border-color: var(--color-primary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(74,222,128,0.15);
+}
+
+/* ============================================================
+   AREA DISPLAY — richer stats bar
+   ============================================================ */
+
+.area-display {
+  animation: p4-fade-up 0.2s ease;
+}

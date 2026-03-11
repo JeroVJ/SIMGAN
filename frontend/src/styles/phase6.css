@@ -1,0 +1,342 @@
+/* ============================================================
+   PHASE 6 — Mobile Responsiveness
+   Supplements existing breakpoints without overwriting them.
+   Breakpoints:
+     ≤ 1200px — large tablet / small laptop
+     ≤  900px — tablet / mobile landscape  (sidebar collapses)
+     ≤  600px — phone portrait
+     ≤  400px — small phone
+   ============================================================ */
+
+/* ── Map heights: move out of inline-style territory ─────── */
+/* These override inline style={{ height: NNN }} on map roots. */
+/* The !important is intentional — inline styles win otherwise. */
+.map-wrapper {
+  height: 440px;
+}
+
+/* ── Sidebar & mobile layout already handled in
+      components.css + index.css — no changes needed here.    */
+
+/* ============================================================
+   TABLET  ≤ 900px
+   ============================================================ */
+@media (max-width: 900px) {
+
+  /* ── Core content padding ── */
+  .main-content {
+    padding: calc(var(--mobile-header-height) + 20px) 20px 28px;
+  }
+
+  /* ── Two-column layout → stacked ── */
+  .two-col {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Map height reduction ── */
+  .map-container { height: 360px !important; }
+  .map-wrapper   { height: 360px !important; }
+
+  /* ── Farms grid: single column on tablet ── */
+  .farms-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Rotation grid: 2 columns on tablet ── */
+  .rotation-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* ── Dashboard header: stack on tablet ── */
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .dashboard-header > .action-btn {
+    align-self: flex-start;
+  }
+
+  /* ── Typography ── */
+  .page-header h2 {
+    font-size: 26px;
+  }
+  .dashboard-title {
+    font-size: 24px;
+  }
+  .ndvi-summary-value {
+    font-size: 22px;
+  }
+  .comp-stat-card__value {
+    font-size: 24px;
+  }
+
+  /* ── area-display wraps ── */
+  .area-display {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  /* ── side-nav-buttons: row on tablet ── */
+  .side-nav-buttons {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .side-nav-buttons .action-btn--nav {
+    flex: 1;
+    min-width: 120px;
+    width: auto;
+  }
+
+  /* ── Lote summary stays 2×2 ── */
+  .lote-summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  /* ── NDVI tabs: cap width, enable horizontal scroll ── */
+  .ndvi-tabs {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    width: auto;
+  }
+
+  /* ── Action button groups wrap ── */
+  .terrain-card__actions {
+    flex-wrap: wrap;
+  }
+  .lote-card-v2__actions {
+    flex-wrap: wrap;
+  }
+}
+
+/* ============================================================
+   PHONE PORTRAIT  ≤ 600px
+   ============================================================ */
+@media (max-width: 600px) {
+
+  /* ── Content padding: tighter horizontal ── */
+  .main-content {
+    padding: calc(var(--mobile-header-height) + 16px) 12px 20px;
+  }
+
+  /* ── Form grid: single column ── */
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+  /* Also collapse any full-width span on single-column grid */
+  .form-group.full-width {
+    grid-column: auto;
+  }
+
+  /* ── Map height: shorter on phones ── */
+  .map-container { height: 280px !important; }
+  .map-wrapper   { height: 280px !important; }
+
+  /* ── Typography scale-down ── */
+  .page-header h2 {
+    font-size: 22px;
+    line-height: 1.2;
+  }
+  .page-header p {
+    font-size: 13px;
+  }
+  .page-header {
+    margin-bottom: 20px;
+  }
+  .dashboard-title {
+    font-size: 20px;
+  }
+  .ndvi-summary-value {
+    font-size: 20px;
+  }
+  .comp-stat-card__value {
+    font-size: 22px;
+  }
+  .comp-stat-card__label {
+    font-size: 10px;
+  }
+  .summary-value {
+    font-size: 18px;
+  }
+  .tcs__val {
+    font-size: 16px;
+  }
+  .lote-stat__value {
+    font-size: 18px;
+  }
+  .area-stat .value {
+    font-size: 20px;
+  }
+  .fcs-val {
+    font-size: 18px;
+  }
+
+  /* ── NDVI tabs: full-width scrollable strip ── */
+  .ndvi-tabs {
+    width: 100%;
+    border-radius: var(--radius-sm);
+    padding: 3px;
+  }
+  .ndvi-tab {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+  /* Hide scrollbar for clean look */
+  .ndvi-tabs::-webkit-scrollbar { display: none; }
+  .ndvi-tabs { scrollbar-width: none; }
+
+  /* ── Rotation grid: single column on phones ── */
+  .rotation-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Panel headers stack ── */
+  .panel-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .panel-header > .action-btn {
+    align-self: flex-start;
+  }
+
+  /* ── Map legend: wraps ── */
+  .map-legend {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* ── Breadcrumb: wraps on overflow ── */
+  .breadcrumb {
+    flex-wrap: wrap;
+    row-gap: 4px;
+  }
+
+  /* ── Farm card header: wrap when badge + title + delete ── */
+  .farm-card__header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  /* ── Lote card actions: full wrap ── */
+  .lote-card-v2__actions {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .lote-card-v2__actions .action-btn--nav-sm {
+    flex: 1;
+    min-width: 80px;
+    justify-content: center;
+  }
+
+  /* ── Two-col side panel: add top margin when stacked ── */
+  .two-col .col-side {
+    gap: 12px;
+  }
+
+  /* ── Area display: tighter ── */
+  .area-display {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+
+  /* ── Parcel item: stack info and actions vertically ── */
+  .parcel-item {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .parcel-item .actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  /* ── Dashboard meta: wrap ── */
+  .dashboard-meta {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* ── NDVI summary grid: 2 col on phones (already at 768px) ── */
+
+  /* ── Stat card: reduce padding ── */
+  .comp-stat-card {
+    padding: 14px 16px;
+  }
+
+  /* ── Card: tighter padding ── */
+  .card {
+    padding: 16px;
+  }
+  .lotes-map-panel,
+  .lotes-list-panel {
+    padding: 12px;
+  }
+
+  /* ── Lote summary grid stays 2×2 on phones ── */
+  .lote-summary-grid {
+    gap: 8px;
+  }
+
+  /* ── Table wrapper: ensure scrollable ── */
+  .ganado-table-wrapper,
+  .table-container {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── Ganado form: stack wrapping ── */
+  .ganado-table-wrapper form {
+    flex-direction: column;
+  }
+
+  /* ── Grazing alerts: compact ── */
+  .grazing-alert {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+}
+
+/* ============================================================
+   SMALL PHONES  ≤ 400px
+   ============================================================ */
+@media (max-width: 400px) {
+
+  /* ── Typography: further reduction ── */
+  .page-header h2 { font-size: 20px; }
+  .dashboard-title { font-size: 18px; }
+
+  /* ── Stats grid: single column on tiny phones ── */
+  .p4-stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── NDVI summary: single column ── */
+  .ndvi-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Lote card stats: 2×2 is still fine but values tighter ── */
+  .lote-stat__value { font-size: 16px; }
+  .summary-value    { font-size: 16px; }
+
+  /* ── Action nav buttons: full-width ── */
+  .side-nav-buttons .action-btn--nav {
+    min-width: 80px;
+  }
+
+  /* ── Breadcrumb: reduce font ── */
+  .breadcrumb { font-size: 11px; }
+
+  /* ── Card: minimal padding ── */
+  .card { padding: 12px; }
+}
+
+/* ============================================================
+   LANDSCAPE PHONE  (height-constrained)
+   ============================================================ */
+@media (max-height: 600px) and (orientation: landscape) {
+  .map-container { height: 220px !important; }
+  .map-wrapper   { height: 220px !important; }
+  .comp-spinner-page { min-height: 40vh; }
+}
