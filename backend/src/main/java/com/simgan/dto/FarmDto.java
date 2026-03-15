@@ -18,6 +18,10 @@ public class FarmDto {
         private String municipality;
         private Double centerLat;
         private Double centerLng;
+        
+        private Boolean isHomogeneous;
+        private String soilType;
+        private String pastureType;
     }
 
     @Getter @Setter
@@ -31,6 +35,9 @@ public class FarmDto {
         private String municipality;
         private Double centerLat;
         private Double centerLng;
+        private Boolean isHomogeneous;
+        private String soilType;
+        private String pastureType;
         private String createdAt;
         private int terrainCount;
     }

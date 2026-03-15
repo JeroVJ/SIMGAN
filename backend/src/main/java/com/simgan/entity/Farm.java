@@ -36,6 +36,16 @@ public class Farm {
 
     private Double centerLng;
 
+    @Column(name = "is_homogeneous")
+    @Builder.Default
+    private Boolean isHomogeneous = false;
+
+    @Column(name = "soil_type")
+    private String soilType;
+
+    @Column(name = "pasture_type")
+    private String pastureType;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

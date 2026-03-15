@@ -29,6 +29,8 @@ public class ParcelService {
                 .geoJson(request.getGeoJson())
                 .areaSqMeters(request.getAreaSqMeters())
                 .areaHectares(request.getAreaHectares())
+                .soilType(request.getSoilType())
+                .pastureType(request.getPastureType())
                 .terrain(terrain)
                 .build();
 
@@ -101,6 +103,8 @@ public class ParcelService {
                 .geoJson(parcel.getGeoJson())
                 .areaSqMeters(parcel.getAreaSqMeters())
                 .areaHectares(parcel.getAreaHectares())
+                .soilType(parcel.getSoilType())
+                .pastureType(parcel.getPastureType())
                 .status(parcel.getStatus())
                 .createdAt(parcel.getCreatedAt() != null ? parcel.getCreatedAt().toString() : null)
                 .build();

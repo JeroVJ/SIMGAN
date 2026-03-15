@@ -21,6 +21,8 @@ public class ParcelDto {
 
         private Double areaSqMeters;
         private Double areaHectares;
+        private String soilType;
+        private String pastureType;
     }
 
     @Getter @Setter
@@ -35,6 +37,8 @@ public class ParcelDto {
         private String geoJson;
         private Double areaSqMeters;
         private Double areaHectares;
+        private String soilType;
+        private String pastureType;
         private Parcel.ParcelStatus status;
         private String createdAt;
     }

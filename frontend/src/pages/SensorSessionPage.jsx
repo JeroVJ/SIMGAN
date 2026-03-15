@@ -29,6 +29,37 @@ function FitBounds({ geoJson }) {
   return null
 }
 
+function FitBoundsWithSensor({ parcelGeoJson, sensorGeoJson }) {
+  const map = useMap()
+
+  useEffect(() => {
+    if (!parcelGeoJson && !sensorGeoJson) return
+    
+    try {
+      const bounds = L.latLngBounds([])
+      
+      // Agregar el parcel si existe
+      if (parcelGeoJson) {
+        const parcelGeo = typeof parcelGeoJson === 'string' ? JSON.parse(parcelGeoJson) : parcelGeoJson
+        const parcelLayer = L.geoJSON(parcelGeo)
+        bounds.extend(parcelLayer.getBounds())
+      }
+      
+      // Agregar el sensor si existe
+      if (sensorGeoJson?.type === 'Point') {
+        const [lon, lat] = sensorGeoJson.coordinates
+        bounds.extend([lat, lon])
+      }
+      
+      if (bounds.isValid()) {
+        map.fitBounds(bounds, { padding: [30, 30] })
+      }
+    } catch {}
+  }, [parcelGeoJson, sensorGeoJson, map])
+
+  return null
+}
+
 export default function SensorSessionPage() {
   const { sensorId } = useParams()
   const navigate = useNavigate()
@@ -60,8 +91,8 @@ export default function SensorSessionPage() {
         setSensor(sensorRes)
 
         // Cargar parcel si existe
-        if (sensorRes.parcel?.id) {
-          const parcelRes = await api.get(`/parcels/${sensorRes.parcel.id}`)
+        if (sensorRes.parcelId) {
+          const parcelRes = await api.get(`/parcels/${sensorRes.parcelId}`)
           setParcel(parcelRes.data)
         }
 
@@ -255,7 +286,7 @@ export default function SensorSessionPage() {
         <div className="col-main">
           <div className="map-container">
             <MapContainer center={[4.6, -74.1]} zoom={15} style={{ height: '100%', width: '100%' }}>
-              {parcelGeoJson && <FitBounds geoJson={parcelGeoJson} />}
+              <FitBoundsWithSensor parcelGeoJson={parcelGeoJson} sensorGeoJson={sensorGeoJson} />
 
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"

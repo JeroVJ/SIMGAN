@@ -29,6 +29,9 @@ public class FarmService {
                 .municipality(request.getMunicipality())
                 .centerLat(request.getCenterLat())
                 .centerLng(request.getCenterLng())
+                .isHomogeneous(request.getIsHomogeneous() != null ? request.getIsHomogeneous() : false)
+                .soilType(request.getSoilType())
+                .pastureType(request.getPastureType())
                 .build();
 
         farm = farmRepository.save(farm);
@@ -60,6 +63,9 @@ public class FarmService {
                 .municipality(farm.getMunicipality())
                 .centerLat(farm.getCenterLat())
                 .centerLng(farm.getCenterLng())
+                .isHomogeneous(farm.getIsHomogeneous())
+                .soilType(farm.getSoilType())
+                .pastureType(farm.getPastureType())
                 .createdAt(farm.getCreatedAt() != null ? farm.getCreatedAt().toString() : null)
                 .terrainCount(farm.getTerrains() != null ? farm.getTerrains().size() : 0)
                 .build();

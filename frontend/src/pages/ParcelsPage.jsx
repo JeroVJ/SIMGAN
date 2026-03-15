@@ -10,7 +10,11 @@ import Spinner from '../components/Spinner'
 import ConfirmDialog from '../components/ConfirmDialog'
 
 import { useTerrain } from '../hooks'
+import api from '../services/api'
 import { getBiomassColor, getBiomassLabel } from '../utils/grazing'
+
+const SOIL_TYPES = ['Arenosa', 'Limosa', 'Arcillosa', 'Franco Arcillosa']
+const PASTURE_TYPES = ['Brachiaria humidicola']
 
 
 delete L.Icon.Default.prototype._getIconUrl
@@ -68,8 +72,32 @@ export default function ParcelsPage() {
   const [drawnParcel, setDrawnParcel] = useState(null)
   const [drawnArea, setDrawnArea] = useState({ sqm: 0, ha: 0 })
   const [confirm, setConfirm] = useState(null)
+  const [farm, setFarm] = useState(null)
+  const [soilType, setSoilType] = useState('')
+  const [pastureType, setPastureType] = useState('')
+  const [farmLoading, setFarmLoading] = useState(true)
 
   const featureGroupRef = useRef(null)
+
+  // Cargar datos de la finca
+  useEffect(() => {
+    if (!terrain?.farmId) return
+    
+    const loadFarm = async () => {
+      try {
+        setFarmLoading(true)
+        const res = await api.get(`/farms/${terrain.farmId}`)
+        console.log('Farm data loaded:', res.data)
+        setFarm(res.data)
+      } catch (err) {
+        console.error('Error cargando finca:', err)
+      } finally {
+        setFarmLoading(false)
+      }
+    }
+    
+    loadFarm()
+  }, [terrain?.farmId])
 
   function handleCreated(e) {
 
@@ -109,21 +137,43 @@ export default function ParcelsPage() {
       return
     }
 
+    // Si la finca NO es homogénea, validar que haya soilType y pastureType
+    if (!farm?.isHomogeneous) {
+      if (!soilType) {
+        toast.error('Selecciona el tipo de suelo')
+        return
+      }
+      if (!pastureType) {
+        toast.error('Selecciona el tipo de pasto')
+        return
+      }
+    }
+
     setSaving(true)
 
     try {
 
-      await addParcel({
+      const parcelData = {
         name: parcelName.trim() || `Parcela ${parcels.length + 1}`,
         terrainId: parseInt(terrainId),
         geoJson: JSON.stringify(drawnParcel),
         areaSqMeters: drawnArea.sqm,
         areaHectares: drawnArea.ha
-      })
+      }
+
+      // Si la finca NO es homogénea, incluir soil y pasture type
+      if (!farm?.isHomogeneous) {
+        parcelData.soilType = soilType
+        parcelData.pastureType = pastureType
+      }
+
+      await addParcel(parcelData)
 
       setDrawnParcel(null)
       setDrawnArea({ sqm: 0, ha: 0 })
       setParcelName('')
+      setSoilType('')
+      setPastureType('')
 
       if (featureGroupRef.current) {
         featureGroupRef.current.clearLayers()
@@ -349,7 +399,8 @@ export default function ParcelsPage() {
                   }}
                 />
 
-              </FeatureGroup>
+
+            </FeatureGroup>
 
             </MapContainer>
 
@@ -371,6 +422,36 @@ export default function ParcelsPage() {
                 placeholder="Ej: Potrero A"
               />
             </div>
+            
+            {farm && !farm.isHomogeneous && (
+              <>
+                <div className="form-group mb-16">
+                  <label>Tipo de Suelo *</label>
+                  <select
+                    value={soilType}
+                    onChange={(e) => setSoilType(e.target.value)}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {SOIL_TYPES.map(soil => (
+                      <option key={soil} value={soil}>{soil}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="form-group mb-16">
+                  <label>Tipo de Pasto *</label>
+                  <select
+                    value={pastureType}
+                    onChange={(e) => setPastureType(e.target.value)}
+                  >
+                    <option value="">Seleccionar...</option>
+                    {PASTURE_TYPES.map(pasture => (
+                      <option key={pasture} value={pasture}>{pasture}</option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
+            
             {drawnParcel && (
               <>
                 <div style={{ padding: '12px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', marginBottom: 16 }}>

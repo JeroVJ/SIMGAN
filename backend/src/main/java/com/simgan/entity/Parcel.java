@@ -28,6 +28,12 @@ public class Parcel {
 
     private Double areaHectares;
 
+    @Column(name = "soil_type")
+    private String soilType;
+
+    @Column(name = "pasture_type")
+    private String pastureType;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private ParcelStatus status = ParcelStatus.DISPONIBLE;

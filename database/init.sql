@@ -41,6 +41,9 @@ CREATE TABLE IF NOT EXISTS farms (
     municipality VARCHAR(255),
     center_lat DOUBLE PRECISION,
     center_lng DOUBLE PRECISION,
+    is_homogeneous BOOLEAN DEFAULT false,
+    soil_type VARCHAR(255),
+    pasture_type VARCHAR(255),
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -62,6 +65,8 @@ CREATE TABLE IF NOT EXISTS parcels (
     geo_json TEXT NOT NULL,
     area_sq_meters DOUBLE PRECISION,
     area_hectares DOUBLE PRECISION,
+    soil_type VARCHAR(255),
+    pasture_type VARCHAR(255),
     status VARCHAR(50) DEFAULT 'DISPONIBLE',
     terrain_id BIGINT NOT NULL REFERENCES terrains(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT NOW()
