@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutGrid, Plus, Satellite, X } from 'lucide-react'
+import { LayoutGrid, Plus, Satellite, X, LogOut } from 'lucide-react'
 
 /**
  * Sidebar
@@ -7,6 +7,8 @@ import { LayoutGrid, Plus, Satellite, X } from 'lucide-react'
  * Props:
  *   open    — whether the drawer is open (mobile only)
  *   onClose — callback to close the drawer
+ *   user    — current logged-in user object
+ *   onLogout — callback to handle logout
  *
  * On desktop the sidebar is always visible (CSS handles this).
  * On mobile it renders as an off-canvas drawer controlled by `open`.
@@ -27,7 +29,7 @@ const NAV_ITEMS = [
   },
 ]
 
-export default function Sidebar({ open, onClose }) {
+export default function Sidebar({ open, onClose, user, onLogout }) {
   return (
     <>
       {/* ── Mobile backdrop ───────────────────────────────────── */}
@@ -96,6 +98,42 @@ export default function Sidebar({ open, onClose }) {
             <span>NDVI</span>
           </div>
           <span className="sidebar-footer__version">SIMGAN v0.2</span>
+
+          {/* User Profile & Logout */}
+          {user && (
+            <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginBottom: 8 }}>
+                <strong>Conectado como:</strong><br />
+                {user.nombreCompleto && user.apellidoCompleto 
+                  ? `${user.nombreCompleto} ${user.apellidoCompleto}`
+                  : user.correo || 'Usuario'}
+              </div>
+              <button
+                onClick={onLogout}
+                style={{
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 6,
+                  padding: '8px 12px',
+                  background: '#ef4444',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                  transition: 'background 0.2s'
+                }}
+                onMouseEnter={(e) => e.target.style.background = '#dc2626'}
+                onMouseLeave={(e) => e.target.style.background = '#ef4444'}
+              >
+                <LogOut size={14} strokeWidth={2} />
+                Cerrar Sesión
+              </button>
+            </div>
+          )}
         </footer>
 
       </aside>
