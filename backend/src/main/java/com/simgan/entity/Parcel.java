@@ -5,6 +5,8 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "parcels")
@@ -37,9 +39,18 @@ public class Parcel {
     @JoinColumn(name = "terrain_id", nullable = false)
     private Terrain terrain;
 
+    /**
+     * RELACION 1:N
+     * Una parcela puede tener muchos sensores
+     */
+    @OneToMany(mappedBy = "parcel", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<Sensor> sensores = new ArrayList<>();
+
     public enum ParcelStatus {
         DISPONIBLE,
         EN_USO,
         EN_DESCANSO
     }
 }
+

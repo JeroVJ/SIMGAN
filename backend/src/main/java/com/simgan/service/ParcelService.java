@@ -42,6 +42,12 @@ public class ParcelService {
                 .collect(Collectors.toList());
     }
 
+    public ParcelDto.Response findById(Long id) {
+        Parcel parcel = parcelRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Parcela no encontrada con id: " + id));
+        return toResponse(parcel);
+    }
+
     public ParcelDto.Response updateStatus(Long id, Parcel.ParcelStatus newStatus) {
         Parcel parcel = parcelRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Parcela no encontrada con id: " + id));
@@ -90,6 +96,8 @@ public class ParcelService {
                 .id(parcel.getId())
                 .name(parcel.getName())
                 .terrainId(parcel.getTerrain().getId())
+                .farmId(parcel.getTerrain().getFarm() != null ? parcel.getTerrain().getFarm().getId() : null)
+                .farmName(parcel.getTerrain().getFarm() != null ? parcel.getTerrain().getFarm().getName() : null)
                 .geoJson(parcel.getGeoJson())
                 .areaSqMeters(parcel.getAreaSqMeters())
                 .areaHectares(parcel.getAreaHectares())

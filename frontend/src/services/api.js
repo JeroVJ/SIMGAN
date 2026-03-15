@@ -122,4 +122,21 @@ export const loteApi = {
   deleteGanado: (ganadoId) => api.delete(`/lotes/ganado/${ganadoId}`)
 }
 
+// ===== SENSORES =====
+export const sensorApi = {
+  getByParcel: (parcelId) => api.get(`/sensors/parcel/${parcelId}`).then(r => r.data),
+  getById: (id) => api.get(`/sensors/${id}`).then(r => r.data),
+  create: (data) => api.post('/sensors', data).then(r => r.data),
+  update: (id, data) => api.patch(`/sensors/${id}`, data).then(r => r.data),
+  delete: (id) => api.delete(`/sensors/${id}`),
+  
+  // Conexión del sensor
+  connectSensor: (id) => api.post(`/sensors/${id}/connect`).then(r => r.data),
+  disconnectSensor: (id) => api.post(`/sensors/${id}/disconnect`).then(r => r.data),
+  getSensorStatus: (id) => api.get(`/sensors/${id}/status`).then(r => r.data),
+  
+  // Configuración MQTT
+  updateSensorConfig: (id, config) => api.patch(`/sensors/${id}/config`, config).then(r => r.data)
+}
+
 export default api

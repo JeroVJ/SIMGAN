@@ -14,5 +14,17 @@ services:
       - simgan_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
 
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: simgan-mosquitto
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    restart: unless-stopped
+
 volumes:
   simgan_data:

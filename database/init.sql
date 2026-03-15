@@ -67,6 +67,46 @@ CREATE TABLE IF NOT EXISTS parcels (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+--Sensors
+
+CREATE TABLE IF NOT EXISTS sensors (
+    id BIGSERIAL PRIMARY KEY,
+
+    name VARCHAR(255),
+
+    ubicacion_geojson TEXT,
+
+    mqtt_topic VARCHAR(255),
+
+    mqtt_broker_url VARCHAR(255),
+
+    client_id VARCHAR(255),
+
+    connected BIT(1) DEFAULT b'0',
+
+    parcel_id BIGINT NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
+
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+--Sensor clasifications
+
+CREATE TABLE IF NOT EXISTS sensor_classifications (
+    id BIGSERIAL PRIMARY KEY,
+
+    sensor_id BIGINT NOT NULL REFERENCES sensors(id) ON DELETE CASCADE,
+
+    valor_humedad DOUBLE PRECISION NOT NULL,
+
+    timestamp TIMESTAMP NOT NULL,
+
+    estado VARCHAR(50),
+
+    consecuencia VARCHAR(100),
+
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- NDVI Records (per parcel per satellite capture)
 CREATE TABLE IF NOT EXISTS ndvi_records (
     id BIGSERIAL PRIMARY KEY,
@@ -158,3 +198,6 @@ CREATE TABLE IF NOT EXISTS lote_parcel_history (
 CREATE INDEX IF NOT EXISTS idx_lotes_terrain ON lotes(terrain_id);
 CREATE INDEX IF NOT EXISTS idx_ganados_lote ON ganados(lote_id);
 CREATE INDEX IF NOT EXISTS idx_lote_parcel_hist ON lote_parcel_history(lote_id, fecha_ingreso);
+CREATE INDEX IF NOT EXISTS idx_sensors_parcel ON sensors(parcel_id);
+CREATE INDEX IF NOT EXISTS idx_sensor_classifications_sensor ON sensor_classifications(sensor_id);
+CREATE INDEX IF NOT EXISTS idx_sensor_classifications_time ON sensor_classifications(timestamp);

@@ -8,4 +8,4 @@ public class SimganDemoApplication {
     public static void main(String[] args) {
         SpringApplication.run(SimganDemoApplication.class, args);
     }
-}
+}          

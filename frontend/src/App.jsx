@@ -11,6 +11,8 @@ import CreateFarmPage    from './pages/CreateFarmPage'
 import CreateTerrainPage from './pages/CreateTerrainPage'
 import FarmDashboardPage from './pages/FarmDashboardPage'
 import ParcelsPage       from './pages/ParcelsPage'
+import SensorPage        from './pages/SensorPage'
+import SensorSessionPage from './pages/SensorSessionPage'
 import RotationPage      from './pages/RotationPage'
 import NdviDashboardPage from './pages/NdviDashboardPage'
 import LotesPage         from './pages/LotesPage'
@@ -162,6 +164,10 @@ export default function App() {
               <Route path="/farms/:farmId/terrain/new" element={<CreateTerrainPage />} />
 
               <Route path="/terrains/:terrainId/parcels" element={<ParcelsPage />} />
+
+              <Route path="/parcels/:parcelId/sensors" element={<SensorPage />} />
+
+              <Route path="/sensors/:sensorId/session" element={<SensorSessionPage />} />
 
               <Route path="/terrains/:terrainId/rotation" element={<RotationPage />} />
 

@@ -87,7 +87,7 @@ function LoginForm({ onLogin }) {
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--color-text-muted)', fontSize: 15, lineHeight: 1, padding: 2
           }}>
-            {show ? '🙈' : '👁️'}
+            {show ? '' : '👁️'}
           </button>
         </div>
         {e.password && <span style={{ fontSize: 12, color: 'var(--color-danger)' }}>{e.password}</span>}
@@ -111,7 +111,7 @@ function LoginForm({ onLogin }) {
       >
         {loading
           ? <><div className="spinner" style={{ width: 16, height: 16, borderTopColor: 'var(--color-bg)' }} /> Ingresando...</>
-          : '🚜 Ingresar'}
+          : 'Ingresar'}
       </button>
     </>
   )

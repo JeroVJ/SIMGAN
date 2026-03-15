@@ -30,6 +30,8 @@ public class ParcelDto {
         private Long id;
         private String name;
         private Long terrainId;
+        private Long farmId;
+        private String farmName;
         private String geoJson;
         private Double areaSqMeters;
         private Double areaHectares;

@@ -27,6 +27,11 @@ public class ParcelController {
         return ResponseEntity.ok(parcelService.findByTerrainId(terrainId));
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<ParcelDto.Response> findById(@PathVariable Long id) {
+        return ResponseEntity.ok(parcelService.findById(id));
+    }
+
     @PatchMapping("/{id}/status")
     public ResponseEntity<ParcelDto.Response> updateStatus(
             @PathVariable Long id,

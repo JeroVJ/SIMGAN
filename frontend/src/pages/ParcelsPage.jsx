@@ -442,6 +442,24 @@ export default function ParcelsPage() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
+                      navigate(`/parcels/${p.id}/sensors`)
+                    }}
+                    style={{
+                      background: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontWeight: 500
+                    }}
+                  >
+                    📡 Sensores
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
                       handleDeleteParcel(p.id)
                     }}
                     style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16 }}
