@@ -1,10 +1,8 @@
 package com.simgan.controller;
 
 import com.simgan.dto.NdviDto;
-import com.simgan.entity.NdviAlert;
-import com.simgan.entity.NdviRecord;
-import com.simgan.repository.NdviAlertRepository;
-import com.simgan.repository.NdviRecordRepository;
+import com.simgan.entity.*;
+import com.simgan.repository.*;
 import com.simgan.service.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +28,9 @@ public class NdviController {
     private final AnalysisOrchestrator analysisOrchestrator;
     private final NdviRecordRepository ndviRecordRepository;
     private final NdviAlertRepository alertRepository;
+    private final LoteRepository loteRepository;
+    private final ParcelRepository parcelRepository;
+    private final GanadoRepository ganadoRepository;
 
     /**
      * GET /api/ndvi/dashboard/{terrainId}
@@ -168,6 +169,83 @@ public class NdviController {
         status.put("optimalThreshold", 0.6);
 
         return ResponseEntity.ok(status);
+    }
+
+    /**
+     * GET /api/ndvi/grazing-estimate/{terrainId}
+     * Estimacion de dias de pastoreo por parcela con lote activo.
+     * Formula: diasOcupacion = (biomasa_disponible_kg) / (consumo_MS_diario_total)
+     * Consumo MS diario = 2.5% peso vivo * N cabezas
+     * Biomasa disponible = (biomasa_total - 30% residual)
+     */
+    @GetMapping("/grazing-estimate/{terrainId}")
+    public ResponseEntity<List<Map<String, Object>>> getGrazingEstimate(@PathVariable Long terrainId) {
+        List<Parcel> parcels = parcelRepository.findByTerrainId(terrainId);
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        for (Parcel parcel : parcels) {
+            List<Lote> occupying = loteRepository.findByCurrentParcelId(parcel.getId());
+            Lote activeLote = occupying.stream()
+                    .filter(l -> l.getFechaSalida() == null)
+                    .findFirst().orElse(null);
+            if (activeLote == null) continue;
+
+            // Get latest NDVI/biomass
+            Optional<NdviRecord> latestNdvi = ndviRecordRepository
+                    .findFirstByParcelIdOrderByCaptureDateDesc(parcel.getId());
+            Double biomassKgPerHa = latestNdvi.map(NdviRecord::getBiomassKgPerHa).orElse(null);
+            Double ndvi = latestNdvi.map(NdviRecord::getMeanNdvi).orElse(null);
+
+            // Get ganado data for the lote
+            List<Ganado> ganados = ganadoRepository.findByLoteIdOrderByNumeracion(activeLote.getId());
+            if (ganados.isEmpty()) continue;
+
+            double pesoPromedio = ganados.stream().mapToDouble(Ganado::getPesoActual).average().orElse(0);
+            int cabezas = ganados.size();
+
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("parcelId", parcel.getId());
+            entry.put("parcelName", parcel.getName());
+            entry.put("areaHectares", parcel.getAreaHectares());
+            entry.put("loteId", activeLote.getId());
+            entry.put("loteName", activeLote.getName());
+            entry.put("cabezas", cabezas);
+            entry.put("pesoPromedio", Math.round(pesoPromedio * 10.0) / 10.0);
+            entry.put("ndvi", ndvi);
+            entry.put("biomassKgPerHa", biomassKgPerHa);
+
+            if (biomassKgPerHa != null && parcel.getAreaHectares() != null) {
+                double totalBiomass = biomassKgPerHa * parcel.getAreaHectares();
+                double residual = totalBiomass * 0.30;
+                double available = Math.max(0, totalBiomass - residual);
+                double consumoDiarioMS = pesoPromedio * 0.025 * cabezas;
+                int estimatedDays = consumoDiarioMS > 0 ? (int) Math.floor(available / consumoDiarioMS) : 0;
+
+                entry.put("totalBiomassKg", Math.round(totalBiomass));
+                entry.put("availableBiomassKg", Math.round(available));
+                entry.put("dailyConsumptionKg", Math.round(consumoDiarioMS * 10.0) / 10.0);
+                entry.put("estimatedDays", Math.max(0, estimatedDays));
+
+                // Generate alert if days <= 3
+                boolean needsAlert = estimatedDays <= 3;
+                entry.put("alert", needsAlert);
+                entry.put("alertMessage", needsAlert
+                        ? (estimatedDays == 0
+                            ? "Sin pasto disponible. Retire el lote inmediatamente."
+                            : "Solo " + estimatedDays + " dia(s) de pasto. Considere rotar.")
+                        : null);
+            } else {
+                entry.put("estimatedDays", null);
+                entry.put("alert", ndvi != null && ndvi < 0.25);
+                entry.put("alertMessage", ndvi != null && ndvi < 0.25
+                        ? "NDVI critico (" + String.format("%.2f", ndvi) + "). Se recomienda descanso."
+                        : null);
+            }
+
+            results.add(entry);
+        }
+
+        return ResponseEntity.ok(results);
     }
 
     // ===== HELPERS =====

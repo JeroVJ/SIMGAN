@@ -1,21 +1,27 @@
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { MapContainer, TileLayer, GeoJSON, useMap } from 'react-leaflet'
-import { terrainApi, parcelApi } from '../services/api'
-import toast from 'react-hot-toast'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import { MapContainer, TileLayer, GeoJSON, useMap, Tooltip } from 'react-leaflet'
+import { useEffect } from 'react'
 import L from 'leaflet'
+
+import Spinner from '../components/Spinner'
+
+import { useTerrain } from '../hooks'
+import { getBiomassColor, getBiomassLabel } from '../utils/grazing'
+import { getStatusClass } from '../utils/ndvi'
 
 function FitBounds({ geoJson }) {
   const map = useMap()
+
   useEffect(() => {
-    if (geoJson) {
-      try {
-        const geo = typeof geoJson === 'string' ? JSON.parse(geoJson) : geoJson
-        const layer = L.geoJSON(geo)
-        map.fitBounds(layer.getBounds(), { padding: [30, 30] })
-      } catch {}
-    }
+    if (!geoJson) return
+
+    try {
+      const geo = typeof geoJson === 'string' ? JSON.parse(geoJson) : geoJson
+      const layer = L.geoJSON(geo)
+      map.fitBounds(layer.getBounds(), { padding: [30, 30] })
+    } catch {}
   }, [geoJson, map])
+
   return null
 }
 
@@ -26,58 +32,32 @@ const STATUS_CONFIG = {
 }
 
 export default function RotationPage() {
+
   const { terrainId } = useParams()
   const navigate = useNavigate()
 
-  const [terrain, setTerrain] = useState(null)
-  const [parcels, setParcels] = useState([])
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    loadData()
-  }, [terrainId])
-
-  async function loadData() {
-    try {
-      const [terrainData, parcelsData] = await Promise.all([
-        terrainApi.getById(terrainId),
-        parcelApi.getByTerrain(terrainId)
-      ])
-      setTerrain(terrainData)
-      setParcels(parcelsData)
-    } catch {
-      toast.error('Error cargando datos')
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { terrain, parcels, parcelInfo, loading, updateParcelStatus } = useTerrain(terrainId)
 
   async function cycleStatus(parcelId, currentStatus) {
+
     const order = ['DISPONIBLE', 'EN_USO', 'EN_DESCANSO']
-    const currentIdx = order.indexOf(currentStatus)
-    const nextStatus = order[(currentIdx + 1) % order.length]
+
+    const nextStatus = order[(order.indexOf(currentStatus) + 1) % order.length]
 
     try {
-      await parcelApi.updateStatus(parcelId, nextStatus)
-      const updated = await parcelApi.getByTerrain(terrainId)
-      setParcels(updated)
+      await updateParcelStatus(parcelId, nextStatus)
+    } catch {}
+  }
+
+  if (loading) return <Spinner page label="Cargando rotación..." />
+
+  const terrainGeoJson = (() => {
+    try {
+      return JSON.parse(terrain.geoJson)
     } catch {
-      toast.error('Error actualizando estado')
+      return null
     }
-  }
-
-  if (loading) {
-    return (
-      <div className="empty-state">
-        <div className="spinner" />
-        <p style={{ marginTop: 16 }}>Cargando rotación...</p>
-      </div>
-    )
-  }
-
-  const terrainGeoJson = terrain ? (() => {
-    try { return JSON.parse(terrain.geoJson) } catch { return null }
-  })() : null
+  })()
 
   const statusCounts = {
     DISPONIBLE: parcels.filter(p => p.status === 'DISPONIBLE').length,
@@ -86,22 +66,42 @@ export default function RotationPage() {
   }
 
   return (
-    <div>
+
+    <div className="page-container">
+
       <div className="page-header">
+
         <div className="breadcrumb">
-          <a href="/farms">Fincas</a>
+
+          <Link to="/farms">Fincas</Link>
+
           <span>›</span>
-          <a href={`/terrains/${terrainId}/parcels`}>{terrain?.name || 'Terreno'}</a>
+
+          <Link to={`/terrains/${terrainId}/parcels`}>
+            {terrain?.name || 'Terreno'}
+          </Link>
+
           <span>›</span>
+
           <span>Rotación</span>
+
         </div>
+
         <h2>Rotación de Pastoreo</h2>
-        <p>Gestiona el estado de cada parcela para la rotación del ganado</p>
+
+        <p>
+          Gestiona el estado de cada parcela para la rotación del ganado
+        </p>
+
       </div>
 
+
       {/* Status summary */}
+
       <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
+
         {Object.entries(STATUS_CONFIG).map(([key, config]) => (
+
           <div
             key={key}
             style={{
@@ -115,143 +115,279 @@ export default function RotationPage() {
               gap: 12
             }}
           >
-            <span style={{ fontSize: 28 }}>{config.icon}</span>
+
+            <span style={{ fontSize: 28 }}>
+              {config.icon}
+            </span>
+
             <div>
-              <div style={{ fontSize: 11, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 1 }}>
+
+              <div
+                style={{
+                  fontSize: 11,
+                  color: 'var(--color-text-muted)',
+                  textTransform: 'uppercase',
+                  letterSpacing: 1
+                }}
+              >
                 {config.label}
               </div>
-              <div style={{ fontSize: 28, fontFamily: 'var(--font-display)', color: config.color }}>
+
+              <div
+                style={{
+                  fontSize: 28,
+                  fontFamily: 'var(--font-display)',
+                  color: config.color
+                }}
+              >
                 {statusCounts[key]}
               </div>
+
             </div>
+
           </div>
+
         ))}
+
       </div>
 
+
       <div className="two-col">
-        {/* Map with colored parcels */}
+
+
+        {/* Map */}
+
         <div className="col-main">
-          <div className="map-container" style={{ height: 450 }}>
-            <MapContainer center={[4.6, -74.1]} zoom={15} style={{ height: '100%', width: '100%' }}>
+
+          <div className="map-container">
+
+            <MapContainer
+              center={[4.6, -74.1]}
+              zoom={15}
+              style={{ height: '100%', width: '100%' }}
+            >
+
               {terrainGeoJson && <FitBounds geoJson={terrainGeoJson} />}
 
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                attribution="Tiles &copy; Esri"
+                attribution="Tiles © Esri"
                 maxZoom={19}
               />
 
               {terrainGeoJson && (
+
                 <GeoJSON
                   data={terrainGeoJson}
-                  style={{ color: '#ffffff', weight: 2, fillOpacity: 0.05, dashArray: '6,3' }}
+                  style={{
+                    color: '#ffffff',
+                    weight: 2,
+                    fillOpacity: 0.05,
+                    dashArray: '6,3'
+                  }}
                 />
+
               )}
 
-              {parcels.map((p) => {
+              {parcels.map(p => {
+
+                const config = STATUS_CONFIG[p.status] || STATUS_CONFIG.DISPONIBLE
+
+                const info = parcelInfo[p.id] || {}
+
+                let geo
+
                 try {
-                  const geo = JSON.parse(p.geoJson)
-                  const config = STATUS_CONFIG[p.status] || STATUS_CONFIG.DISPONIBLE
-                  return (
-                    <GeoJSON
-                      key={`${p.id}-${p.status}`}
-                      data={geo}
-                      style={{
-                        color: config.color,
-                        weight: 3,
-                        fillColor: config.color,
-                        fillOpacity: config.bgAlpha
-                      }}
-                    />
-                  )
+                  geo = JSON.parse(p.geoJson)
                 } catch {
                   return null
                 }
+
+                return (
+
+                  <GeoJSON
+                    key={`${p.id}-${p.status}`}
+                    data={geo}
+                    style={{
+                      color: config.color,
+                      weight: info.lote ? 3 : 2,
+                      fillColor: config.color,
+                      fillOpacity: config.bgAlpha
+                    }}
+                  >
+
+                    <Tooltip sticky>
+
+                      <div style={{ minWidth: 180 }}>
+
+                        <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                          {p.name}
+                        </div>
+
+                        <div style={{ fontSize: 12 }}>
+                          {p.areaHectares?.toFixed(2)} ha
+                        </div>
+
+                        {info.lote && (
+
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: '#b45309',
+                              fontWeight: 500
+                            }}
+                          >
+                            🐄 {info.lote.name} ({info.lote.cabezas})
+                          </div>
+
+                        )}
+
+                        {info.biomass != null && (
+
+                          <div style={{ fontSize: 12 }}>
+
+                            Pasto:
+
+                            <span
+                              style={{
+                                fontWeight: 600,
+                                color: getBiomassColor(info.biomass)
+                              }}
+                            >
+                              {Math.round(info.biomass)} kg/ha
+                            </span>
+
+                            <span style={{ fontSize: 11 }}>
+                              ({getBiomassLabel(info.biomass)})
+                            </span>
+
+                          </div>
+
+                        )}
+
+                      </div>
+
+                    </Tooltip>
+
+                  </GeoJSON>
+
+                )
+
               })}
+
             </MapContainer>
+
           </div>
 
-          {/* Legend */}
-          <div style={{ display: 'flex', gap: 24, marginTop: 12 }}>
-            {Object.entries(STATUS_CONFIG).map(([key, config]) => (
-              <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                <span style={{ width: 14, height: 14, borderRadius: 3, background: config.color, opacity: 0.8 }} />
-                {config.label}
-              </div>
-            ))}
-          </div>
         </div>
 
-        {/* Rotation controls */}
+
+        {/* Controls */}
+
         <div className="col-side">
+
           <div className="card">
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 16 }}>
+
+            <h3
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 18,
+                marginBottom: 16
+              }}
+            >
               Control de Parcelas
             </h3>
-            <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16 }}>
-              Haz clic en una parcela para cambiar su estado de rotación.
-            </p>
 
-            <div className="rotation-grid" style={{ gridTemplateColumns: '1fr' }}>
-              {parcels.map((p) => {
+            <div className="rotation-grid">
+
+              {parcels.map(p => {
+
                 const config = STATUS_CONFIG[p.status] || STATUS_CONFIG.DISPONIBLE
+
+                const info = parcelInfo[p.id] || {}
+
+                const isLocked = !!info.lote
+
                 return (
+
                   <div
                     key={p.id}
                     className="rotation-card"
                     style={{
-                      cursor: 'pointer',
+                      cursor: isLocked ? 'not-allowed' : 'pointer',
                       borderColor: `${config.color}44`,
-                      textAlign: 'left',
-                      transition: 'all 0.2s'
+                      opacity: isLocked ? 0.7 : 1
                     }}
-                    onClick={() => cycleStatus(p.id, p.status)}
+                    onClick={() => !isLocked && cycleStatus(p.id, p.status)}
                   >
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+
                       <div>
-                        <h4 style={{ fontFamily: 'var(--font-display)', fontSize: 16 }}>{p.name}</h4>
-                        <div className="area-info" style={{ margin: 0 }}>{p.areaHectares?.toFixed(2)} ha</div>
+
+                        <h4 style={{ fontSize: 16 }}>
+                          {isLocked && '🔒 '}
+                          {p.name}
+                        </h4>
+
+                        <div>
+                          {p.areaHectares?.toFixed(2)} ha
+                        </div>
+
+                        {info.lote && (
+                          <div style={{ fontSize: 11 }}>
+                            {info.lote.name}
+                          </div>
+                        )}
+
                       </div>
+
                       <div className={`status-badge ${getStatusClass(p.status)}`}>
                         {config.icon} {config.label}
                       </div>
+
                     </div>
+
                   </div>
+
                 )
+
               })}
+
             </div>
+
           </div>
 
-          <div className="card" style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.7 }}>
-            <strong style={{ color: 'var(--color-text)' }}>🔮 Próximamente:</strong><br />
-            Integración con <span style={{ color: 'var(--color-primary)' }}>Sentinel-2 (ESA)</span> para análisis NDVI automático y recomendaciones de rotación basadas en salud vegetacional del pastizal.
+
+          <div className="side-nav-buttons">
+
+            <button
+              className="action-btn action-btn--nav"
+              onClick={() => navigate(`/terrains/${terrainId}/parcels`)}
+            >
+              ← Volver a Parcelas
+            </button>
+
+            <button
+              className="action-btn action-btn--nav"
+              onClick={() => navigate(`/terrains/${terrainId}/lotes`)}
+            >
+              🐄 Lotes
+            </button>
+
+            <button
+              className="action-btn action-btn--nav action-btn--primary"
+              onClick={() => navigate(`/terrains/${terrainId}/ndvi`)}
+            >
+              🛰️ Dashboard NDVI
+            </button>
+
           </div>
 
-          <button
-            className="btn btn-secondary"
-            style={{ width: '100%' }}
-            onClick={() => navigate(`/terrains/${terrainId}/parcels`)}
-          >
-            ← Volver a Parcelas
-          </button>
-          <button
-            className="btn btn-primary"
-            style={{ width: '100%' }}
-            onClick={() => navigate(`/terrains/${terrainId}/ndvi`)}
-          >
-            🛰️ Dashboard NDVI
-          </button>
         </div>
+
       </div>
+
     </div>
   )
-}
-
-function getStatusClass(status) {
-  switch (status) {
-    case 'DISPONIBLE': return 'disponible'
-    case 'EN_USO': return 'en-uso'
-    case 'EN_DESCANSO': return 'en-descanso'
-    default: return 'disponible'
-  }
 }

@@ -202,76 +202,135 @@ public class PlanetApiService {
     }
 
     /**
-     * Activa un asset para descarga
+     * Asset types en orden de preferencia para NDVI.
+     * Education license a veces no tiene _sr (Surface Reflectance).
+     *
+     * 4-band: Red=Band3(idx2), NIR=Band4(idx3)
+     * 8-band: Red=Band6(idx5), NIR=Band8(idx7)
      */
+    private static final String[] ASSET_FALLBACKS = {
+            "ortho_analytic_4b_sr",   // 4-band Surface Reflectance (ideal)
+            "ortho_analytic_4b",      // 4-band DN (sin corrección atmosférica, funciona para NDVI)
+            "ortho_analytic_8b_sr",   // 8-band Surface Reflectance
+            "ortho_analytic_8b",      // 8-band DN
+    };
+
     /**
-     * Activa un asset para descarga
+     * Activa un asset para descarga, probando múltiples tipos en cascada.
+     * Retorna Map con: "url", "assetType", "numBands" o null si ninguno sirve.
      */
-    public String activateAndGetDownloadUrl(String sceneId) throws IOException, InterruptedException {
+    public Map<String, Object> activateAndGetDownloadUrl(String sceneId) throws IOException, InterruptedException {
         if (!isConfigured()) return null;
 
         String assetsUrl = String.format("%s/item-types/%s/items/%s/assets", baseUrl, itemType, sceneId);
 
-        // Get assets
         Request getAssets = new Request.Builder()
                 .url(assetsUrl)
                 .addHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((apiKey + ":").getBytes()))
                 .build();
 
         try (Response response = client.newCall(getAssets).execute()) {
-            if (!response.isSuccessful()) return null;
-
-            JsonNode assets = mapper.readTree(response.body().string());
-            JsonNode asset = assets.get(assetType);
-
-            if (asset == null) {
-                log.warn("Asset {} no disponible para escena {}", assetType, sceneId);
+            if (!response.isSuccessful()) {
+                log.error("Planet assets request failed: HTTP {} for scene {}", response.code(), sceneId);
                 return null;
             }
 
-            String status = asset.get("status").asText();
-            log.info("Estado del asset {}: {}", sceneId, status);
+            String responseBody = response.body().string();
 
-            // Si está inactivo o ya se está activando, entramos al ciclo de espera
-            if ("inactive".equals(status) || "activating".equals(status)) {
+            // Log raw response (truncated) para diagnosticar
+            log.info("Planet assets RAW para {}: {}", sceneId,
+                    responseBody.length() > 500 ? responseBody.substring(0, 500) + "..." : responseBody);
 
-                // Solo mandamos la orden de activar si está estrictamente inactivo
-                if ("inactive".equals(status)) {
-                    String activateUrl = asset.get("_links").get("activate").asText();
-                    Request activate = new Request.Builder()
-                            .url(activateUrl)
-                            .post(RequestBody.create("", MediaType.parse("application/json")))
-                            .addHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((apiKey + ":").getBytes()))
-                            .build();
+            JsonNode assets = mapper.readTree(responseBody);
 
-                    try (Response activateResp = client.newCall(activate).execute()) {
-                        log.info("Orden de activación enviada para escena {}: {}", sceneId, activateResp.code());
-                    }
-                }
+            // Log ALL available assets
+            List<String> availableAssets = new ArrayList<>();
+            assets.fieldNames().forEachRemaining(name -> {
+                String st = assets.get(name).has("status") ? assets.get(name).get("status").asText() : "?";
+                String perm = assets.get(name).has("_permissions") ? assets.get(name).get("_permissions").toString() : "no-perms";
+                availableAssets.add(name + "(" + st + ", " + perm + ")");
+            });
 
-                log.info("Esperando a que el asset se active (puede tomar varios minutos)...");
-                // Poll until active (max 5 minutos = 60 intentos de 5 segundos)
-                for (int i = 0; i < 60; i++) {
-                    Thread.sleep(5000);
-                    try (Response pollResp = client.newCall(getAssets).execute()) {
-                        JsonNode pollAssets = mapper.readTree(pollResp.body().string());
-                        JsonNode pollAsset = pollAssets.get(assetType);
-                        String currentStatus = pollAsset.get("status").asText();
-
-                        if ("active".equals(currentStatus)) {
-                            log.info("¡Asset activado exitosamente!");
-                            return pollAsset.get("location").asText();
+            if (availableAssets.isEmpty()) {
+                log.warn("⚠️ ZERO assets para escena {}. Tu licencia Education puede no tener permisos de descarga para esta zona.", sceneId);
+                // Try fetching the item itself to check permissions
+                String itemUrl = String.format("%s/item-types/%s/items/%s", baseUrl, itemType, sceneId);
+                Request itemReq = new Request.Builder()
+                        .url(itemUrl)
+                        .addHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((apiKey + ":").getBytes()))
+                        .build();
+                try (Response itemResp = client.newCall(itemReq).execute()) {
+                    if (itemResp.isSuccessful()) {
+                        String itemBody = itemResp.body().string();
+                        JsonNode item = mapper.readTree(itemBody);
+                        if (item.has("_permissions")) {
+                            log.info("Permisos del item {}: {}", sceneId, item.get("_permissions"));
+                        }
+                        if (item.has("assets")) {
+                            log.info("Assets dentro del item: {}",
+                                    item.get("assets").toString().substring(0, Math.min(500, item.get("assets").toString().length())));
                         }
                     }
                 }
-                log.warn("Timeout activando asset para escena {}", sceneId);
                 return null;
             }
 
-            if ("active".equals(status)) {
-                return asset.get("location").asText();
+            log.info("Assets disponibles para {}: {}", sceneId, String.join(", ", availableAssets));
+
+            // Try each asset type in order
+            for (String tryAssetType : ASSET_FALLBACKS) {
+                JsonNode asset = assets.get(tryAssetType);
+                if (asset == null) continue;
+
+                String status = asset.get("status").asText();
+                log.info("Probando asset {} para {}: estado={}", tryAssetType, sceneId, status);
+
+                String downloadUrl = null;
+
+                if ("active".equals(status)) {
+                    downloadUrl = asset.get("location").asText();
+                } else if ("inactive".equals(status) || "activating".equals(status)) {
+                    // Activate if needed
+                    if ("inactive".equals(status) && asset.has("_links") && asset.get("_links").has("activate")) {
+                        String activateUrl = asset.get("_links").get("activate").asText();
+                        Request activate = new Request.Builder()
+                                .url(activateUrl)
+                                .post(RequestBody.create("", MediaType.parse("application/json")))
+                                .addHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((apiKey + ":").getBytes()))
+                                .build();
+                        try (Response activateResp = client.newCall(activate).execute()) {
+                            log.info("Activación enviada para {} ({}): HTTP {}", sceneId, tryAssetType, activateResp.code());
+                        }
+                    }
+
+                    // Poll until active (max 5 min)
+                    log.info("Esperando activación de {} ({})...", sceneId, tryAssetType);
+                    for (int i = 0; i < 60; i++) {
+                        Thread.sleep(5000);
+                        try (Response pollResp = client.newCall(getAssets).execute()) {
+                            JsonNode pollAssets = mapper.readTree(pollResp.body().string());
+                            JsonNode pollAsset = pollAssets.get(tryAssetType);
+                            if (pollAsset != null && "active".equals(pollAsset.get("status").asText())) {
+                                downloadUrl = pollAsset.get("location").asText();
+                                log.info("Asset {} activado exitosamente para {}", tryAssetType, sceneId);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (downloadUrl != null) {
+                    int numBands = tryAssetType.contains("8b") ? 8 : 4;
+                    Map<String, Object> result = new HashMap<>();
+                    result.put("url", downloadUrl);
+                    result.put("assetType", tryAssetType);
+                    result.put("numBands", numBands);
+                    log.info("✅ Asset listo: {} ({} bandas) para escena {}", tryAssetType, numBands, sceneId);
+                    return result;
+                }
             }
 
+            log.warn("Ningún asset analítico disponible para escena {}", sceneId);
             return null;
         }
     }

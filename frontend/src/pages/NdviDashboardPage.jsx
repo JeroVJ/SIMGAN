@@ -1,156 +1,56 @@
-import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { useParams, useNavigate, Link } from 'react-router-dom'
+import Spinner from '../components/Spinner'
+import EmptyState from '../components/EmptyState'
 import {
-  LineChart, Line, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine
+  LineChart, Line, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { ndviApi, terrainApi } from '../services/api'
-import toast from 'react-hot-toast'
+import { useNdvi } from '../hooks'
+import { getHealthColor } from '../utils/ndvi'
 
 const PARCEL_COLORS = ['#4ade80', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#ec4899', '#14b8a6', '#f97316']
 
 const HEALTH_COLORS = {
-  'EXCELENTE': '#4ade80',
-  'BUENO': '#84cc16',
-  'REGULAR': '#f59e0b',
-  'CRÍTICO': '#ef4444'
+  EXCELENTE: '#4ade80', BUENO: '#84cc16', REGULAR: '#f59e0b', CRÍTICO: '#ef4444',
 }
 
 const STATUS_LABELS = {
-  'DISPONIBLE': { label: 'Disponible', icon: '🌿', color: '#4ade80' },
-  'EN_USO': { label: 'En uso', icon: '🐄', color: '#f59e0b' },
-  'EN_DESCANSO': { label: 'En descanso', icon: '💤', color: '#3b82f6' }
+  DISPONIBLE:  { label: 'Disponible', icon: '🌿', color: '#4ade80' },
+  EN_USO:      { label: 'En uso',     icon: '🐄', color: '#f59e0b' },
+  EN_DESCANSO: { label: 'En descanso',icon: '💤', color: '#3b82f6' },
 }
 
 const SEVERITY_COLORS = {
-  'CRITICAL': '#ef4444',
-  'HIGH': '#f97316',
-  'MEDIUM': '#f59e0b',
-  'LOW': '#3b82f6'
+  CRITICAL: '#ef4444', HIGH: '#f97316', MEDIUM: '#f59e0b', LOW: '#3b82f6',
 }
 
 export default function NdviDashboardPage() {
   const { terrainId } = useParams()
   const navigate = useNavigate()
+  const {
+    dashboard, comparison, recommendations, history,
+    loading, analyzing,
+    timelineByDate, parcelNames,
+    analyze, selectParcel, acknowledgeAlert,
+  } = useNdvi(terrainId)
 
-  const [dashboard, setDashboard] = useState(null)
-  const [comparison, setComparison] = useState([])
-  const [recommendations, setRecommendations] = useState([])
-  const [history, setHistory] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [analyzing, setAnalyzing] = useState(false)
   const [activeTab, setActiveTab] = useState('overview')
-  const [selectedParcel, setSelectedParcel] = useState(null)
-  const [parcelTimeline, setParcelTimeline] = useState([])
 
-  useEffect(() => { loadAll() }, [terrainId])
-
-  async function loadAll() {
-    setLoading(true)
-    try {
-      const [dash, comp, recs, hist] = await Promise.all([
-        ndviApi.getDashboard(terrainId),
-        ndviApi.getComparison(terrainId),
-        ndviApi.getRecommendations(terrainId),
-        ndviApi.getRotationHistory(terrainId)
-      ])
-      setDashboard(dash)
-      setComparison(comp)
-      setRecommendations(recs)
-      setHistory(hist)
-    } catch (err) {
-      toast.error('Error cargando dashboard NDVI')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleAnalyze() {
-    setAnalyzing(true)
-    try {
-      const result = await ndviApi.analyze(terrainId)
-
-      // Show detailed message
-      if (result.message) {
-        toast.success(result.message, { duration: 6000 })
-      }
-      if (result.planetNote) {
-        toast(result.planetNote, { icon: '🛰️', duration: 4000 })
-      }
-      if (result.sentinelNote) {
-        toast(result.sentinelNote, { icon: '🌍', duration: 4000 })
-      }
-      if (result.error) {
-        toast.error(result.error)
-      }
-
-      // Always reload dashboard after analysis
-      await loadAll()
-    } catch (err) {
-      toast.error('Error ejecutando análisis: ' + (err.response?.data?.error || err.message))
-    } finally {
-      setAnalyzing(false)
-    }
-  }
-
-  async function handleSelectParcel(parcelId) {
-    setSelectedParcel(parcelId)
-    try {
-      const timeline = await ndviApi.getParcelTimeline(parcelId)
-      setParcelTimeline(timeline)
-    } catch {
-      setParcelTimeline([])
-    }
-  }
-
-  async function handleAcknowledgeAlert(alertId) {
-    try {
-      await ndviApi.acknowledgeAlert(alertId)
-      await loadAll()
-      toast.success('Alerta reconocida')
-    } catch {
-      toast.error('Error')
-    }
-  }
-
-  // Prepare timeline data grouped by date
-  const timelineByDate = useMemo(() => {
-    if (!dashboard?.timeline) return []
-    const grouped = {}
-    dashboard.timeline.forEach(p => {
-      if (!grouped[p.date]) grouped[p.date] = { date: p.date }
-      grouped[p.date][p.parcelName || `P${p.parcelId}`] = p.meanNdvi
-      grouped[p.date][`bio_${p.parcelName || p.parcelId}`] = p.biomassKgPerHa
-    })
-    return Object.values(grouped).sort((a, b) => a.date.localeCompare(b.date))
-  }, [dashboard?.timeline])
-
-  const parcelNames = useMemo(() => {
-    if (!dashboard?.parcels) return []
-    return dashboard.parcels.map(p => p.parcelName)
-  }, [dashboard?.parcels])
-
-  if (loading) {
-    return (
-      <div className="empty-state">
-        <div className="spinner" />
-        <p style={{ marginTop: 16 }}>Cargando analíticas NDVI...</p>
-      </div>
-    )
-  }
+  if (loading) return <Spinner page label="Cargando analíticas NDVI..." />
 
   const hasData = dashboard?.timeline?.length > 0
 
   return (
-    <div>
+    <div className="page-container">
       {/* Header */}
       <div className="page-header">
         <div className="breadcrumb">
-          <a href="/farms">Fincas</a>
+          <Link to="/farms">Fincas</Link>
           <span>›</span>
           <span>{dashboard?.farmName}</span>
           <span>›</span>
-          <a href={`/terrains/${terrainId}/parcels`}>{dashboard?.terrainName}</a>
+          <Link to={`/terrains/${terrainId}/parcels`}>{dashboard?.terrainName}</Link>
           <span>›</span>
           <span>NDVI Analytics</span>
         </div>
@@ -159,25 +59,23 @@ export default function NdviDashboardPage() {
             <h2>🛰️ Analíticas NDVI</h2>
             <p>{dashboard?.terrainName} — {dashboard?.terrainAreaHa?.toFixed(2)} ha · {dashboard?.parcels?.length} parcelas</p>
           </div>
-          <button
-            className="btn btn-primary"
-            onClick={handleAnalyze}
-            disabled={analyzing}
-          >
+          <button className="action-btn action-btn--primary" onClick={analyze} disabled={analyzing}>
             {analyzing ? <><span className="spinner" /> Analizando...</> : '🛰️ Ejecutar Análisis'}
           </button>
         </div>
       </div>
 
       {!hasData ? (
-        <div className="empty-state card">
-          <div className="icon">🛰️</div>
-          <h3>Sin datos NDVI</h3>
-          <p>Ejecuta un análisis para generar datos satelitales de este terreno.</p>
-          <button className="btn btn-primary" onClick={handleAnalyze} disabled={analyzing}>
-            {analyzing ? 'Analizando...' : '🛰️ Ejecutar Primer Análisis'}
-          </button>
-        </div>
+        <EmptyState
+          icon="🛰️"
+          title="Sin datos NDVI"
+          description="Ejecuta un análisis para generar datos satelitales de este terreno."
+          action={
+            <button className="action-btn action-btn--primary" onClick={analyze} disabled={analyzing}>
+              {analyzing ? 'Analizando...' : '🛰️ Ejecutar Primer Análisis'}
+            </button>
+          }
+        />
       ) : (
         <>
           {/* Summary Cards */}
@@ -215,16 +113,16 @@ export default function NdviDashboardPage() {
           {/* Tabs */}
           <div className="ndvi-tabs">
             {[
-              { key: 'overview', label: '📊 Evolución NDVI' },
-              { key: 'comparison', label: '📋 Comparación' },
+              { key: 'overview',        label: '📊 Evolución NDVI' },
+              { key: 'comparison',      label: '📋 Comparación' },
               { key: 'recommendations', label: '🎯 Recomendaciones' },
-              { key: 'alerts', label: `⚠️ Alertas (${dashboard?.activeAlerts || 0})` },
-              { key: 'history', label: '📜 Historial' },
-              { key: 'biomass', label: '🌱 Biomasa' }
+              { key: 'alerts',          label: `⚠️ Alertas (${dashboard?.activeAlerts || 0})` },
+              { key: 'history',         label: '📜 Historial' },
+              { key: 'biomass',         label: '🌱 Biomasa' },
             ].map(tab => (
               <button
                 key={tab.key}
-                className={`ndvi-tab ${activeTab === tab.key ? 'active' : ''}`}
+                className={`ndvi-tab${activeTab === tab.key ? ' ndvi-tab--active' : ''}`}
                 onClick={() => setActiveTab(tab.key)}
               >
                 {tab.label}
@@ -232,7 +130,6 @@ export default function NdviDashboardPage() {
             ))}
           </div>
 
-          {/* Tab Content */}
           <div className="ndvi-tab-content">
             {activeTab === 'overview' && (
               <div>
@@ -246,39 +143,28 @@ export default function NdviDashboardPage() {
                   <ResponsiveContainer width="100%" height={380}>
                     <LineChart data={timelineByDate}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#2a3d2a" />
-                      <XAxis dataKey="date" stroke="#5c7a5c" tick={{ fontSize: 11 }}
-                        tickFormatter={d => d?.substring(5)} />
+                      <XAxis dataKey="date" stroke="#5c7a5c" tick={{ fontSize: 11 }} tickFormatter={d => d?.substring(5)} />
                       <YAxis domain={[0, 1]} stroke="#5c7a5c" tick={{ fontSize: 11 }} />
-                      <Tooltip
-                        contentStyle={{ background: '#172117', border: '1px solid #2a3d2a', borderRadius: 8 }}
-                        labelStyle={{ color: '#e8f5e8' }}
-                      />
+                      <Tooltip contentStyle={{ background: '#172117', border: '1px solid #2a3d2a', borderRadius: 8 }} labelStyle={{ color: '#e8f5e8' }} />
                       <Legend />
                       <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Umbral alerta', fill: '#ef4444', fontSize: 11 }} />
                       <ReferenceLine y={0.6} stroke="#4ade80" strokeDasharray="5 5" label={{ value: 'Óptimo', fill: '#4ade80', fontSize: 11 }} />
                       {parcelNames.map((name, i) => (
-                        <Line
-                          key={name}
-                          type="monotone"
-                          dataKey={name}
+                        <Line key={name} type="monotone" dataKey={name}
                           stroke={PARCEL_COLORS[i % PARCEL_COLORS.length]}
-                          strokeWidth={2}
-                          dot={false}
-                          connectNulls
-                        />
+                          strokeWidth={2} dot={false} connectNulls />
                       ))}
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
 
-                {/* Per-parcel mini cards */}
                 <div className="ndvi-parcel-grid">
                   {dashboard?.parcels?.map((p, i) => (
                     <div
                       key={p.parcelId}
                       className="ndvi-parcel-card"
                       style={{ borderLeftColor: PARCEL_COLORS[i % PARCEL_COLORS.length] }}
-                      onClick={() => handleSelectParcel(p.parcelId)}
+                      onClick={() => selectParcel(p.parcelId)}
                     >
                       <div className="flex justify-between items-center">
                         <h4>{p.parcelName}</h4>
@@ -319,22 +205,14 @@ export default function NdviDashboardPage() {
 
             {activeTab === 'comparison' && (
               <div className="card">
-                <div className="card-header">
-                  <h3>Ranking de Parcelas por NDVI</h3>
-                </div>
+                <div className="card-header"><h3>Ranking de Parcelas por NDVI</h3></div>
                 <div className="table-container">
                   <table>
                     <thead>
                       <tr>
-                        <th>#</th>
-                        <th>Parcela</th>
-                        <th>Área (ha)</th>
-                        <th>Estado</th>
-                        <th>NDVI Actual</th>
-                        <th>NDVI Promedio</th>
-                        <th>Biomasa (kg/ha)</th>
-                        <th>Salud</th>
-                        <th>Recomendación</th>
+                        <th>#</th><th>Parcela</th><th>Área (ha)</th><th>Estado</th>
+                        <th>NDVI Actual</th><th>NDVI Promedio</th><th>Biomasa (kg/ha)</th>
+                        <th>Salud</th><th>Recomendación</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -379,9 +257,7 @@ export default function NdviDashboardPage() {
                       <div key={rec.parcelId} className="ndvi-rec-card" data-urgency={rec.urgency}>
                         <div className="flex justify-between items-center mb-16">
                           <h4>{rec.parcelName}</h4>
-                          <span className={`ndvi-urgency ${rec.urgency?.toLowerCase()}`}>
-                            {rec.urgency}
-                          </span>
+                          <span className={`ndvi-urgency ${rec.urgency?.toLowerCase()}`}>{rec.urgency}</span>
                         </div>
                         <div className="ndvi-rec-flow">
                           <span className={`status-badge ${rec.currentStatus?.toLowerCase()?.replace('_', '-')}`}>
@@ -392,9 +268,7 @@ export default function NdviDashboardPage() {
                             {STATUS_LABELS[rec.recommendedStatus]?.icon} {STATUS_LABELS[rec.recommendedStatus]?.label}
                           </span>
                         </div>
-                        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 12 }}>
-                          {rec.reason}
-                        </p>
+                        <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', marginTop: 12 }}>{rec.reason}</p>
                         <div className="ndvi-rec-metrics">
                           <span>NDVI: <strong style={{ color: getHealthColor(rec.currentNdvi) }}>{rec.currentNdvi?.toFixed(3)}</strong></span>
                           <span>Biomasa: <strong>{rec.biomass?.toFixed(0)} kg/ha</strong></span>
@@ -430,7 +304,7 @@ export default function NdviDashboardPage() {
                             </span>
                           </div>
                           {!alert.acknowledged && (
-                            <button className="btn btn-secondary btn-sm" onClick={() => handleAcknowledgeAlert(alert.id)}>
+                            <button className="action-btn action-btn--small" onClick={() => acknowledgeAlert(alert.id)}>
                               ✓ Reconocer
                             </button>
                           )}
@@ -448,9 +322,7 @@ export default function NdviDashboardPage() {
 
             {activeTab === 'history' && (
               <div className="card">
-                <div className="card-header">
-                  <h3>Historial de Rotación</h3>
-                </div>
+                <div className="card-header"><h3>Historial de Rotación</h3></div>
                 {history.length === 0 ? (
                   <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: 24 }}>
                     Sin historial de rotación registrado.
@@ -493,9 +365,7 @@ export default function NdviDashboardPage() {
                 <div className="card mb-24">
                   <div className="card-header">
                     <h3>🌱 Materia Vegetal por Parcela</h3>
-                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                      kg de materia seca / hectárea
-                    </span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>kg de materia seca / hectárea</span>
                   </div>
                   <ResponsiveContainer width="100%" height={350}>
                     <BarChart data={comparison} layout="vertical">
@@ -546,25 +416,12 @@ export default function NdviDashboardPage() {
             )}
           </div>
 
-          {/* Navigation */}
           <div className="flex gap-12 mt-24">
-            <button className="btn btn-secondary" onClick={() => navigate(`/terrains/${terrainId}/parcels`)}>
-              ← Parcelas
-            </button>
-            <button className="btn btn-secondary" onClick={() => navigate(`/terrains/${terrainId}/rotation`)}>
-              🔄 Rotación
-            </button>
+            <button className="action-btn" onClick={() => navigate(`/terrains/${terrainId}/parcels`)}>← Parcelas</button>
+            <button className="action-btn" onClick={() => navigate(`/terrains/${terrainId}/rotation`)}>🔄 Rotación</button>
           </div>
         </>
       )}
     </div>
   )
-}
-
-function getHealthColor(ndvi) {
-  if (ndvi == null) return '#5c7a5c'
-  if (ndvi >= 0.60) return '#4ade80'
-  if (ndvi >= 0.40) return '#84cc16'
-  if (ndvi >= 0.25) return '#f59e0b'
-  return '#ef4444'
 }

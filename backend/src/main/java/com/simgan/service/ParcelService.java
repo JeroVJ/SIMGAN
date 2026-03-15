@@ -1,14 +1,8 @@
 package com.simgan.service;
 
 import com.simgan.dto.ParcelDto;
-import com.simgan.entity.NdviRecord;
-import com.simgan.entity.Parcel;
-import com.simgan.entity.RotationHistory;
-import com.simgan.entity.Terrain;
-import com.simgan.repository.NdviRecordRepository;
-import com.simgan.repository.ParcelRepository;
-import com.simgan.repository.RotationHistoryRepository;
-import com.simgan.repository.TerrainRepository;
+import com.simgan.entity.*;
+import com.simgan.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +18,7 @@ public class ParcelService {
     private final TerrainRepository terrainRepository;
     private final RotationHistoryRepository rotationHistoryRepository;
     private final NdviRecordRepository ndviRecordRepository;
+    private final LoteRepository loteRepository;
 
     public ParcelDto.Response create(ParcelDto.CreateRequest request) {
         Terrain terrain = terrainRepository.findById(request.getTerrainId())
@@ -50,6 +45,17 @@ public class ParcelService {
     public ParcelDto.Response updateStatus(Long id, Parcel.ParcelStatus newStatus) {
         Parcel parcel = parcelRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Parcela no encontrada con id: " + id));
+
+        // Block status change if parcel is in use by an active lote
+        List<Lote> occupyingLotes = loteRepository.findByCurrentParcelId(id);
+        List<Lote> activeLotes = occupyingLotes.stream()
+                .filter(l -> l.getFechaSalida() == null)
+                .collect(Collectors.toList());
+        if (!activeLotes.isEmpty()) {
+            throw new RuntimeException("No se puede cambiar el estado de la parcela '"
+                    + parcel.getName() + "' porque está en uso por el lote '"
+                    + activeLotes.get(0).getName() + "'. Primero retire el lote de la parcela.");
+        }
 
         Parcel.ParcelStatus previousStatus = parcel.getStatus();
 

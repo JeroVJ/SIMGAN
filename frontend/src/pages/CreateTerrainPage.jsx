@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, Link } from 'react-router-dom'
 import { MapContainer, TileLayer, FeatureGroup, GeoJSON, useMap } from 'react-leaflet'
 import { EditControl } from 'react-leaflet-draw'
 import * as turf from '@turf/turf'
 import { farmApi, terrainApi } from '../services/api'
+import { useFarm } from '../hooks'
 import toast from 'react-hot-toast'
 import L from 'leaflet'
 
@@ -12,79 +13,45 @@ delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon-2x.png',
   iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-icon.png',
-  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png'
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-// Component to recenter map when farm data loads
 function MapCenter({ lat, lng }) {
   const map = useMap()
   useEffect(() => {
-    if (lat && lng) {
-      map.setView([lat, lng], 15)
-    }
+    if (lat && lng) map.setView([lat, lng], 15)
   }, [lat, lng, map])
   return null
 }
 
+const TERRAIN_COLORS = ['#4ade80', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7']
+
 export default function CreateTerrainPage() {
   const { farmId } = useParams()
   const navigate = useNavigate()
+  const { farm, terrains: existingTerrains } = useFarm(farmId)
 
-  const [farm, setFarm] = useState(null)
-  const [existingTerrains, setExistingTerrains] = useState([])
   const [terrainName, setTerrainName] = useState('')
   const [drawnGeoJson, setDrawnGeoJson] = useState(null)
   const [areaSqM, setAreaSqM] = useState(0)
   const [areaHa, setAreaHa] = useState(0)
-  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const featureGroupRef = useRef(null)
 
-  // Default center: Colombia (Córdoba region - cattle country)
-  const [center, setCenter] = useState([8.75, -75.88])
-
-  useEffect(() => {
-    loadFarm()
-    loadTerrains()
-  }, [farmId])
-
-  async function loadFarm() {
-    try {
-      const data = await farmApi.getById(farmId)
-      setFarm(data)
-      if (data.centerLat && data.centerLng) {
-        setCenter([data.centerLat, data.centerLng])
-      }
-    } catch {
-      toast.error('Finca no encontrada')
-      navigate('/farms')
-    }
-  }
-
-  async function loadTerrains() {
-    try {
-      const data = await terrainApi.getByFarm(farmId)
-      setExistingTerrains(data)
-    } catch {
-      // ignore
-    }
-  }
+  const center = (farm?.centerLat && farm?.centerLng)
+    ? [farm.centerLat, farm.centerLng]
+    : [8.75, -75.88]
 
   function handleCreated(e) {
-    const layer = e.layer
-    const geoJson = layer.toGeoJSON()
-
-    // Calculate area with turf.js
+    const geoJson = e.layer.toGeoJSON()
     const areaM2 = turf.area(geoJson)
-    const areaHectares = areaM2 / 10000
-
     setDrawnGeoJson(geoJson)
     setAreaSqM(areaM2)
-    setAreaHa(areaHectares)
+    setAreaHa(areaM2 / 10000)
   }
 
   function handleEdited(e) {
-    const layers = e.layers
-    layers.eachLayer((layer) => {
+    e.layers.eachLayer((layer) => {
       const geoJson = layer.toGeoJSON()
       const areaM2 = turf.area(geoJson)
       setDrawnGeoJson(geoJson)
@@ -100,39 +67,30 @@ export default function CreateTerrainPage() {
   }
 
   async function handleSave() {
-    if (!drawnGeoJson) {
-      toast.error('Dibuja el polígono del terreno en el mapa')
-      return
-    }
-
-    setLoading(true)
+    if (!drawnGeoJson) { toast.error('Dibuja el polígono del terreno en el mapa'); return }
+    setSaving(true)
     try {
-      const payload = {
+      const terrain = await terrainApi.create({
         name: terrainName.trim() || `Terreno ${existingTerrains.length + 1}`,
         farmId: parseInt(farmId),
         geoJson: JSON.stringify(drawnGeoJson),
         areaSqMeters: areaSqM,
-        areaHectares: areaHa
-      }
-
-      const terrain = await terrainApi.create(payload)
+        areaHectares: areaHa,
+      })
       toast.success(`Terreno guardado: ${terrain.areaHectares?.toFixed(2)} ha`)
       navigate(`/terrains/${terrain.id}/parcels`)
-    } catch (err) {
+    } catch {
       toast.error('Error guardando terreno')
     } finally {
-      setLoading(false)
+      setSaving(false)
     }
   }
-
-  // Parcel colors for existing terrains
-  const terrainColors = ['#4ade80', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7']
 
   return (
     <div>
       <div className="page-header">
         <div className="breadcrumb">
-          <a href="/farms">Mis Fincas</a>
+          <Link to="/farms">Mis Fincas</Link>
           <span>›</span>
           <span>{farm?.name || '...'}</span>
           <span>›</span>
@@ -148,42 +106,22 @@ export default function CreateTerrainPage() {
           <div className="map-container">
             <MapContainer center={center} zoom={15} style={{ height: '100%', width: '100%' }}>
               <MapCenter lat={center[0]} lng={center[1]} />
-
-              {/* Esri World Imagery - Satellite tiles */}
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
-                attribution="Tiles &copy; Esri"
-                maxZoom={19}
+                attribution="Tiles &copy; Esri" maxZoom={19}
               />
-
-              {/* Labels overlay */}
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
                 maxZoom={19}
               />
-
-              {/* Existing terrains */}
               {existingTerrains.map((t, i) => {
                 try {
-                  const geo = JSON.parse(t.geoJson)
                   return (
-                    <GeoJSON
-                      key={t.id}
-                      data={geo}
-                      style={{
-                        color: terrainColors[i % terrainColors.length],
-                        weight: 2,
-                        fillOpacity: 0.15,
-                        dashArray: '5,5'
-                      }}
-                    />
+                    <GeoJSON key={t.id} data={JSON.parse(t.geoJson)}
+                      style={{ color: TERRAIN_COLORS[i % TERRAIN_COLORS.length], weight: 2, fillOpacity: 0.15, dashArray: '5,5' }} />
                   )
-                } catch {
-                  return null
-                }
+                } catch { return null }
               })}
-
-              {/* Drawing controls */}
               <FeatureGroup ref={featureGroupRef}>
                 <EditControl
                   position="topright"
@@ -191,34 +129,19 @@ export default function CreateTerrainPage() {
                   onEdited={handleEdited}
                   onDeleted={handleDeleted}
                   draw={{
-                    polygon: {
-                      allowIntersection: false,
-                      shapeOptions: {
-                        color: '#4ade80',
-                        weight: 3,
-                        fillOpacity: 0.2
-                      }
-                    },
-                    rectangle: false,
-                    circle: false,
-                    circlemarker: false,
-                    marker: false,
-                    polyline: false
+                    polygon: { allowIntersection: false, shapeOptions: { color: '#4ade80', weight: 3, fillOpacity: 0.2 } },
+                    rectangle: false, circle: false, circlemarker: false, marker: false, polyline: false,
                   }}
                 />
               </FeatureGroup>
             </MapContainer>
           </div>
 
-          {/* Area display */}
           {drawnGeoJson && (
             <div className="area-display">
               <div className="area-stat">
                 <span className="label">Área</span>
-                <span className="value">
-                  {areaHa.toFixed(2)}
-                  <span className="unit">ha</span>
-                </span>
+                <span className="value">{areaHa.toFixed(2)}<span className="unit">ha</span></span>
               </div>
               <div className="area-stat">
                 <span className="label">Metros²</span>
@@ -237,7 +160,6 @@ export default function CreateTerrainPage() {
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 16 }}>
               Datos del Terreno
             </h3>
-
             <div className="form-group mb-16">
               <label>Nombre del Terreno</label>
               <input
@@ -246,7 +168,6 @@ export default function CreateTerrainPage() {
                 placeholder="Ej: Potrero Norte"
               />
             </div>
-
             <div style={{ padding: '12px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16 }}>
               <strong style={{ color: 'var(--color-text)' }}>Instrucciones:</strong><br />
               1. Usa el icono de polígono (▭) en el mapa<br />
@@ -254,26 +175,19 @@ export default function CreateTerrainPage() {
               3. Cierra el polígono haciendo clic en el primer punto<br />
               4. El área se calcula automáticamente
             </div>
-
             <button
-              className="btn btn-primary"
+              className="action-btn action-btn--primary"
               style={{ width: '100%' }}
               onClick={handleSave}
-              disabled={!drawnGeoJson || loading}
+              disabled={!drawnGeoJson || saving}
             >
-              {loading ? <><span className="spinner" /> Guardando...</> : '✓ Guardar Terreno'}
+              {saving ? <><span className="spinner" /> Guardando...</> : '✓ Guardar Terreno'}
             </button>
-
-            <button
-              className="btn btn-secondary mt-16"
-              style={{ width: '100%' }}
-              onClick={() => navigate('/farms')}
-            >
+            <button className="action-btn mt-16" style={{ width: '100%' }} onClick={() => navigate('/farms')}>
               ← Volver a Fincas
             </button>
           </div>
 
-          {/* Existing terrains */}
           {existingTerrains.length > 0 && (
             <div className="card">
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
@@ -287,7 +201,7 @@ export default function CreateTerrainPage() {
                   onClick={() => navigate(`/terrains/${t.id}/parcels`)}
                 >
                   <div className="info">
-                    <span className="name" style={{ color: terrainColors[i % terrainColors.length] }}>
+                    <span className="name" style={{ color: TERRAIN_COLORS[i % TERRAIN_COLORS.length] }}>
                       {t.name || `Terreno ${t.id}`}
                     </span>
                     <span className="area">{t.areaHectares?.toFixed(2)} ha</span>

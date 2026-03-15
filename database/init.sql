@@ -119,3 +119,42 @@ CREATE INDEX IF NOT EXISTS idx_parcels_terrain_id ON parcels(terrain_id);
 CREATE INDEX IF NOT EXISTS idx_ndvi_parcel_date ON ndvi_records(parcel_id, capture_date);
 CREATE INDEX IF NOT EXISTS idx_ndvi_terrain_date ON ndvi_records(terrain_id, capture_date);
 CREATE INDEX IF NOT EXISTS idx_rotation_parcel ON rotation_history(parcel_id, changed_at);
+
+-- =============================================
+-- GANADO MODULE v0.2
+-- =============================================
+
+-- Lotes (batches of cattle)
+CREATE TABLE IF NOT EXISTS lotes (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    fecha_ingreso DATE NOT NULL,
+    fecha_salida DATE,
+    terrain_id BIGINT NOT NULL REFERENCES terrains(id) ON DELETE CASCADE,
+    current_parcel_id BIGINT REFERENCES parcels(id) ON DELETE SET NULL,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Ganado (individual cattle)
+CREATE TABLE IF NOT EXISTS ganados (
+    id BIGSERIAL PRIMARY KEY,
+    numeracion VARCHAR(100) NOT NULL,
+    tipo VARCHAR(20) NOT NULL,
+    peso_inicial DOUBLE PRECISION NOT NULL,
+    peso_actual DOUBLE PRECISION NOT NULL,
+    lote_id BIGINT NOT NULL REFERENCES lotes(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Lote-Parcel History (rotation tracking per batch)
+CREATE TABLE IF NOT EXISTS lote_parcel_history (
+    id BIGSERIAL PRIMARY KEY,
+    lote_id BIGINT NOT NULL REFERENCES lotes(id) ON DELETE CASCADE,
+    parcel_id BIGINT NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
+    fecha_ingreso DATE NOT NULL,
+    fecha_salida DATE
+);
+
+CREATE INDEX IF NOT EXISTS idx_lotes_terrain ON lotes(terrain_id);
+CREATE INDEX IF NOT EXISTS idx_ganados_lote ON ganados(lote_id);
+CREATE INDEX IF NOT EXISTS idx_lote_parcel_hist ON lote_parcel_history(lote_id, fecha_ingreso);

@@ -53,7 +53,9 @@ public class NdviAlert {
         BIOMASS_LOW,
         OVERGRAZING_RISK,
         REST_RECOMMENDED,
-        READY_FOR_GRAZING
+        READY_FOR_GRAZING,
+        GRAZING_DAYS_LOW,
+        PASTURE_DEPLETED
     }
 
     public enum AlertSeverity {

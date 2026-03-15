@@ -2,11 +2,15 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { farmApi, terrainApi } from '../services/api'
 import toast from 'react-hot-toast'
+import Spinner from '../components/Spinner'
+import EmptyState from '../components/EmptyState'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function FarmsPage() {
   const [farms, setFarms] = useState([])
   const [terrainsByFarm, setTerrainsByFarm] = useState({})
   const [loading, setLoading] = useState(true)
+  const [confirm, setConfirm] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -18,7 +22,6 @@ export default function FarmsPage() {
       const data = await farmApi.getAll()
       setFarms(data)
 
-      // Load terrains for each farm
       const terrainsMap = {}
       for (const farm of data) {
         try {
@@ -37,99 +40,134 @@ export default function FarmsPage() {
 
   async function handleDelete(e, id) {
     e.stopPropagation()
-    if (!window.confirm('¿Eliminar esta finca y todos sus terrenos?')) return
-    try {
-      await farmApi.delete(id)
-      toast.success('Finca eliminada')
-      loadFarms()
-    } catch {
-      toast.error('Error eliminando finca')
-    }
+    setConfirm({
+      title: 'Eliminar finca',
+      message: '¿Eliminar esta finca y todos sus terrenos? Esta acción no se puede deshacer.',
+      confirmLabel: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          await farmApi.delete(id)
+          toast.success('Finca eliminada')
+          loadFarms()
+        } catch {
+          toast.error('Error eliminando finca')
+        }
+      },
+    })
   }
 
-  if (loading) {
-    return (
-      <div className="empty-state">
-        <div className="spinner" />
-        <p style={{ marginTop: 16 }}>Cargando fincas...</p>
-      </div>
-    )
-  }
+  if (loading) return <Spinner page label="Cargando fincas..." />
 
   return (
-    <div>
+    <div className="page-container">
       <div className="page-header">
         <h2>Mis Fincas</h2>
         <p>Gestiona tus fincas ganaderas y sus terrenos</p>
       </div>
 
       {farms.length === 0 ? (
-        <div className="empty-state card">
-          <div className="icon">🌾</div>
-          <h3>Sin fincas registradas</h3>
-          <p>Crea tu primera finca para comenzar a gestionar terrenos y parcelas.</p>
-          <button className="btn btn-primary" onClick={() => navigate('/farms/new')}>
-            ➕ Crear Finca
-          </button>
-        </div>
+        <EmptyState
+          icon="🌾"
+          title="Sin fincas registradas"
+          description="Crea tu primera finca para comenzar a gestionar terrenos y parcelas."
+          action={
+            <button
+              className="action-btn action-btn--primary"
+              onClick={() => navigate('/farms/new')}
+            >
+              Crear Finca
+            </button>
+          }
+        />
       ) : (
         <div className="farms-grid">
           {farms.map(farm => {
             const terrains = terrainsByFarm[farm.id] || []
+
             return (
-              <div key={farm.id} className="farm-card" onClick={() => navigate(`/farms/${farm.id}/terrain/new`)}>
-                <h3>{farm.name}</h3>
-                <div className="meta">
-                  <span>👤 {farm.owner}</span>
-                  {farm.department && <span>📍 {farm.municipality ? `${farm.municipality}, ` : ''}{farm.department}</span>}
-                  <span>🗺️ {terrains.length} terreno{terrains.length !== 1 ? 's' : ''}</span>
+              <div
+                key={farm.id}
+                className="farm-card"
+                onClick={() => navigate(`/farms/${farm.id}`)}
+              >
+                <div className="farm-card__header">
+                  <div className="farm-card__initial">
+                    {farm.name?.[0] || '?'}
+                  </div>
+
+                  <h3>{farm.name || 'Finca sin nombre'}</h3>
+
+                  <button
+                    className="action-btn action-btn--danger action-btn--icon"
+                    onClick={(e) => handleDelete(e, farm.id)}
+                    title="Eliminar finca"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                      <path
+                        d="M3 4h10M5.5 4V3a1 1 0 011-1h3a1 1 0 011 1v1M6.5 7v4M9.5 7v4M4.5 4l.5 8a1 1 0 001 1h4a1 1 0 001-1l.5-8"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
                 </div>
 
-                {/* Show terrains if any */}
+                <div className="farm-card__meta">
+                  {farm.owner && <span>{farm.owner}</span>}
+
+                  {farm.department && (
+                    <span>
+                      {farm.municipality ? `${farm.municipality}, ` : ''}
+                      {farm.department}
+                    </span>
+                  )}
+                </div>
+
+                <div className="farm-card__stat">
+                  <span className="fcs-val">{terrains.length}</span>
+                  <span className="fcs-lbl">
+                    terreno{terrains.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+
                 {terrains.length > 0 && (
-                  <div style={{ marginTop: 12 }}>
+                  <div className="farm-card__terrains">
                     {terrains.map(t => (
                       <div
                         key={t.id}
-                        style={{
-                          padding: '8px 12px',
-                          background: 'var(--color-bg)',
-                          borderRadius: 'var(--radius-sm)',
-                          marginBottom: 6,
-                          fontSize: 13,
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center'
-                        }}
+                        className="farm-terrain-row"
                         onClick={(e) => {
                           e.stopPropagation()
                           navigate(`/terrains/${t.id}/parcels`)
                         }}
                       >
                         <span>{t.name || `Terreno ${t.id}`}</span>
-                        <span style={{ color: 'var(--color-primary)' }}>
-                          {t.areaHectares?.toFixed(2)} ha
+                        <span className="ftr-area">
+                          {t.areaHectares?.toFixed(1)} ha
                         </span>
                       </div>
                     ))}
                   </div>
                 )}
 
-                <div className="card-actions">
+                <div
+                  className="farm-card__footer"
+                  onClick={e => e.stopPropagation()}
+                >
                   <button
-                    className="btn btn-primary btn-sm"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      navigate(`/farms/${farm.id}/terrain/new`)
-                    }}
+                    className="action-btn action-btn--small"
+                    onClick={() => navigate(`/farms/${farm.id}`)}
                   >
-                    🗺️ Agregar Terreno
+                    Dashboard
                   </button>
+
                   <button
-                    className="btn btn-danger btn-sm"
-                    onClick={(e) => handleDelete(e, farm.id)}
+                    className="action-btn action-btn--small action-btn--outline"
+                    onClick={() => navigate(`/farms/${farm.id}/terrain/new`)}
                   >
-                    🗑️
+                    + Terreno
                   </button>
                 </div>
               </div>
@@ -137,6 +175,19 @@ export default function FarmsPage() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirm}
+        title={confirm?.title}
+        message={confirm?.message}
+        confirmLabel={confirm?.confirmLabel || 'Confirmar'}
+        variant="danger"
+        onConfirm={() => {
+          confirm?.onConfirm?.()
+          setConfirm(null)
+        }}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   )
 }
