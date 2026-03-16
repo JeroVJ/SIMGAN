@@ -27,7 +27,7 @@ public class SensorService {
 
         // Crear clasificacion desde la lectura
         ClasificacionSensor clasificacion =
-                ClasificacionSensor.fromLectura(lectura, "F");
+                ClasificacionSensor.fromLectura(lectura, "Franco");
 
         // Asociar sensor
         clasificacion.setSensor(sensor);

@@ -3,9 +3,12 @@ package com.simgan.controller;
 import com.simgan.dto.SensorConfigDto;
 import com.simgan.dto.SensorCreateDto;
 import com.simgan.dto.SensorDto;
+import com.simgan.dto.ClasificacionSensorDto;
 import com.simgan.entity.Sensor;
+import com.simgan.entity.ClasificacionSensor;
 import com.simgan.repository.SensorRepository;
 import com.simgan.repository.ParcelRepository;
+import com.simgan.repository.ClasificacionSensorRepository;
 import com.simgan.entity.Parcel;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,6 +26,7 @@ public class SensorController {
 
     private final SensorRepository sensorRepository;
     private final ParcelRepository parcelRepository;
+    private final ClasificacionSensorRepository clasificacionSensorRepository;
 
     private SensorDto toDto(Sensor sensor) {
         return SensorDto.builder()
@@ -79,7 +83,31 @@ public class SensorController {
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
-    @PatchMapping("/{id}")
+    @GetMapping("/{id}/classifications")
+    public ResponseEntity<List<ClasificacionSensorDto>> getClassifications(@PathVariable Long id) {
+        Optional<Sensor> sensor = sensorRepository.findById(id);
+        if (sensor.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        
+        List<ClasificacionSensor> clasificaciones = sensor.get().getClasificaciones();
+        List<ClasificacionSensorDto> dtos = clasificaciones.stream()
+                .map(c -> ClasificacionSensorDto.builder()
+                        .id(c.getId())
+                        .valorHumedad(c.getValorHumedad())
+                        .timestamp(c.getTimestamp())
+                        .estado(c.getEstado())
+                        .consecuencia(c.getConsecuencia())
+                        .mqttTopic(c.getMqttTopic() != null ? c.getMqttTopic() : sensor.get().getMqttTopic())
+                        .mqttBrokerUrl(c.getMqttBrokerUrl() != null ? c.getMqttBrokerUrl() : sensor.get().getMqttBrokerUrl())
+                        .clientId(c.getClientId() != null ? c.getClientId() : sensor.get().getClientId())
+                        .connected(c.getConnected() != null ? c.getConnected() : sensor.get().getConnected())
+                        .sensorId(id)
+                        .build())
+                .collect(Collectors.toList());
+        
+        return ResponseEntity.ok(dtos);
+    }
     public ResponseEntity<SensorDto> update(@PathVariable Long id, @RequestBody SensorDto sensorUpdate) {
         return sensorRepository.findById(id)
                 .map(sensor -> {

@@ -101,15 +101,18 @@ export default function SensorSessionPage() {
     }
   }, [])
 
-  // Cargar sensor
+  // Cargar sensor y su configuración MQTT desde clasificaciones
   useEffect(() => {
     if (!sensorId) return
 
     const loadSensor = async () => {
       try {
         setLoading(true)
+        
+        // Cargar sensor básico
         const sensorRes = await sensorApi.getById(sensorId)
         setSensor(sensorRes)
+        console.log('✓ Sensor cargado:', sensorRes)
 
         // Cargar parcel si existe
         if (sensorRes.parcelId) {
@@ -117,19 +120,36 @@ export default function SensorSessionPage() {
           setParcel(parcelRes.data)
         }
 
-        // Cargar configuración MQTT guardada del sensor
-        if (sensorRes.mqttTopic) {
+        // Cargar configuración MQTT desde clasificaciones del sensor
+        try {
+          const classificationsRes = await api.get(`/sensors/${sensorId}/classifications`)
+          if (classificationsRes.data && classificationsRes.data.length > 0) {
+            const lastClassification = classificationsRes.data[0]
+            console.log('✓ Última clasificación cargada:', lastClassification)
+            
+            setMqttConfig(prev => ({
+              ...prev,
+              topic: lastClassification.mqttTopic || `sensor/${sensorId}/data`,
+              brokerUrl: lastClassification.mqttBrokerUrl || prev.brokerUrl,
+              clientId: lastClassification.clientId || prev.clientId,
+              connected: lastClassification.connected || false
+            }))
+          } else {
+            // Si no hay clasificaciones, usar tema por defecto del sensor
+            setMqttConfig(prev => ({
+              ...prev,
+              topic: sensorRes.mqttTopic || `sensor/${sensorId}/data`,
+              brokerUrl: sensorRes.mqttBrokerUrl || prev.brokerUrl,
+              clientId: sensorRes.clientId || prev.clientId
+            }))
+          }
+        } catch (classErr) {
+          console.warn('⚠️ No se pudieron cargar clasificaciones, usando datos del sensor:', classErr)
           setMqttConfig(prev => ({
             ...prev,
-            topic: sensorRes.mqttTopic,
+            topic: sensorRes.mqttTopic || `sensor/${sensorId}/data`,
             brokerUrl: sensorRes.mqttBrokerUrl || prev.brokerUrl,
             clientId: sensorRes.clientId || prev.clientId
-          }))
-        } else {
-          // Generar topic por defecto
-          setMqttConfig(prev => ({
-            ...prev,
-            topic: `sensor/${sensorRes.id}/data`
           }))
         }
 

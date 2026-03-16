@@ -26,7 +26,15 @@ public class ClasificacionSensor {
 
     private String consecuencia;
 
-   
+    // MQTT Configuration
+    private String mqttTopic;
+    private String mqttBrokerUrl;
+    private String clientId;
+    private Boolean connected;
+
+    @ManyToOne
+    @JoinColumn(name = "sensor_id")
+    private Sensor sensor;
 
 
     
@@ -82,8 +90,8 @@ public class ClasificacionSensor {
         }
     }
 
-    // Franca (F)
-    else if (tipoSuelo.equals("Franca")) {
+    // Franco (F)
+    else if (tipoSuelo.equals("Franco")) {
         if (humedad < 20) {
             clasificacion.setEstado("SECO");
             clasificacion.setConsecuencia("REQUIERE RIEGO");
@@ -210,10 +218,4 @@ public class ClasificacionSensor {
 
     return clasificacion;
 }
-
-
-
-     @ManyToOne
-    @JoinColumn(name = "sensor_id")
-    private Sensor sensor;
 }

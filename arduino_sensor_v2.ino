@@ -3,14 +3,14 @@
 
 #define SENSOR_PIN 32
 
-// WIFI
+// wifi 
 const char* ssid = "LOS JUANES";
 const char* password = "Juanluiseduardo";
 
-// MQTT
+// mqtt
 const char* mqtt_server = "192.168.0.9";
 const int mqtt_port = 1883;
-const char* mqtt_topic = "sensor/1/data";  // Cambia "1" por tu ID de sensor
+const char* mqtt_topic = "sensor/5/data";  
 const char* mqtt_client_id = "ESP32_HUMEDAD";
 
 WiFiClient espClient;
@@ -105,7 +105,7 @@ void loop() {
     int sensorValue = analogRead(SENSOR_PIN);
     int humedad = map(sensorValue, 4095, 0, 0, 100);
 
-    Serial.print("📊 Leyendo sensor: ");
+    Serial.print(" Leyendo sensor: ");
     Serial.print(sensorValue);
     Serial.print(" -> ");
     Serial.print(humedad);
@@ -114,7 +114,7 @@ void loop() {
     char mensaje[20];
     sprintf(mensaje, "{\"humidity\":%d}", humedad);
 
-    Serial.print("📤 Publicando en topic: ");
+    Serial.print(" Publicando en topic: ");
     Serial.println(mqtt_topic);
     Serial.print("Mensaje: ");
     Serial.println(mensaje);

@@ -52,3 +52,24 @@
 1773674304: New client connected from 172.18.0.1:55278 as ESP32_HUMEDAD (p4, c1, k15).
 1773674421: mosquitto version 2.1.2 terminating
 1773674421: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1773675797: mosquitto version 2.1.2 starting
+1773675797: Config loaded from /mosquitto/config/mosquitto.conf.
+1773675797: Bridge support available.
+1773675797: Persistence support available.
+1773675797: TLS support available.
+1773675797: TLS-PSK support available.
+1773675797: Websockets support available.
+1773675797: Opening ipv4 listen socket on port 1883.
+1773675797: Opening ipv6 listen socket on port 1883.
+1773675797: Opening ipv4 listen socket on port 9001.
+1773675797: Opening ipv6 listen socket on port 9001.
+1773675797: mosquitto version 2.1.2 running
+1773675922: New connection from 172.18.0.1:57890 on port 1883.
+1773675922: New client connected from 172.18.0.1:57890 as ESP32_HUMEDAD (p4, c1, k15).
+1773675974: New connection from 172.18.0.1:43534 on port 1883.
+1773675974: Client ESP32_HUMEDAD [172.18.0.1:57890] disconnected: session taken over.
+1773675974: New client connected from 172.18.0.1:43534 as ESP32_HUMEDAD (p4, c1, k15).
+1773675976: New connection from 172.18.0.1:35740 on port 9001.
+1773675976: New client connected from 172.18.0.1:35740 as sensor-client-txyfm7tzu (p4, c1, k60).
+1773676094: mosquitto version 2.1.2 terminating
+1773676094: Saving in-memory database to /mosquitto/data//mosquitto.db.
