@@ -536,7 +536,7 @@ export default function ParcelsPage() {
                       fontWeight: 500
                     }}
                   >
-                    📡 Sensores
+                     Sensores
                   </button>
                   <button
                     onClick={(e) => {

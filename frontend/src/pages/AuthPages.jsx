@@ -87,7 +87,7 @@ function LoginForm({ onLogin }) {
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--color-text-muted)', fontSize: 15, lineHeight: 1, padding: 2
           }}>
-            {show ? '' : '👁️'}
+            {show ? 'Ocultar' : 'Ver'}
           </button>
         </div>
         {e.password && <span style={{ fontSize: 12, color: 'var(--color-danger)' }}>{e.password}</span>}
@@ -200,7 +200,7 @@ function SignupForm({ onLogin }) {
             background: 'none', border: 'none', cursor: 'pointer',
             color: 'var(--color-text-muted)', fontSize: 15, lineHeight: 1, padding: 2
           }}>
-            {showPw ? '🙈' : '👁️'}
+            {showPw ? 'Ocultar' : 'Ver'}
           </button>
         </div>
         {f.password && (
@@ -311,7 +311,7 @@ export default function AuthPage({ onLogin }) {
 
         {/* Header */}
         <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, marginBottom: 4 }}>
-          {tab === 'login' ? 'Bienvenido 👋' : 'Crear cuenta'}
+          {tab === 'login' ? 'Bienvenido ' : 'Crear cuenta'}
         </h3>
         <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 24 }}>
           {tab === 'login' ? 'Ingresa tus datos para continuar' : 'Regístrate y empieza a gestionar tus fincas'}

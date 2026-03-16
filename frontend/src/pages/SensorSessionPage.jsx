@@ -196,21 +196,21 @@ export default function SensorSessionPage() {
         setConnected(true)
         
         // Suscribirse al topic
-        console.log('📥 Suscribiéndose al topic:', mqttConfig.topic)
+        console.log(' Suscribiéndose al topic:', mqttConfig.topic)
         client.subscribe(mqttConfig.topic, (err) => {
           if (err) {
             console.error('❌ Error al suscribirse:', err)
             toast.error('Error al suscribirse')
           } else {
             console.log('✓ Suscripción exitosa al topic:', mqttConfig.topic)
-            toast.success(`📡 Escuchando: ${mqttConfig.topic}`)
+            toast.success(` Escuchando: ${mqttConfig.topic}`)
           }
         })
       })
 
       client.on('message', (topic, message) => {
         const messageStr = message.toString()
-        console.log('📩 MENSAJE RECIBIDO:')
+        console.log(' MENSAJE RECIBIDO:')
         console.log('  Topic:', topic)
         console.log('  Mensaje (raw):', messageStr)
         console.log('  Bytes:', message)
@@ -226,7 +226,7 @@ export default function SensorSessionPage() {
             },
             ...prev.slice(0, 99)
           ])
-          toast.success('📊 Dato recibido')
+          toast.success(' Dato recibido')
         } catch (e) {
           console.log('ℹ️ No es JSON válido, guardando como texto:', messageStr)
           setSensorData(prev => [
@@ -237,7 +237,7 @@ export default function SensorSessionPage() {
             },
             ...prev.slice(0, 99)
           ])
-          toast.info('📝 Texto recibido')
+          toast.info(' Texto recibido')
         }
       })
 
@@ -280,7 +280,7 @@ export default function SensorSessionPage() {
       setConnecting(true)
       
       if (clientRef.current) {
-        console.log('🔌 Desconectando cliente MQTT...')
+        console.log(' Desconectando cliente MQTT...')
         
         // Desuscribirse del topic
         clientRef.current.unsubscribe(mqttConfig.topic, (err) => {
@@ -419,7 +419,7 @@ export default function SensorSessionPage() {
           {/* Configuración MQTT */}
           <div className="card">
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 16 }}>
-              {connected ? '✓ Configuración' : '⚙️ Configuración MQTT'}
+              {connected ? '✓ Configuración' : ' Configuración MQTT'}
             </h3>
 
             {!connected ? (
@@ -466,7 +466,7 @@ export default function SensorSessionPage() {
                   {connecting ? (
                     <><span className="spinner" /> Conectando...</>
                   ) : (
-                    '🔌 Conectar a Mosquitto'
+                    ' Conectar a Mosquitto'
                   )}
                 </button>
               </>
@@ -475,8 +475,8 @@ export default function SensorSessionPage() {
                 <div style={{ padding: '12px 16px', background: '#d1fae5', borderRadius: 'var(--radius-sm)', marginBottom: 16, fontSize: 12, color: '#065f46', borderLeft: '4px solid #10b981' }}>
                   <div style={{ fontWeight: 600, marginBottom: 8 }}>✓ Conectado a Mosquitto</div>
                   <div style={{ fontSize: 11 }}>
-                    📡 Topic: {mqttConfig.topic}<br />
-                    🌐 Broker: {mqttConfig.brokerUrl}
+                     Topic: {mqttConfig.topic}<br />
+                     Broker: {mqttConfig.brokerUrl}
                   </div>
                 </div>
 
@@ -485,7 +485,7 @@ export default function SensorSessionPage() {
                   style={{ width: '100%', background: '#ef4444', color: 'white' }}
                   onClick={handleDisconnect}
                 >
-                  🔌 Desconectar
+                   Desconectar
                 </button>
 
                 <button
@@ -503,7 +503,7 @@ export default function SensorSessionPage() {
           {sensorData.length > 0 && (
             <div className="card">
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
-                📊 Datos en Tiempo Real ({sensorData.length})
+                 Datos en Tiempo Real ({sensorData.length})
               </h3>
 
               <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
@@ -536,7 +536,7 @@ export default function SensorSessionPage() {
           {connected && sensorData.length === 0 && (
             <div className="card">
               <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>📡</div>
+                <div style={{ fontSize: 32, marginBottom: 8 }}></div>
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Esperando datos...</div>
                 <div style={{ fontSize: 12 }}>
                   Envía mensajes JSON al topic<br />
