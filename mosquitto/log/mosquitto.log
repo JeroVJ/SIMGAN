@@ -1,0 +1,54 @@
+1773671338: mosquitto version 2.1.2 starting
+1773671338: Config loaded from /mosquitto/config/mosquitto.conf.
+1773671338: Bridge support available.
+1773671338: Persistence support available.
+1773671338: TLS support available.
+1773671338: TLS-PSK support available.
+1773671338: Websockets support available.
+1773671338: Opening ipv4 listen socket on port 1883.
+1773671338: Opening ipv6 listen socket on port 1883.
+1773671338: mosquitto version 2.1.2 running
+1773671790: mosquitto version 2.1.2 terminating
+1773671790: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1773671804: mosquitto version 2.1.2 starting
+1773671804: Config loaded from /mosquitto/config/mosquitto.conf.
+1773671804: Bridge support available.
+1773671804: Persistence support available.
+1773671804: TLS support available.
+1773671804: TLS-PSK support available.
+1773671804: Websockets support available.
+1773671804: Opening ipv4 listen socket on port 1883.
+1773671804: Opening ipv6 listen socket on port 1883.
+1773671804: Opening ipv4 listen socket on port 9001.
+1773671804: Opening ipv6 listen socket on port 9001.
+1773671804: mosquitto version 2.1.2 running
+1773672285: New connection from ::1:46418 on port 1883.
+1773672285: New client connected from ::1:46418 as auto-79EF6383-24EE-7FAB-BC05-140DB7B9B6AD (p4, c1, k60).
+1773673330: New connection from ::1:55564 on port 1883.
+1773673330: New client connected from ::1:55564 as auto-3B0ED57A-CA2F-5A18-6342-891976DA986C (p4, c1, k60).
+1773673351: New connection from ::1:37718 on port 1883.
+1773673351: New client connected from ::1:37718 as auto-A555197F-921A-6135-AF51-82630127378D (p4, c1, k60).
+1773673603: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1773673682: mosquitto version 2.1.2 terminating
+1773673682: Saving in-memory database to /mosquitto/data//mosquitto.db.
+1773673823: mosquitto version 2.1.2 starting
+1773673823: Config loaded from /mosquitto/config/mosquitto.conf.
+1773673823: Bridge support available.
+1773673823: Persistence support available.
+1773673823: TLS support available.
+1773673823: TLS-PSK support available.
+1773673823: Websockets support available.
+1773673823: Opening ipv4 listen socket on port 1883.
+1773673823: Opening ipv6 listen socket on port 1883.
+1773673823: Opening ipv4 listen socket on port 9001.
+1773673823: Opening ipv6 listen socket on port 9001.
+1773673823: mosquitto version 2.1.2 running
+1773673824: New connection from 172.18.0.1:37912 on port 1883.
+1773673824: New client connected from 172.18.0.1:37912 as ESP32_HUMEDAD (p4, c1, k15).
+1773674064: New connection from ::1:33978 on port 1883.
+1773674064: New client connected from ::1:33978 as auto-5D6D88BF-B6F1-55FE-DCB5-398970622375 (p4, c1, k60).
+1773674304: New connection from 172.18.0.1:55278 on port 1883.
+1773674304: Client ESP32_HUMEDAD [172.18.0.1:37912] disconnected: session taken over.
+1773674304: New client connected from 172.18.0.1:55278 as ESP32_HUMEDAD (p4, c1, k15).
+1773674421: mosquitto version 2.1.2 terminating
+1773674421: Saving in-memory database to /mosquitto/data//mosquitto.db.

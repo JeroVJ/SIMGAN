@@ -71,14 +71,35 @@ export default function SensorSessionPage() {
   const [connected, setConnected] = useState(false)
   const [sensorData, setSensorData] = useState([])
 
-  // Configuración MQTT
+  // Configuración MQTT - Validar URL almacenada
+  const getValidBrokerUrl = () => {
+    const stored = localStorage.getItem('mqttBrokerUrl')
+    // Si tiene 8083 (antiguo), ignorar y usar 9001
+    if (stored && stored.includes('8083')) {
+      localStorage.removeItem('mqttBrokerUrl')
+      return 'ws://localhost:9001'
+    }
+    return stored || 'ws://localhost:9001'
+  }
+
   const [mqttConfig, setMqttConfig] = useState({
-    brokerUrl: localStorage.getItem('mqttBrokerUrl') || 'ws://localhost:8083/mqtt',
+    brokerUrl: getValidBrokerUrl(),
     topic: '',
     clientId: `sensor-client-${Math.random().toString(36).substr(2, 9)}`
   })
   const [showConfig, setShowConfig] = useState(false)
   const clientRef = useRef(null)
+
+  // Limpiar valores antiguos de localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem('mqttBrokerUrl')
+    if (stored && stored.includes('8083')) {
+      console.log('🧹 Limpiando localStorage: URL antigua (8083)')
+      localStorage.removeItem('mqttBrokerUrl')
+      // Recargar para que use la nueva URL
+      window.location.reload()
+    }
+  }, [])
 
   // Cargar sensor
   useEffect(() => {
@@ -150,52 +171,76 @@ export default function SensorSessionPage() {
       })
 
       client.on('connect', () => {
+        console.log('✓ MQTT conectado al broker:', mqttConfig.brokerUrl)
         toast.success('🟢 Conectado a Mosquitto')
         setConnected(true)
         
         // Suscribirse al topic
+        console.log('📥 Suscribiéndose al topic:', mqttConfig.topic)
         client.subscribe(mqttConfig.topic, (err) => {
           if (err) {
+            console.error('❌ Error al suscribirse:', err)
             toast.error('Error al suscribirse')
           } else {
+            console.log('✓ Suscripción exitosa al topic:', mqttConfig.topic)
             toast.success(`📡 Escuchando: ${mqttConfig.topic}`)
           }
         })
       })
 
       client.on('message', (topic, message) => {
+        const messageStr = message.toString()
+        console.log('📩 MENSAJE RECIBIDO:')
+        console.log('  Topic:', topic)
+        console.log('  Mensaje (raw):', messageStr)
+        console.log('  Bytes:', message)
+        
         try {
-          const data = JSON.parse(message.toString())
+          const data = JSON.parse(messageStr)
+          console.log('✓ JSON parseado correctamente:', data)
           setSensorData(prev => [
             {
               ...data,
               timestamp: new Date().toISOString(),
               id: Math.random()
             },
-            ...prev.slice(0, 99) // Mantener últimos 100 datos
+            ...prev.slice(0, 99)
           ])
+          toast.success('📊 Dato recibido')
         } catch (e) {
-          // Si no es JSON válido, mostrar como texto
+          console.log('ℹ️ No es JSON válido, guardando como texto:', messageStr)
           setSensorData(prev => [
             {
-              value: message.toString(),
+              value: messageStr,
               timestamp: new Date().toISOString(),
               id: Math.random()
             },
             ...prev.slice(0, 99)
           ])
+          toast.info('📝 Texto recibido')
         }
       })
 
       client.on('error', (err) => {
-        console.error('MQTT error:', err)
-        toast.error('❌ Error de conexión MQTT')
+        console.error('❌ MQTT error:', err)
+        console.error('Detalles:', { 
+          message: err.message, 
+          code: err.code,
+          errno: err.errno
+        })
+        toast.error(`❌ Error MQTT: ${err.message}`)
         setConnected(false)
       })
 
       client.on('disconnect', () => {
+        console.log('⚠️ Desconectado de Mosquitto')
         setConnected(false)
         toast.info('Desconectado de Mosquitto')
+      })
+
+      client.on('reconnect', () => {
+        console.log('🔄 Reintentando conexión...')
+        toast.success('🔄 Reconectando...')
       })
 
       clientRef.current = client
@@ -211,9 +256,24 @@ export default function SensorSessionPage() {
   }
 
   const handleDisconnect = async () => {
-    if (clientRef.current) {
-      clientRef.current.end()
-      clientRef.current = null
+    try {
+      setConnecting(true)
+      
+      if (clientRef.current) {
+        console.log('🔌 Desconectando cliente MQTT...')
+        
+        // Desuscribirse del topic
+        clientRef.current.unsubscribe(mqttConfig.topic, (err) => {
+          if (err) console.error('Error al desuscribirse:', err)
+        })
+        
+        // Terminar conexión
+        clientRef.current.end(true, () => {
+          console.log('✓ Cliente MQTT cerrado')
+        })
+        
+        clientRef.current = null
+      }
       
       // Actualizar estado en backend
       try {
@@ -226,13 +286,29 @@ export default function SensorSessionPage() {
       
       setConnected(false)
       setSensorData([])
-      toast.info('🔌 Desconectado')
+      toast.success('🔌 Desconectado correctamente')
+    } catch (err) {
+      console.error('Error en desconexión:', err)
+      toast.error('Error al desconectar')
+    } finally {
+      setConnecting(false)
     }
   }
 
   const handleClearData = () => {
     setSensorData([])
   }
+
+  // Cleanup: desconectar al salir de la página
+  useEffect(() => {
+    return () => {
+      if (clientRef.current && connected) {
+        console.log('🧹 Limpiando: desconectando cliente MQTT...')
+        clientRef.current.end(true)
+        clientRef.current = null
+      }
+    }
+  }, [connected])
 
   if (loading) {
     return <Spinner page label="Cargando sensor..." />
