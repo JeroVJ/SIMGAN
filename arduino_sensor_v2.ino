@@ -1,5 +1,7 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <WiFiClientSecure.h>   
+
 
 #define SENSOR_PIN 32
 
@@ -12,14 +14,14 @@ const char* mqtt_server = "q94824c1.ala.eu-central-1.emqxsl.com";
 const int mqtt_port = 8883;
 const char* mqtt_user = "SIMGAN";
 const char* mqtt_password = "simgan12";
-const char* mqtt_topic = "sensor/5/data";  
+const char* mqtt_topic = "sensor/11/data";  
 const char* mqtt_client_id = "ESP32_HUMEDAD";
 
 WiFiClientSecure espClient;
 PubSubClient client(espClient);
 
 unsigned long lastPublish = 0;
-const long publishInterval = 5000; // 5 segundos
+const long publishInterval = 60000; // 5 segundos
 
 void setup_wifi() {
   Serial.println("\n\n=== INICIANDO CONEXION WIFI ===");
@@ -103,7 +105,6 @@ void loop() {
 
   client.loop();
 
-  // Publicar cada 5 segundos
   if (millis() - lastPublish >= publishInterval) {
     lastPublish = millis();
 
@@ -116,8 +117,8 @@ void loop() {
     Serial.print(humedad);
     Serial.println("%");
 
-    char mensaje[20];
-    sprintf(mensaje, "{\"humidity\":%d}", humedad);
+    char mensaje[64];
+    snprintf(mensaje, sizeof(mensaje), "{\"valorHumedad\":%d}", humedad);
 
     Serial.print(" Publicando en topic: ");
     Serial.println(mqtt_topic);

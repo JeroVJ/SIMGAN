@@ -23,7 +23,7 @@ public class Sensor {
 
     private String ubicacionGeoJson;
 
-    // MQTT Configuration
+    // MQTT Configuracion
     private String mqttTopic;
     private String mqttBrokerUrl;
     private String clientId;

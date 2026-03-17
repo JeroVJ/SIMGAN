@@ -59,7 +59,8 @@ export default function Sidebar({ open, onClose, user, onLogout }) {
           <div className="sidebar-brand__text">
             <span className="sidebar-brand__name">SIMGAN</span>
             <span className="sidebar-brand__tagline">
-              Sistema de Gestión Ganadera
+             
+              
             </span>
           </div>
         </div>

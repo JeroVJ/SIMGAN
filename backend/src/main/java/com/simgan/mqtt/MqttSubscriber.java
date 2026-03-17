@@ -26,13 +26,13 @@ public class MqttSubscriber {
      */
     public void procesarMensajeMqtt(Sensor sensor, String payload) {
         try {
-            log.info("📨 Procesando mensaje MQTT para sensor {}: {}", sensor.getId(), payload);
+            log.info("Procesando mensaje MQTT para sensor {}: {}", sensor.getId(), payload);
             
             // Procesar a través del servicio
             sensorService.procesarLectura(sensor, payload);
             
         } catch (Exception e) {
-            log.error("❌ Error procesando mensaje MQTT: {}", e.getMessage());
+            log.error(" Error procesando mensaje MQTT: {}", e.getMessage());
         }
     }
 

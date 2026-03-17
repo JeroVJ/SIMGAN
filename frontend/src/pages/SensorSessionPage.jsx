@@ -113,7 +113,7 @@ export default function SensorSessionPage() {
           console.log('✓ Configuración MQTT cargada:', configRes.data)
         } catch (configErr) {
           // No hay configuración guardada aún
-          console.log('ℹ️ Sin configuración MQTT guardada')
+          console.log('Sin configuración MQTT guardada')
           setShowConfigForm(true) // Mostrar formulario
         }
       } catch (err) {
@@ -132,7 +132,7 @@ export default function SensorSessionPage() {
     try {
       const classificationsRes = await api.get(`/sensors/${sensorId}/classifications`)
       if (classificationsRes.data && classificationsRes.data.length > 0) {
-        console.log('📊 Datos cargados del backend:', classificationsRes.data.length)
+        console.log('Datos cargados:', classificationsRes.data.length)
         setSensorData(classificationsRes.data)
       }
     } catch (err) {
@@ -163,7 +163,7 @@ export default function SensorSessionPage() {
   const handleSaveConfig = async () => {
     try {
       if (!formConfig.brokerUrl || !formConfig.topic) {
-        toast.error('ℹ️ URL del broker y topic son requeridos')
+        toast.error('ℹ URL del broker y topic son requeridos')
         return
       }
 
@@ -192,7 +192,7 @@ export default function SensorSessionPage() {
   // Iniciar monitoreo
   const handleStartMonitoring = async () => {
     try {
-      console.log('▶️ Iniciando monitoreo del sensor...')
+      console.log('▶Iniciando monitoreo del sensor...')
       setIsMonitoring(true)
       toast.success('🟢 Monitoreo iniciado')
     } catch (err) {
@@ -204,12 +204,12 @@ export default function SensorSessionPage() {
   // Detener monitoreo
   const handleStopMonitoring = async () => {
     try {
-      console.log('⏹️ Deteniendo monitoreo...')
+      console.log('⏹ Deteniendo monitoreo...')
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
       }
       setIsMonitoring(false)
-      toast.success('🔌 Monitoreo detenido')
+      toast.success(' Monitoreo detenido')
     } catch (err) {
       console.error('Error deteniendo monitoreo:', err)
       toast.error('Error al detener monitoreo')
@@ -320,7 +320,7 @@ export default function SensorSessionPage() {
           {/* Formulario de configuración MQTT o Panel de monitoreo */}
           <div className="card">
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 16 }}>
-              {showConfigForm ? '⚙️ Configurar MQTT' : (mqttConfig ? '✓ Configuración' : '⚠️ Sin configurar')}
+              {showConfigForm ? ' Configurar MQTT' : (mqttConfig ? '✓ Configuración' : '⚠️ Sin configurar')}
             </h3>
 
             {/* Mostrar formulario si no hay configuración */}
@@ -385,7 +385,7 @@ export default function SensorSessionPage() {
                   {isSavingConfig ? (
                     <><span className="spinner" /> Guardando...</>
                   ) : (
-                    '💾 Guardar Configuración'
+                    ' Guardar Configuración'
                   )}
                 </button>
               </>
@@ -395,12 +395,12 @@ export default function SensorSessionPage() {
             {mqttConfig && !showConfigForm && (
               <>
                 <div style={{ padding: '12px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', marginBottom: 16, fontSize: 11, color: 'var(--color-text-secondary)' }}>
-                  <strong style={{ color: 'var(--color-text)', display: 'block', marginBottom: 8 }}>📋 Configuración MQTT:</strong>
+                  <strong style={{ color: 'var(--color-text)', display: 'block', marginBottom: 8 }}> Configuración MQTT:</strong>
                   <div style={{ fontFamily: 'monospace', fontSize: 10, lineHeight: 1.6 }}>
-                    🔗 Broker: {mqttConfig.brokerUrl}<br />
-                    🔐 Usuario: {mqttConfig.username}<br />
-                    📡 Topic: {mqttConfig.topic}<br />
-                    🆔 Client ID: {mqttConfig.clientId}<br />
+                     Broker: {mqttConfig.brokerUrl}<br />
+                     Usuario: {mqttConfig.username}<br />
+                     Topic: {mqttConfig.topic}<br />
+                     Client ID: {mqttConfig.clientId}<br />
                     <span style={{ marginTop: 8, display: 'block', color: '#10b981' }}>
                       ✓ {mqttConfig.state}
                     </span>
@@ -412,25 +412,19 @@ export default function SensorSessionPage() {
                   style={{ width: '100%', marginBottom: 8, background: 'var(--color-bg)', fontSize: 12 }}
                   onClick={() => setShowConfigForm(true)}
                 >
-                  ✏️ Cambiar Configuración
+                   Cambiar Configuración
                 </button>
 
                 {!isMonitoring ? (
                   <>
-                    <div style={{ padding: '12px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', marginBottom: 16, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                      <strong style={{ color: 'var(--color-text)' }}>ℹ️ Cómo funciona:</strong><br />
-                      • Backend conectado a EMQX<br />
-                      • Recibe datos del sensor<br />
-                      • Almacena en BD<br />
-                      • Polling cada {POLLING_INTERVAL / 1000}s
-                    </div>
+                    
 
                     <button
                       className="action-btn action-btn--primary"
                       style={{ width: '100%' }}
                       onClick={handleStartMonitoring}
                     >
-                      ▶️ Iniciar Monitoreo
+                       Iniciar Monitoreo
                     </button>
                   </>
                 ) : (
@@ -438,9 +432,9 @@ export default function SensorSessionPage() {
                     <div style={{ padding: '12px 16px', background: '#d1fae5', borderRadius: 'var(--radius-sm)', marginBottom: 16, fontSize: 12, color: '#065f46', borderLeft: '4px solid #10b981' }}>
                       <div style={{ fontWeight: 600, marginBottom: 8 }}>✓ Monitoreo Activo</div>
                       <div style={{ fontSize: 11 }}>
-                        📡 Sensor: {sensor?.name}<br />
-                        🔄 Polling: {POLLING_INTERVAL / 1000}s<br />
-                        📊 Datos recibidos: {sensorData.length}
+                       Sensor: {sensor?.name}<br />
+                       Polling: {POLLING_INTERVAL / 1000}s<br />
+                       Datos recibidos: {sensorData.length}
                       </div>
                     </div>
 
@@ -449,7 +443,7 @@ export default function SensorSessionPage() {
                       style={{ width: '100%', background: '#ef4444', color: 'white' }}
                       onClick={handleStopMonitoring}
                     >
-                      ⏹️ Detener Monitoreo
+                       Detener Monitoreo
                     </button>
 
                     <button
@@ -457,7 +451,7 @@ export default function SensorSessionPage() {
                       style={{ width: '100%', marginTop: 8, background: 'var(--color-bg)' }}
                       onClick={handleClearData}
                     >
-                      🗑️ Limpiar Datos Locales ({sensorData.length})
+                       Limpiar Datos Locales ({sensorData.length})
                     </button>
                   </>
                 )}
@@ -469,7 +463,7 @@ export default function SensorSessionPage() {
           {isMonitoring && sensorData.length > 0 && (
             <div className="card">
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
-                📊 Datos Almacenados ({sensorData.length})
+                 Datos Almacenados ({sensorData.length})
               </h3>
 
               <div style={{ maxHeight: '400px', overflowY: 'auto' }}>

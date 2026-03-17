@@ -1,9 +1,10 @@
 package com.simgan.controller;
 
-import com.simgan.dto.SensorConfigDto;
+import com.simgan.dto.MqttConfigUpdateDto;
 import com.simgan.dto.SensorCreateDto;
 import com.simgan.dto.SensorDto;
 import com.simgan.dto.ClasificacionSensorDto;
+import com.simgan.dto.MqttConfigResponseDto;
 import com.simgan.entity.Sensor;
 import com.simgan.entity.ClasificacionSensor;
 import com.simgan.repository.SensorRepository;
@@ -159,15 +160,16 @@ public class SensorController {
     }
 
     @GetMapping("/{id}/status")
-    public ResponseEntity<SensorConfigDto> getStatus(@PathVariable Long id) {
+    public ResponseEntity<MqttConfigResponseDto> getStatus(@PathVariable Long id) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
-                    SensorConfigDto config = SensorConfigDto.builder()
+                    MqttConfigResponseDto config = MqttConfigResponseDto.builder()
                             .sensorId(sensor.getId())
-                            .mqttTopic(sensor.getMqttTopic())
-                            .mqttBrokerUrl(sensor.getMqttBrokerUrl())
+                            .brokerUrl(sensor.getMqttBrokerUrl())
+                            .topic(sensor.getMqttTopic())
                             .clientId(sensor.getClientId())
-                            .connected(sensor.getConnected() != null && sensor.getConnected())
+                            .username("SIMGAN")
+                            .state(sensor.getConnected() != null && sensor.getConnected() ? "Conectado" : "Desconectado")
                             .build();
                     return ResponseEntity.ok(config);
                 })
@@ -175,9 +177,9 @@ public class SensorController {
     }
 
     @GetMapping("/{id}/mqtt-config")
-    public ResponseEntity<MqttBrokerService.MqttSensorConfig> getMqttConfig(@PathVariable Long id) {
+    public ResponseEntity<MqttConfigResponseDto> getMqttConfig(@PathVariable Long id) {
         try {
-            MqttBrokerService.MqttSensorConfig config = mqttBrokerService.getSensorMqttConfig(id);
+            MqttConfigResponseDto config = mqttBrokerService.getSensorMqttConfig(id);
             return ResponseEntity.ok(config);
         } catch (RuntimeException e) {
             return ResponseEntity.notFound().build();
@@ -185,11 +187,11 @@ public class SensorController {
     }
 
     @PostMapping("/{id}/mqtt-config")
-    public ResponseEntity<MqttBrokerService.MqttSensorConfig> saveMqttConfig(
+    public ResponseEntity<MqttConfigResponseDto> saveMqttConfig(
             @PathVariable Long id,
-            @RequestBody MqttBrokerService.MqttConfigRequest request) {
+            @RequestBody MqttConfigUpdateDto request) {
         try {
-            MqttBrokerService.MqttSensorConfig config = mqttBrokerService.saveSensorMqttConfig(id, request);
+            MqttConfigResponseDto config = mqttBrokerService.saveSensorMqttConfig(id, request);
             
             // Conectar automáticamente después de guardar
             try {
@@ -234,7 +236,7 @@ public class SensorController {
     }
 
     @PatchMapping("/{id}/config")
-    public ResponseEntity<SensorConfigDto> updateConfig(@PathVariable Long id, @RequestBody SensorConfigDto.UpdateRequest request) {
+    public ResponseEntity<MqttConfigResponseDto> updateConfig(@PathVariable Long id, @RequestBody MqttConfigUpdateDto.UpdateRequest request) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
                     if (request.getMqttTopic() != null) {
@@ -250,12 +252,13 @@ public class SensorController {
                         sensor.setConnected(request.getConnected());
                     }
                     Sensor updated = sensorRepository.save(sensor);
-                    SensorConfigDto config = SensorConfigDto.builder()
+                    MqttConfigResponseDto config = MqttConfigResponseDto.builder()
                             .sensorId(updated.getId())
-                            .mqttTopic(updated.getMqttTopic())
-                            .mqttBrokerUrl(updated.getMqttBrokerUrl())
+                            .topic(updated.getMqttTopic())
+                            .brokerUrl(updated.getMqttBrokerUrl())
                             .clientId(updated.getClientId())
-                            .connected(updated.getConnected() != null && updated.getConnected())
+                            .username("SIMGAN")
+                            .state(updated.getConnected() != null && updated.getConnected() ? "Conectado" : "Desconectado")
                             .build();
                     return ResponseEntity.ok(config);
                 })

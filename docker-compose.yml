@@ -1,3 +1,4 @@
+
 version: '3.8'
 
 services:
@@ -6,14 +7,19 @@ services:
     container_name: simgan-postgres
     environment:
       POSTGRES_DB: simgan_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - simgan_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
 
+volumes:
+  simgan_data:
+
+
+  
   # mosquitto:
   #   image: eclipse-mosquitto:2
   #   container_name: simgan-mosquitto
@@ -29,6 +35,3 @@ services:
   # MQTT Broker: EMQX Cloud (q94824c1.ala.eu-central-1.emqxsl.com:8883)
   # Usuario: SIMGAN
   # Contraseña: simgan12
-
-volumes:
-  simgan_data:
