@@ -7,13 +7,15 @@
 const char* ssid = "LOS JUANES";
 const char* password = "Juanluiseduardo";
 
-// mqtt
-const char* mqtt_server = "192.168.0.9";
-const int mqtt_port = 1883;
+// mqtt - EMQX Cloud (TLS/SSL)
+const char* mqtt_server = "q94824c1.ala.eu-central-1.emqxsl.com";
+const int mqtt_port = 8883;
+const char* mqtt_user = "SIMGAN";
+const char* mqtt_password = "simgan12";
 const char* mqtt_topic = "sensor/5/data";  
 const char* mqtt_client_id = "ESP32_HUMEDAD";
 
-WiFiClient espClient;
+WiFiClientSecure espClient;
 PubSubClient client(espClient);
 
 unsigned long lastPublish = 0;
@@ -49,7 +51,7 @@ void reconnect() {
     Serial.print(":");
     Serial.println(mqtt_port);
 
-    if (client.connect(mqtt_client_id)) {
+    if (client.connect(mqtt_client_id, mqtt_user, mqtt_password)) {
       Serial.println("✓ MQTT CONECTADO");
       Serial.print("Cliente ID: ");
       Serial.println(mqtt_client_id);
@@ -79,6 +81,9 @@ void setup() {
   
   setup_wifi();
 
+  // Configurar SSL/TLS para EMQX
+  espClient.setInsecure(); // Desactiva verificación de certificado (necesario para EMQX Cloud)
+  
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
   

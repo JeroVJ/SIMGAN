@@ -2,13 +2,18 @@ package com.simgan.mqtt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.simgan.entity.LecturaSensor;
+import com.simgan.entity.Sensor;
 import com.simgan.service.SensorService;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.integration.annotation.ServiceActivator;
-import org.springframework.messaging.Message;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Servicio para procesar mensajes MQTT
+ * Llamado por MqttClientService cuando llegan mensajes
+ */
 @Service
+@Slf4j
 public class MqttSubscriber {
 
     @Autowired
@@ -16,23 +21,25 @@ public class MqttSubscriber {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @ServiceActivator(inputChannel = "mqttInputChannel")
-    public void recibirMensaje(Message<String> message) {
-
+    /**
+     * Procesar mensaje MQTT recibido
+     */
+    public void procesarMensajeMqtt(Sensor sensor, String payload) {
         try {
-
-            String payload = message.getPayload();
-
-            LecturaSensor lectura = convertir(payload);
-
-            sensorService.procesarLectura(lectura);
-
+            log.info("📨 Procesando mensaje MQTT para sensor {}: {}", sensor.getId(), payload);
+            
+            // Procesar a través del servicio
+            sensorService.procesarLectura(sensor, payload);
+            
         } catch (Exception e) {
-            e.printStackTrace();
+            log.error("❌ Error procesando mensaje MQTT: {}", e.getMessage());
         }
     }
 
-    private LecturaSensor convertir(String mensaje) throws Exception {
+    /**
+     * Convertir JSON a LecturaSensor (legacy)
+     */
+    public LecturaSensor convertir(String mensaje) throws Exception {
         return objectMapper.readValue(mensaje, LecturaSensor.class);
     }
 }

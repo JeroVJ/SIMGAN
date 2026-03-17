@@ -14,6 +14,9 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
+// Polling interval in milliseconds
+const POLLING_INTERVAL = 3000 // 3 segundos
+
 function FitBounds({ geoJson }) {
   const map = useMap()
 
@@ -67,45 +70,27 @@ export default function SensorSessionPage() {
   const [sensor, setSensor] = useState(null)
   const [parcel, setParcel] = useState(null)
   const [loading, setLoading] = useState(true)
-  const [connecting, setConnecting] = useState(false)
-  const [connected, setConnected] = useState(false)
+  const [mqttConfig, setMqttConfig] = useState(null)
   const [sensorData, setSensorData] = useState([])
+  const [isMonitoring, setIsMonitoring] = useState(false)
+  const [isSavingConfig, setIsSavingConfig] = useState(false)
+  const [showConfigForm, setShowConfigForm] = useState(false)
+  const pollingIntervalRef = useRef(null)
 
-  // Configuración MQTT - Validar URL almacenada
-  const getValidBrokerUrl = () => {
-    const stored = localStorage.getItem('mqttBrokerUrl')
-    // Si tiene 8083 (antiguo), ignorar y usar 9001
-    if (stored && stored.includes('8083')) {
-      localStorage.removeItem('mqttBrokerUrl')
-      return 'ws://localhost:9001'
-    }
-    return stored || 'ws://localhost:9001'
-  }
-
-  const [mqttConfig, setMqttConfig] = useState({
-    brokerUrl: getValidBrokerUrl(),
+  // Formulario de configuración MQTT
+  const [formConfig, setFormConfig] = useState({
+    brokerUrl: '',
+    username: '',
+    password: '',
     topic: '',
-    clientId: `sensor-client-${Math.random().toString(36).substr(2, 9)}`
+    clientId: ''
   })
-  const [showConfig, setShowConfig] = useState(false)
-  const clientRef = useRef(null)
 
-  // Limpiar valores antiguos de localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem('mqttBrokerUrl')
-    if (stored && stored.includes('8083')) {
-      console.log('🧹 Limpiando localStorage: URL antigua (8083)')
-      localStorage.removeItem('mqttBrokerUrl')
-      // Recargar para que use la nueva URL
-      window.location.reload()
-    }
-  }, [])
-
-  // Cargar sensor y su configuración MQTT desde clasificaciones
+  // Cargar sensor y parcel
   useEffect(() => {
     if (!sensorId) return
 
-    const loadSensor = async () => {
+    const loadSensorData = async () => {
       try {
         setLoading(true)
         
@@ -120,42 +105,16 @@ export default function SensorSessionPage() {
           setParcel(parcelRes.data)
         }
 
-        // Cargar configuración MQTT desde clasificaciones del sensor
+        // Intentar cargar configuración MQTT guardada
         try {
-          const classificationsRes = await api.get(`/sensors/${sensorId}/classifications`)
-          if (classificationsRes.data && classificationsRes.data.length > 0) {
-            const lastClassification = classificationsRes.data[0]
-            console.log('✓ Última clasificación cargada:', lastClassification)
-            
-            setMqttConfig(prev => ({
-              ...prev,
-              topic: lastClassification.mqttTopic || `sensor/${sensorId}/data`,
-              brokerUrl: lastClassification.mqttBrokerUrl || prev.brokerUrl,
-              clientId: lastClassification.clientId || prev.clientId,
-              connected: lastClassification.connected || false
-            }))
-          } else {
-            // Si no hay clasificaciones, usar tema por defecto del sensor
-            setMqttConfig(prev => ({
-              ...prev,
-              topic: sensorRes.mqttTopic || `sensor/${sensorId}/data`,
-              brokerUrl: sensorRes.mqttBrokerUrl || prev.brokerUrl,
-              clientId: sensorRes.clientId || prev.clientId
-            }))
-          }
-        } catch (classErr) {
-          console.warn('⚠️ No se pudieron cargar clasificaciones, usando datos del sensor:', classErr)
-          setMqttConfig(prev => ({
-            ...prev,
-            topic: sensorRes.mqttTopic || `sensor/${sensorId}/data`,
-            brokerUrl: sensorRes.mqttBrokerUrl || prev.brokerUrl,
-            clientId: sensorRes.clientId || prev.clientId
-          }))
-        }
-
-        // Si el sensor estaba conectado, mantener estado
-        if (sensorRes.connected) {
-          setConnected(true)
+          const configRes = await api.get(`/sensors/${sensorId}/mqtt-config`)
+          setMqttConfig(configRes.data)
+          setShowConfigForm(false) // Ocultar formulario si ya existe config
+          console.log('✓ Configuración MQTT cargada:', configRes.data)
+        } catch (configErr) {
+          // No hay configuración guardada aún
+          console.log('ℹ️ Sin configuración MQTT guardada')
+          setShowConfigForm(true) // Mostrar formulario
         }
       } catch (err) {
         console.error('Error cargando sensor:', err)
@@ -165,170 +124,112 @@ export default function SensorSessionPage() {
       }
     }
 
-    loadSensor()
+    loadSensorData()
   }, [sensorId])
 
-  // Conectar a MQTT
-  const handleConnectMQTT = async () => {
-    setConnecting(true)
+  // Cargar datos del sensor desde el backend
+  const fetchSensorData = async () => {
     try {
-      // Guardar configuración en el backend
-      await sensorApi.updateSensorConfig(sensorId, {
-        mqttTopic: mqttConfig.topic,
-        mqttBrokerUrl: mqttConfig.brokerUrl,
-        clientId: mqttConfig.clientId,
-        connected: true
-      })
-
-      // Importar MQTT dinámicamente
-      const mqtt = (await import('mqtt')).default
-
-      // Crear cliente
-      const client = mqtt.connect(mqttConfig.brokerUrl, {
-        clientId: mqttConfig.clientId,
-        clean: true,
-        reconnectPeriod: 1000,
-      })
-
-      client.on('connect', () => {
-        console.log('✓ MQTT conectado al broker:', mqttConfig.brokerUrl)
-        toast.success('🟢 Conectado a Mosquitto')
-        setConnected(true)
-        
-        // Suscribirse al topic
-        console.log(' Suscribiéndose al topic:', mqttConfig.topic)
-        client.subscribe(mqttConfig.topic, (err) => {
-          if (err) {
-            console.error('❌ Error al suscribirse:', err)
-            toast.error('Error al suscribirse')
-          } else {
-            console.log('✓ Suscripción exitosa al topic:', mqttConfig.topic)
-            toast.success(` Escuchando: ${mqttConfig.topic}`)
-          }
-        })
-      })
-
-      client.on('message', (topic, message) => {
-        const messageStr = message.toString()
-        console.log(' MENSAJE RECIBIDO:')
-        console.log('  Topic:', topic)
-        console.log('  Mensaje (raw):', messageStr)
-        console.log('  Bytes:', message)
-        
-        try {
-          const data = JSON.parse(messageStr)
-          console.log('✓ JSON parseado correctamente:', data)
-          setSensorData(prev => [
-            {
-              ...data,
-              timestamp: new Date().toISOString(),
-              id: Math.random()
-            },
-            ...prev.slice(0, 99)
-          ])
-          toast.success(' Dato recibido')
-        } catch (e) {
-          console.log('ℹ️ No es JSON válido, guardando como texto:', messageStr)
-          setSensorData(prev => [
-            {
-              value: messageStr,
-              timestamp: new Date().toISOString(),
-              id: Math.random()
-            },
-            ...prev.slice(0, 99)
-          ])
-          toast.info(' Texto recibido')
-        }
-      })
-
-      client.on('error', (err) => {
-        console.error('❌ MQTT error:', err)
-        console.error('Detalles:', { 
-          message: err.message, 
-          code: err.code,
-          errno: err.errno
-        })
-        toast.error(`❌ Error MQTT: ${err.message}`)
-        setConnected(false)
-      })
-
-      client.on('disconnect', () => {
-        console.log('⚠️ Desconectado de Mosquitto')
-        setConnected(false)
-        toast.info('Desconectado de Mosquitto')
-      })
-
-      client.on('reconnect', () => {
-        console.log('🔄 Reintentando conexión...')
-        toast.success('🔄 Reconectando...')
-      })
-
-      clientRef.current = client
-
-      // Guardar configuración en localStorage
-      localStorage.setItem('mqttBrokerUrl', mqttConfig.brokerUrl)
+      const classificationsRes = await api.get(`/sensors/${sensorId}/classifications`)
+      if (classificationsRes.data && classificationsRes.data.length > 0) {
+        console.log('📊 Datos cargados del backend:', classificationsRes.data.length)
+        setSensorData(classificationsRes.data)
+      }
     } catch (err) {
-      console.error('Error connecting to MQTT:', err)
-      toast.error('⚠️ Error: Asegúrate de que MQTT.js está instalado en el frontend')
-    } finally {
-      setConnecting(false)
+      console.error('Error cargando datos del sensor:', err)
     }
   }
 
-  const handleDisconnect = async () => {
+  // Polling: cargar datos cada POLLING_INTERVAL
+  useEffect(() => {
+    if (!isMonitoring || !sensorId) return
+
+    // Cargar inmediatamente
+    fetchSensorData()
+
+    // Configurar polling
+    pollingIntervalRef.current = setInterval(() => {
+      fetchSensorData()
+    }, POLLING_INTERVAL)
+
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+    }
+  }, [isMonitoring, sensorId])
+
+  // Guardar configuración MQTT desde el formulario
+  const handleSaveConfig = async () => {
     try {
-      setConnecting(true)
-      
-      if (clientRef.current) {
-        console.log(' Desconectando cliente MQTT...')
-        
-        // Desuscribirse del topic
-        clientRef.current.unsubscribe(mqttConfig.topic, (err) => {
-          if (err) console.error('Error al desuscribirse:', err)
-        })
-        
-        // Terminar conexión
-        clientRef.current.end(true, () => {
-          console.log('✓ Cliente MQTT cerrado')
-        })
-        
-        clientRef.current = null
+      if (!formConfig.brokerUrl || !formConfig.topic) {
+        toast.error('ℹ️ URL del broker y topic son requeridos')
+        return
       }
-      
-      // Actualizar estado en backend
-      try {
-        await sensorApi.updateSensorConfig(sensorId, {
-          connected: false
-        })
-      } catch (err) {
-        console.error('Error actualizando estado:', err)
-      }
-      
-      setConnected(false)
-      setSensorData([])
-      toast.success('🔌 Desconectado correctamente')
+
+      setIsSavingConfig(true)
+      const saveRes = await api.post(`/sensors/${sensorId}/mqtt-config`, {
+        brokerUrl: formConfig.brokerUrl,
+        username: formConfig.username,
+        password: formConfig.password,
+        topic: formConfig.topic,
+        clientId: formConfig.clientId || `sensor-${sensorId}`
+      })
+
+      setMqttConfig(saveRes.data)
+      setShowConfigForm(false)
+      setFormConfig({ brokerUrl: '', username: '', password: '', topic: '', clientId: '' })
+      toast.success('✓ Configuración MQTT guardada')
+      console.log('✓ Config guardada:', saveRes.data)
     } catch (err) {
-      console.error('Error en desconexión:', err)
-      toast.error('Error al desconectar')
+      console.error('Error guardando configuración:', err)
+      toast.error('Error al guardar configuración')
     } finally {
-      setConnecting(false)
+      setIsSavingConfig(false)
     }
   }
 
+  // Iniciar monitoreo
+  const handleStartMonitoring = async () => {
+    try {
+      console.log('▶️ Iniciando monitoreo del sensor...')
+      setIsMonitoring(true)
+      toast.success('🟢 Monitoreo iniciado')
+    } catch (err) {
+      console.error('Error iniciando monitoreo:', err)
+      toast.error('Error al iniciar monitoreo')
+    }
+  }
+
+  // Detener monitoreo
+  const handleStopMonitoring = async () => {
+    try {
+      console.log('⏹️ Deteniendo monitoreo...')
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
+      }
+      setIsMonitoring(false)
+      toast.success('🔌 Monitoreo detenido')
+    } catch (err) {
+      console.error('Error deteniendo monitoreo:', err)
+      toast.error('Error al detener monitoreo')
+    }
+  }
+
+  // Limpiar datos locales del frontend
   const handleClearData = () => {
     setSensorData([])
+    toast.success('Datos locales limpiados')
   }
 
-  // Cleanup: desconectar al salir de la página
+  // Cleanup: detener polling al salir
   useEffect(() => {
     return () => {
-      if (clientRef.current && connected) {
-        console.log('🧹 Limpiando: desconectando cliente MQTT...')
-        clientRef.current.end(true)
-        clientRef.current = null
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current)
       }
     }
-  }, [connected])
+  }, [])
 
   if (loading) {
     return <Spinner page label="Cargando sensor..." />
@@ -374,7 +275,7 @@ export default function SensorSessionPage() {
         <h2>Monitoreo de Sensor</h2>
         <p>
           {sensor?.name} en {parcel?.name}
-          {connected && ' 🟢 En línea'}
+          {isMonitoring && ' 🟢 En línea'}
         </p>
       </div>
 
@@ -406,7 +307,7 @@ export default function SensorSessionPage() {
                   <Popup permanent={true}>
                     <div>
                       <strong>{sensor?.name}</strong><br />
-                      Estado: {connected ? '🟢 Conectado' : '🔴 Desconectado'}
+                      Estado: {isMonitoring ? '🟢 Monitoreando' : '🔴 Inactivo'}
                     </div>
                   </Popup>
                 </Marker>
@@ -416,100 +317,165 @@ export default function SensorSessionPage() {
         </div>
 
         <div className="col-side">
-          {/* Configuración MQTT */}
+          {/* Formulario de configuración MQTT o Panel de monitoreo */}
           <div className="card">
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 16 }}>
-              {connected ? '✓ Configuración' : ' Configuración MQTT'}
+              {showConfigForm ? '⚙️ Configurar MQTT' : (mqttConfig ? '✓ Configuración' : '⚠️ Sin configurar')}
             </h3>
 
-            {!connected ? (
+            {/* Mostrar formulario si no hay configuración */}
+            {showConfigForm && (
               <>
                 <div className="form-group mb-16">
-                  <label>URL del Broker</label>
+                  <label>URL del Broker MQTT</label>
                   <input
-                    value={mqttConfig.brokerUrl}
-                    onChange={(e) => setMqttConfig({ ...mqttConfig, brokerUrl: e.target.value })}
-                    placeholder="ws://localhost:8083/mqtt"
+                    type="text"
+                    value={formConfig.brokerUrl}
+                    onChange={(e) => setFormConfig({ ...formConfig, brokerUrl: e.target.value })}
+                    placeholder="ssl://q94824c1.ala.eu-central-1.emqxsl.com:8883"
+                  />
+                </div>
+
+                <div className="form-group mb-16">
+                  <label>Usuario</label>
+                  <input
+                    type="text"
+                    value={formConfig.username}
+                    onChange={(e) => setFormConfig({ ...formConfig, username: e.target.value })}
+                    placeholder="SIMGAN"
+                  />
+                </div>
+
+                <div className="form-group mb-16">
+                  <label>Contraseña</label>
+                  <input
+                    type="password"
+                    value={formConfig.password}
+                    onChange={(e) => setFormConfig({ ...formConfig, password: e.target.value })}
+                    placeholder="••••••••••"
                   />
                 </div>
 
                 <div className="form-group mb-16">
                   <label>Topic MQTT</label>
                   <input
-                    value={mqttConfig.topic}
-                    onChange={(e) => setMqttConfig({ ...mqttConfig, topic: e.target.value })}
-                    placeholder="sensor/123/data"
+                    type="text"
+                    value={formConfig.topic}
+                    onChange={(e) => setFormConfig({ ...formConfig, topic: e.target.value })}
+                    placeholder={`sensor/${sensorId}/data`}
                   />
                 </div>
 
                 <div className="form-group mb-16">
-                  <label>Client ID</label>
+                  <label>Client ID (opcional)</label>
                   <input
-                    value={mqttConfig.clientId}
-                    onChange={(e) => setMqttConfig({ ...mqttConfig, clientId: e.target.value })}
-                    placeholder="sensor-client-xxx"
+                    type="text"
+                    value={formConfig.clientId}
+                    onChange={(e) => setFormConfig({ ...formConfig, clientId: e.target.value })}
+                    placeholder={`sensor-${sensorId}`}
                   />
-                </div>
-
-                <div style={{ padding: '12px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', marginBottom: 16, fontSize: 12, color: 'var(--color-text-secondary)' }}>
-                  <strong style={{ color: 'var(--color-text)' }}>Notas:</strong><br />
-                  • Broker: localhost:8083 por defecto<br />
-                  • Topic: se genera automáticamente
                 </div>
 
                 <button
                   className="action-btn action-btn--primary"
                   style={{ width: '100%' }}
-                  onClick={handleConnectMQTT}
-                  disabled={connecting || !mqttConfig.topic}
+                  onClick={handleSaveConfig}
+                  disabled={isSavingConfig}
                 >
-                  {connecting ? (
-                    <><span className="spinner" /> Conectando...</>
+                  {isSavingConfig ? (
+                    <><span className="spinner" /> Guardando...</>
                   ) : (
-                    ' Conectar a Mosquitto'
+                    '💾 Guardar Configuración'
                   )}
                 </button>
               </>
-            ) : (
+            )}
+
+            {/* Mostrar configuración guardada y panel de monitoreo */}
+            {mqttConfig && !showConfigForm && (
               <>
-                <div style={{ padding: '12px 16px', background: '#d1fae5', borderRadius: 'var(--radius-sm)', marginBottom: 16, fontSize: 12, color: '#065f46', borderLeft: '4px solid #10b981' }}>
-                  <div style={{ fontWeight: 600, marginBottom: 8 }}>✓ Conectado a Mosquitto</div>
-                  <div style={{ fontSize: 11 }}>
-                     Topic: {mqttConfig.topic}<br />
-                     Broker: {mqttConfig.brokerUrl}
+                <div style={{ padding: '12px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', marginBottom: 16, fontSize: 11, color: 'var(--color-text-secondary)' }}>
+                  <strong style={{ color: 'var(--color-text)', display: 'block', marginBottom: 8 }}>📋 Configuración MQTT:</strong>
+                  <div style={{ fontFamily: 'monospace', fontSize: 10, lineHeight: 1.6 }}>
+                    🔗 Broker: {mqttConfig.brokerUrl}<br />
+                    🔐 Usuario: {mqttConfig.username}<br />
+                    📡 Topic: {mqttConfig.topic}<br />
+                    🆔 Client ID: {mqttConfig.clientId}<br />
+                    <span style={{ marginTop: 8, display: 'block', color: '#10b981' }}>
+                      ✓ {mqttConfig.state}
+                    </span>
                   </div>
                 </div>
 
                 <button
                   className="action-btn"
-                  style={{ width: '100%', background: '#ef4444', color: 'white' }}
-                  onClick={handleDisconnect}
+                  style={{ width: '100%', marginBottom: 8, background: 'var(--color-bg)', fontSize: 12 }}
+                  onClick={() => setShowConfigForm(true)}
                 >
-                   Desconectar
+                  ✏️ Cambiar Configuración
                 </button>
 
-                <button
-                  className="action-btn"
-                  style={{ width: '100%', marginTop: 8, background: 'var(--color-bg)' }}
-                  onClick={handleClearData}
-                >
-                  Limpiar Datos ({sensorData.length})
-                </button>
+                {!isMonitoring ? (
+                  <>
+                    <div style={{ padding: '12px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', marginBottom: 16, fontSize: 12, color: 'var(--color-text-secondary)' }}>
+                      <strong style={{ color: 'var(--color-text)' }}>ℹ️ Cómo funciona:</strong><br />
+                      • Backend conectado a EMQX<br />
+                      • Recibe datos del sensor<br />
+                      • Almacena en BD<br />
+                      • Polling cada {POLLING_INTERVAL / 1000}s
+                    </div>
+
+                    <button
+                      className="action-btn action-btn--primary"
+                      style={{ width: '100%' }}
+                      onClick={handleStartMonitoring}
+                    >
+                      ▶️ Iniciar Monitoreo
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ padding: '12px 16px', background: '#d1fae5', borderRadius: 'var(--radius-sm)', marginBottom: 16, fontSize: 12, color: '#065f46', borderLeft: '4px solid #10b981' }}>
+                      <div style={{ fontWeight: 600, marginBottom: 8 }}>✓ Monitoreo Activo</div>
+                      <div style={{ fontSize: 11 }}>
+                        📡 Sensor: {sensor?.name}<br />
+                        🔄 Polling: {POLLING_INTERVAL / 1000}s<br />
+                        📊 Datos recibidos: {sensorData.length}
+                      </div>
+                    </div>
+
+                    <button
+                      className="action-btn"
+                      style={{ width: '100%', background: '#ef4444', color: 'white' }}
+                      onClick={handleStopMonitoring}
+                    >
+                      ⏹️ Detener Monitoreo
+                    </button>
+
+                    <button
+                      className="action-btn"
+                      style={{ width: '100%', marginTop: 8, background: 'var(--color-bg)' }}
+                      onClick={handleClearData}
+                    >
+                      🗑️ Limpiar Datos Locales ({sensorData.length})
+                    </button>
+                  </>
+                )}
               </>
             )}
           </div>
 
-          {/* Datos en tiempo real */}
-          {sensorData.length > 0 && (
+          {/* Datos del sensor almacenados en backend */}
+          {isMonitoring && sensorData.length > 0 && (
             <div className="card">
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
-                 Datos en Tiempo Real ({sensorData.length})
+                📊 Datos Almacenados ({sensorData.length})
               </h3>
 
               <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-                {sensorData.map((data) => (
+                {sensorData.map((data, idx) => (
                   <div
-                    key={data.id}
+                    key={data.id || idx}
                     style={{
                       padding: '12px',
                       marginBottom: '8px',
@@ -521,28 +487,28 @@ export default function SensorSessionPage() {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ fontWeight: 600, color: '#10b981' }}>
-                        {new Date(data.timestamp).toLocaleTimeString()}
+                        {data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : 'N/A'}
                       </span>
                     </div>
-                    <pre style={{ margin: 0, fontSize: 11, overflow: 'auto', maxWidth: '100%' }}>
-                      {JSON.stringify(data, null, 2)}
-                    </pre>
+                    <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
+                      <strong>Humedad:</strong> {data.valorHumedad}%<br />
+                      <strong>Estado:</strong> {data.estado}<br />
+                      <strong>Consecuencia:</strong> {data.consecuencia}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {connected && sensorData.length === 0 && (
+          {isMonitoring && sensorData.length === 0 && (
             <div className="card">
               <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}></div>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>⏳</div>
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Esperando datos...</div>
                 <div style={{ fontSize: 12 }}>
-                  Envía mensajes JSON al topic<br />
-                  <code style={{ background: 'var(--color-bg)', padding: '4px 8px', borderRadius: '4px' }}>
-                    {mqttConfig.topic}
-                  </code>
+                  El backend se está conectando a EMQX<br />
+                  y procesando la información del sensor
                 </div>
               </div>
             </div>

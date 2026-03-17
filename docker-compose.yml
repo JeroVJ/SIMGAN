@@ -14,17 +14,21 @@ services:
       - simgan_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
 
-  mosquitto:
-    image: eclipse-mosquitto:2
-    container_name: simgan-mosquitto
-    ports:
-      - "1883:1883" #MQTT
-      - "9001:9001" #webSockets 
-    volumes:
-      - ./mosquitto/config:/mosquitto/config
-      - ./mosquitto/data:/mosquitto/data
-      - ./mosquitto/log:/mosquitto/log
-    restart: unless-stopped
+  # mosquitto:
+  #   image: eclipse-mosquitto:2
+  #   container_name: simgan-mosquitto
+  #   ports:
+  #     - "1883:1883" #MQTT
+  #     - "9001:9001" #webSockets 
+  #   volumes:
+  #     - ./mosquitto/config:/mosquitto/config
+  #     - ./mosquitto/data:/mosquitto/data
+  #     - ./mosquitto/log:/mosquitto/log
+  #   restart: unless-stopped
+  # 
+  # MQTT Broker: EMQX Cloud (q94824c1.ala.eu-central-1.emqxsl.com:8883)
+  # Usuario: SIMGAN
+  # Contraseña: simgan12
 
 volumes:
   simgan_data:

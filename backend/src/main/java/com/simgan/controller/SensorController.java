@@ -10,6 +10,8 @@ import com.simgan.repository.SensorRepository;
 import com.simgan.repository.ParcelRepository;
 import com.simgan.repository.ClasificacionSensorRepository;
 import com.simgan.entity.Parcel;
+import com.simgan.service.MqttBrokerService;
+import com.simgan.service.MqttClientService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -27,6 +29,8 @@ public class SensorController {
     private final SensorRepository sensorRepository;
     private final ParcelRepository parcelRepository;
     private final ClasificacionSensorRepository clasificacionSensorRepository;
+    private final MqttBrokerService mqttBrokerService;
+    private final MqttClientService mqttClientService;
 
     private SensorDto toDto(Sensor sensor) {
         return SensorDto.builder()
@@ -168,6 +172,65 @@ public class SensorController {
                     return ResponseEntity.ok(config);
                 })
                 .orElseGet(() -> ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/{id}/mqtt-config")
+    public ResponseEntity<MqttBrokerService.MqttSensorConfig> getMqttConfig(@PathVariable Long id) {
+        try {
+            MqttBrokerService.MqttSensorConfig config = mqttBrokerService.getSensorMqttConfig(id);
+            return ResponseEntity.ok(config);
+        } catch (RuntimeException e) {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PostMapping("/{id}/mqtt-config")
+    public ResponseEntity<MqttBrokerService.MqttSensorConfig> saveMqttConfig(
+            @PathVariable Long id,
+            @RequestBody MqttBrokerService.MqttConfigRequest request) {
+        try {
+            MqttBrokerService.MqttSensorConfig config = mqttBrokerService.saveSensorMqttConfig(id, request);
+            
+            // Conectar automáticamente después de guardar
+            try {
+                mqttClientService.connectSensor(id, request.getBrokerUrl(), request.getUsername(), request.getPassword());
+                config.setState("Conectado a MQTT - Escuchando datos");
+            } catch (Exception e) {
+                config.setState("Config guardada - Error en conexión: " + e.getMessage());
+            }
+            
+            return ResponseEntity.ok(config);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(null);
+        }
+    }
+
+    @PostMapping("/{id}/mqtt-connect")
+    public ResponseEntity<String> connectMqtt(@PathVariable Long id) {
+        try {
+            Sensor sensor = sensorRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Sensor no encontrado"));
+
+            if (sensor.getMqttBrokerUrl() == null) {
+                return ResponseEntity.badRequest().body("Sensor sin configuración MQTT");
+            }
+
+            // Conectar con credenciales guardadas (usuario/contraseña por defecto para EMQX)
+            mqttClientService.connectSensor(id, sensor.getMqttBrokerUrl(), "SIMGAN", "simgan12");
+            return ResponseEntity.ok("✓ Conectado a MQTT");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/{id}/mqtt-disconnect")
+    public ResponseEntity<String> disconnectMqtt(@PathVariable Long id) {
+        try {
+            mqttClientService.disconnectSensor(id);
+            return ResponseEntity.ok("✓ Desconectado de MQTT");
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body("Error: " + e.getMessage());
+        }
     }
 
     @PatchMapping("/{id}/config")
