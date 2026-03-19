@@ -11,6 +11,8 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.LocalDateTime;
+
 @Service
 @Slf4j
 public class SensorService {
@@ -33,16 +35,35 @@ public class SensorService {
             // Parsear JSON
             LecturaSensor lectura = objectMapper.readValue(payload, LecturaSensor.class);
 
+            if (lectura.getTimestamp() == null) {
+                lectura.setTimestamp(LocalDateTime.now());
+            }
+
+            String tipoSuelo = sensor.getParcel() != null && sensor.getParcel().getSoilType() != null
+                    ? sensor.getParcel().getSoilType()
+                    : "Franco";
+
             // Crear clasificación
-            ClasificacionSensor clasificacion = ClasificacionSensor.fromLectura(lectura, "Automático");
+            ClasificacionSensor clasificacion = ClasificacionSensor.fromLectura(lectura, tipoSuelo);
             clasificacion.setSensor(sensor);
+            clasificacion.setMqttTopic(sensor.getMqttTopic());
+            clasificacion.setMqttBrokerUrl(sensor.getMqttBrokerUrl());
+            clasificacion.setClientId(sensor.getClientId());
+            clasificacion.setConnected(sensor.getConnected());
+
+            if (clasificacion.getEstado() == null) {
+                clasificacion.setEstado("SIN_CLASIFICAR");
+            }
+            if (clasificacion.getConsecuencia() == null) {
+                clasificacion.setConsecuencia("SIN_CONSECUENCIA");
+            }
 
             // Guardar en BD
             clasificacionSensorRepository.save(clasificacion);
-            log.info("✓ Lectura guardada para sensor {}", sensor.getId());
+            log.info("✓ Lectura guardada para sensor {} en topic {}", sensor.getId(), sensor.getMqttTopic());
 
         } catch (Exception e) {
-            log.error("❌ Error procesando lectura: {}", e.getMessage());
+            log.error("❌ Error procesando lectura para sensor {} con payload {}", sensor.getId(), payload, e);
         }
     }
 

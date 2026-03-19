@@ -74,7 +74,7 @@ CREATE TABLE IF NOT EXISTS parcels (
 
 --Sensors
 
-CREATE TABLE IF NOT EXISTS sensors (
+CREATE TABLE IF NOT EXISTS sensores (
     id BIGSERIAL PRIMARY KEY,
 
     name VARCHAR(255),
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS sensors (
 
     client_id VARCHAR(255),
 
-    connected BIT(1) DEFAULT b'0',
+    connected BOOLEAN DEFAULT false,
 
     parcel_id BIGINT NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
 
@@ -96,10 +96,10 @@ CREATE TABLE IF NOT EXISTS sensors (
 
 --Sensor clasifications
 
-CREATE TABLE IF NOT EXISTS sensor_classifications (
+CREATE TABLE IF NOT EXISTS clasificaciones_sensor (
     id BIGSERIAL PRIMARY KEY,
 
-    sensor_id BIGINT NOT NULL REFERENCES sensors(id) ON DELETE CASCADE,
+    sensor_id BIGINT NOT NULL REFERENCES sensores(id) ON DELETE CASCADE,
 
     valor_humedad DOUBLE PRECISION NOT NULL,
 
@@ -203,6 +203,6 @@ CREATE TABLE IF NOT EXISTS lote_parcel_history (
 CREATE INDEX IF NOT EXISTS idx_lotes_terrain ON lotes(terrain_id);
 CREATE INDEX IF NOT EXISTS idx_ganados_lote ON ganados(lote_id);
 CREATE INDEX IF NOT EXISTS idx_lote_parcel_hist ON lote_parcel_history(lote_id, fecha_ingreso);
-CREATE INDEX IF NOT EXISTS idx_sensors_parcel ON sensors(parcel_id);
-CREATE INDEX IF NOT EXISTS idx_sensor_classifications_sensor ON sensor_classifications(sensor_id);
-CREATE INDEX IF NOT EXISTS idx_sensor_classifications_time ON sensor_classifications(timestamp);
+CREATE INDEX IF NOT EXISTS idx_sensores_parcel ON sensores(parcel_id);
+CREATE INDEX IF NOT EXISTS idx_clasificaciones_sensor_sensor ON clasificaciones_sensor(sensor_id);
+CREATE INDEX IF NOT EXISTS idx_clasificaciones_sensor_time ON clasificaciones_sensor(timestamp);
