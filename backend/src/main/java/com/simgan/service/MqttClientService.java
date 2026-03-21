@@ -2,13 +2,18 @@ package com.simgan.service;
 
 import org.eclipse.paho.client.mqttv3.*;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import com.simgan.entity.Sensor;
 import com.simgan.repository.SensorRepository;
+
+import jakarta.annotation.PostConstruct;
+
 import com.simgan.mqtt.MqttSubscriber;
 import lombok.extern.slf4j.Slf4j;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 @Service
 @Slf4j
@@ -20,7 +25,44 @@ public class MqttClientService {
     @Autowired
     private MqttSubscriber mqttSubscriber;
 
+    @Value("${mqtt.default.username:SIMGAN}")
+    private String defaultMqttUsername;
+
+    @Value("${mqtt.default.password:simgan12}")
+    private String defaultMqttPassword;
+
     private Map<Long, MqttClient> clientMap = new HashMap<>();
+
+    @PostConstruct
+    public void reconnectActiveSensorsOnStartup() {
+        List<Sensor> activeSensors = sensorRepository.findByConnectedTrue();
+
+        if (activeSensors.isEmpty()) {
+            log.info("ℹ️ No hay sensores MQTT activos para reconectar al iniciar");
+            return;
+        }
+
+        log.info("🔄 Reconectando {} sensores MQTT activos al iniciar", activeSensors.size());
+
+        for (Sensor sensor : activeSensors) {
+            try {
+                if (sensor.getMqttBrokerUrl() == null || sensor.getMqttBrokerUrl().isBlank()) {
+                    log.warn("⚠️ Sensor {} marcado como conectado pero sin broker URL. Se marca desconectado.", sensor.getId());
+                    sensor.setConnected(false);
+                    sensorRepository.save(sensor);
+                    continue;
+                }
+
+                connectSensor(
+                        sensor.getId(),
+                        sensor.getMqttBrokerUrl(),
+                        defaultMqttUsername,
+                        defaultMqttPassword);
+            } catch (Exception e) {
+                log.error("❌ No se pudo reconectar sensor {} al iniciar: {}", sensor.getId(), e.getMessage());
+            }
+        }
+    }
 
     /**
      * Conectar sensor a MQTT broker
@@ -28,6 +70,15 @@ public class MqttClientService {
     public void connectSensor(Long sensorId, String brokerUrl, String username, String password) {
         try {
             log.info("🔌 Conectando sensor {} a broker: {}", sensorId, brokerUrl);
+
+            MqttClient existingClient = clientMap.get(sensorId);
+            if (existingClient != null) {
+                if (existingClient.isConnected()) {
+                    existingClient.disconnect();
+                }
+                existingClient.close();
+                clientMap.remove(sensorId);
+            }
 
             // Obtener sensor
             Sensor sensor = sensorRepository.findById(sensorId)
@@ -134,7 +185,9 @@ public class MqttClientService {
         } catch (MqttException e) {
             log.error("❌ Error desconectando MQTT: {}", e.getMessage());
         }
-    }
+    }  
+
+   
 
     /**
      * Verificar si sensor está conectado

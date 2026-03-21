@@ -25,7 +25,10 @@ function FitBounds({ geoJson }) {
     try {
       const geo = typeof geoJson === 'string' ? JSON.parse(geoJson) : geoJson
       const layer = L.geoJSON(geo)
-      map.fitBounds(layer.getBounds(), { padding: [30, 30] })
+      map.fitBounds(layer.getBounds(), {
+        padding: [50, 50],
+        maxZoom: 17,
+      })
     } catch {}
   }, [geoJson, map])
 
@@ -55,7 +58,10 @@ function FitBoundsWithSensor({ parcelGeoJson, sensorGeoJson }) {
       }
       
       if (bounds.isValid()) {
-        map.fitBounds(bounds, { padding: [30, 30] })
+        map.fitBounds(bounds, {
+          padding: [50, 50],
+          maxZoom: 17,
+        })
       }
     } catch {}
   }, [parcelGeoJson, sensorGeoJson, map])

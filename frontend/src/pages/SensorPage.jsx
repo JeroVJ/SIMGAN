@@ -27,7 +27,10 @@ function FitBounds({ geoJson }) {
     try {
       const geo = typeof geoJson === 'string' ? JSON.parse(geoJson) : geoJson
       const layer = L.geoJSON(geo)
-      map.fitBounds(layer.getBounds(), { padding: [30, 30] })
+      map.fitBounds(layer.getBounds(), {
+        padding: [50, 50],
+        maxZoom: 17,
+      })
     } catch {}
   }, [geoJson, map])
 
@@ -132,26 +135,7 @@ export default function SensorPage() {
     }
   }
 
-  async function handleConnectSensor(sensorId) {
-    try {
-      await api.post(`/sensors/${sensorId}/connect`)
-      toast.success('Sensor conectado')
-    } catch (err) {
-      console.error('Error conectando sensor:', err)
-      toast.error('Error conectando sensor')
-    }
-  }
-
-  async function handleConnectSensor(sensorId) {
-    try {
-      // Este endpoint debería estar en el backend
-      toast.success('Conectando sensor...')
-      // await sensorApi.connectSensor(sensorId)
-    } catch (err) {
-      console.error('Error conectando sensor:', err)
-      toast.error('Error conectando sensor')
-    }
-  }
+ 
 
   function handleDeleteSensor(id) {
     setConfirm({
