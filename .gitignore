@@ -1,3 +1,9 @@
 # Project exclude paths
 /backend/target/
-.env
+.env  
+
+# Archivos temporales
+tmp/
+
+# Imágenes pesadas (como las satelitales)
+*.tif
