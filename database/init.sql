@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS farms (
     center_lat DOUBLE PRECISION,
     center_lng DOUBLE PRECISION,
     is_homogeneous BOOLEAN DEFAULT false,
+    iot_enabled BOOLEAN DEFAULT true,
     soil_type VARCHAR(255),
     pasture_type VARCHAR(255),
     created_at TIMESTAMP DEFAULT NOW()

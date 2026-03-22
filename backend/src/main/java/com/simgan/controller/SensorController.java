@@ -33,6 +33,17 @@ public class SensorController {
     private final MqttBrokerService mqttBrokerService;
     private final MqttClientService mqttClientService;
 
+    private boolean isIotEnabled(Parcel parcel) {
+        return parcel != null
+                && parcel.getTerrain() != null
+                && parcel.getTerrain().getFarm() != null
+                && Boolean.TRUE.equals(parcel.getTerrain().getFarm().getIotEnabled());
+    }
+
+    private boolean isIotEnabled(Sensor sensor) {
+        return sensor != null && isIotEnabled(sensor.getParcel());
+    }
+
     private SensorDto toDto(Sensor sensor) {
         return SensorDto.builder()
                 .id(sensor.getId())
@@ -62,6 +73,9 @@ public class SensorController {
             if (parcel.isEmpty()) {
                 return ResponseEntity.badRequest().build();
             }
+            if (!isIotEnabled(parcel.get())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
             sensor.setParcel(parcel.get());
         }
         
@@ -74,6 +88,14 @@ public class SensorController {
 
     @GetMapping("/parcel/{parcelId}")
     public ResponseEntity<List<SensorDto>> findByParcelId(@PathVariable Long parcelId) {
+        Optional<Parcel> parcel = parcelRepository.findById(parcelId);
+        if (parcel.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        if (!isIotEnabled(parcel.get())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+
         List<Sensor> sensors = sensorRepository.findByParcelId(parcelId);
         List<SensorDto> sensorDtos = sensors.stream()
                 .map(this::toDto)
@@ -84,7 +106,12 @@ public class SensorController {
     @GetMapping("/{id}")
     public ResponseEntity<SensorDto> findById(@PathVariable Long id) {
         return sensorRepository.findById(id)
-                .map(sensor -> ResponseEntity.ok(toDto(sensor)))
+                .map(sensor -> {
+                    if (!isIotEnabled(sensor)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).<SensorDto>build();
+                    }
+                    return ResponseEntity.ok(toDto(sensor));
+                })
                 .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
@@ -93,6 +120,9 @@ public class SensorController {
         Optional<Sensor> sensor = sensorRepository.findById(id);
         if (sensor.isEmpty()) {
             return ResponseEntity.notFound().build();
+        }
+        if (!isIotEnabled(sensor.get())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         
         List<ClasificacionSensor> clasificaciones = sensor.get().getClasificaciones();
@@ -116,6 +146,9 @@ public class SensorController {
     public ResponseEntity<SensorDto> update(@PathVariable Long id, @RequestBody SensorDto sensorUpdate) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
+                    if (!isIotEnabled(sensor)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).<SensorDto>build();
+                    }
                     if (sensorUpdate.getName() != null) {
                         sensor.setName(sensorUpdate.getName());
                     }
@@ -130,17 +163,24 @@ public class SensorController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
-        if (sensorRepository.existsById(id)) {
-            sensorRepository.deleteById(id);
-            return ResponseEntity.noContent().build();
-        }
-        return ResponseEntity.notFound().build();
+        return sensorRepository.findById(id)
+                .map(sensor -> {
+                    if (!isIotEnabled(sensor)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).<Void>build();
+                    }
+                    sensorRepository.deleteById(id);
+                    return ResponseEntity.noContent().<Void>build();
+                })
+                .orElseGet(() -> ResponseEntity.notFound().build());
     }
 
     @PostMapping("/{id}/connect")
     public ResponseEntity<SensorDto> connect(@PathVariable Long id) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
+                    if (!isIotEnabled(sensor)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).<SensorDto>build();
+                    }
                     sensor.setConnected(true);
                     Sensor updated = sensorRepository.save(sensor);
                     return ResponseEntity.ok(toDto(updated));
@@ -152,6 +192,9 @@ public class SensorController {
     public ResponseEntity<SensorDto> disconnect(@PathVariable Long id) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
+                    if (!isIotEnabled(sensor)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).<SensorDto>build();
+                    }
                     sensor.setConnected(false);
                     Sensor updated = sensorRepository.save(sensor);
                     return ResponseEntity.ok(toDto(updated));
@@ -163,6 +206,9 @@ public class SensorController {
     public ResponseEntity<MqttConfigResponseDto> getStatus(@PathVariable Long id) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
+                    if (!isIotEnabled(sensor)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).<MqttConfigResponseDto>build();
+                    }
                     MqttConfigResponseDto config = MqttConfigResponseDto.builder()
                             .sensorId(sensor.getId())
                             .brokerUrl(sensor.getMqttBrokerUrl())
@@ -179,6 +225,13 @@ public class SensorController {
     @GetMapping("/{id}/mqtt-config")
     public ResponseEntity<MqttConfigResponseDto> getMqttConfig(@PathVariable Long id) {
         try {
+            Optional<Sensor> sensor = sensorRepository.findById(id);
+            if (sensor.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            if (!isIotEnabled(sensor.get())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
             MqttConfigResponseDto config = mqttBrokerService.getSensorMqttConfig(id);
             return ResponseEntity.ok(config);
         } catch (RuntimeException e) {
@@ -191,6 +244,14 @@ public class SensorController {
             @PathVariable Long id,
             @RequestBody MqttConfigUpdateDto request) {
         try {
+            Optional<Sensor> sensor = sensorRepository.findById(id);
+            if (sensor.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            if (!isIotEnabled(sensor.get())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+            }
+
             MqttConfigResponseDto config = mqttBrokerService.saveSensorMqttConfig(id, request);
             
             // Conectar automáticamente después de guardar
@@ -213,6 +274,10 @@ public class SensorController {
             Sensor sensor = sensorRepository.findById(id)
                     .orElseThrow(() -> new RuntimeException("Sensor no encontrado"));
 
+            if (!isIotEnabled(sensor)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("IoT deshabilitado para esta finca");
+            }
+
             if (sensor.getMqttBrokerUrl() == null) {
                 return ResponseEntity.badRequest().body("Sensor sin configuración MQTT");
             }
@@ -228,6 +293,14 @@ public class SensorController {
     @PostMapping("/{id}/mqtt-disconnect")
     public ResponseEntity<String> disconnectMqtt(@PathVariable Long id) {
         try {
+            Optional<Sensor> sensor = sensorRepository.findById(id);
+            if (sensor.isEmpty()) {
+                return ResponseEntity.notFound().build();
+            }
+            if (!isIotEnabled(sensor.get())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body("IoT deshabilitado para esta finca");
+            }
+
             mqttClientService.disconnectSensor(id);
             return ResponseEntity.ok("✓ Desconectado de MQTT");
         } catch (Exception e) {
@@ -239,6 +312,9 @@ public class SensorController {
     public ResponseEntity<MqttConfigResponseDto> updateConfig(@PathVariable Long id, @RequestBody MqttConfigUpdateDto.UpdateRequest request) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
+                    if (!isIotEnabled(sensor)) {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).<MqttConfigResponseDto>build();
+                    }
                     if (request.getMqttTopic() != null) {
                         sensor.setMqttTopic(request.getMqttTopic());
                     }

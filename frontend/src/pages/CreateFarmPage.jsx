@@ -27,6 +27,7 @@ export default function CreateFarmPage() {
     municipality: '',
     centerLat: '',
     centerLng: '',
+    iotEnabled: true,
     isHomogeneous: false,
     soilType: '',
     pastureType: ''
@@ -88,6 +89,7 @@ export default function CreateFarmPage() {
         municipality: form.municipality,
         centerLat: parseFloat(form.centerLat),
         centerLng: parseFloat(form.centerLng),
+        iotEnabled: form.iotEnabled,
         isHomogeneous: form.isHomogeneous,
         soilType: form.isHomogeneous ? form.soilType : null,
         pastureType: form.isHomogeneous ? form.pastureType : null
@@ -191,6 +193,18 @@ export default function CreateFarmPage() {
                 placeholder="Ej: -75.8814"
               />
               {errors.centerLng && <span style={{ color: 'red', fontSize: '12px' }}>{errors.centerLng}</span>}
+            </div>
+
+            <div className="form-group">
+              <label>¿Usará infraestructura IoT?</label>
+              <select
+                name="iotEnabled"
+                value={form.iotEnabled ? 'true' : 'false'}
+                onChange={(e) => setForm(prev => ({ ...prev, iotEnabled: e.target.value === 'true' }))}
+              >
+                <option value="true">Sí, habilitar sensores</option>
+                <option value="false">No, deshabilitar sensores</option>
+              </select>
             </div>
           </div>
 

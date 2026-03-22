@@ -19,11 +19,21 @@ public class FarmService {
     private final GanaderoRepository ganaderoRepository;
 
     public FarmDto.Response create(FarmDto.CreateRequest request) {
+        String normalizedName = request.getName() != null ? request.getName().trim() : null;
+
+        if (normalizedName == null || normalizedName.isBlank()) {
+            throw new IllegalArgumentException("El nombre de la finca es obligatorio");
+        }
+
+        if (farmRepository.existsByNormalizedName(normalizedName)) {
+            throw new IllegalArgumentException("La finca ya existe");
+        }
+
         Ganadero ganadero = ganaderoRepository.findById(request.getGanaderoId())
                 .orElseThrow(() -> new RuntimeException("Ganadero no encontrado con id: " + request.getGanaderoId()));
 
         Farm farm = Farm.builder()
-                .name(request.getName())
+                .name(normalizedName)
                 .ganadero(ganadero)
                 .department(request.getDepartment())
                 .municipality(request.getMunicipality())
@@ -32,6 +42,7 @@ public class FarmService {
                 .isHomogeneous(request.getIsHomogeneous() != null ? request.getIsHomogeneous() : false)
                 .soilType(request.getSoilType())
                 .pastureType(request.getPastureType())
+            .iotEnabled(request.getIotEnabled() != null ? request.getIotEnabled() : true)
                 .build();
 
         farm = farmRepository.save(farm);
@@ -66,6 +77,7 @@ public class FarmService {
                 .isHomogeneous(farm.getIsHomogeneous())
                 .soilType(farm.getSoilType())
                 .pastureType(farm.getPastureType())
+                .iotEnabled(farm.getIotEnabled())
                 .createdAt(farm.getCreatedAt() != null ? farm.getCreatedAt().toString() : null)
                 .terrainCount(farm.getTerrains() != null ? farm.getTerrains().size() : 0)
                 .build();

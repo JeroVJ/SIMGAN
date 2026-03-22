@@ -22,6 +22,7 @@ public class FarmDto {
         private Boolean isHomogeneous;
         private String soilType;
         private String pastureType;
+        private Boolean iotEnabled;
     }
 
     @Getter @Setter
@@ -38,6 +39,7 @@ public class FarmDto {
         private Boolean isHomogeneous;
         private String soilType;
         private String pastureType;
+        private Boolean iotEnabled;
         private String createdAt;
         private int terrainCount;
     }

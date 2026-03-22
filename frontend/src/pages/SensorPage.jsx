@@ -52,12 +52,13 @@ export default function SensorPage() {
 
   const [parcel, setParcel] = useState(null)
   const [loadingParcel, setLoadingParcel] = useState(true)
+  const [iotEnabled, setIotEnabled] = useState(null)
   const {
     sensors,
     loading,
     addSensor,
     deleteSensor
-  } = useSensor(parcelId)
+  } = useSensor(parcelId, { enabled: iotEnabled === true })
 
   const [saving, setSaving] = useState(false)
   const [sensorName, setSensorName] = useState('')
@@ -76,10 +77,25 @@ export default function SensorPage() {
       try {
         setLoadingParcel(true)
         const res = await api.get(`/parcels/${parcelId}`)
-        setParcel(res.data)
+        const parcelData = res.data
+        setParcel(parcelData)
+
+        if (parcelData?.farmId) {
+          const farmRes = await api.get(`/farms/${parcelData.farmId}`)
+          const enabled = farmRes?.data?.iotEnabled !== false
+          setIotEnabled(enabled)
+
+          if (!enabled) {
+            toast.error('IoT deshabilitado para esta finca')
+            navigate(`/terrains/${parcelData.terrainId}/parcels`, { replace: true })
+          }
+        } else {
+          setIotEnabled(true)
+        }
       } catch (err) {
         console.error('Error cargando potrero:', err)
         toast.error('Error cargando potrero')
+        setIotEnabled(false)
       } finally {
         setLoadingParcel(false)
       }
@@ -144,8 +160,12 @@ export default function SensorPage() {
     })
   }
 
-  if (loading || loadingParcel) {
+  if (loading || loadingParcel || iotEnabled === null) {
     return <Spinner page label="Cargando sensores..." />
+  }
+
+  if (iotEnabled === false) {
+    return <Spinner page label="IoT deshabilitado para esta finca..." />
   }
 
   const parcelGeoJson = (() => {

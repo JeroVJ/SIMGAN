@@ -108,7 +108,17 @@ export default function SensorSessionPage() {
         // Cargar parcel si existe
         if (sensorRes.parcelId) {
           const parcelRes = await api.get(`/parcels/${sensorRes.parcelId}`)
-          setParcel(parcelRes.data)
+          const parcelData = parcelRes.data
+          setParcel(parcelData)
+
+          if (parcelData?.farmId) {
+            const farmRes = await api.get(`/farms/${parcelData.farmId}`)
+            if (farmRes?.data?.iotEnabled === false) {
+              toast.error('IoT deshabilitado para esta finca')
+              navigate(`/terrains/${parcelData.terrainId}/parcels`, { replace: true })
+              return
+            }
+          }
         }
 
         // Intentar cargar configuración MQTT guardada

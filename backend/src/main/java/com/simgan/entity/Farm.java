@@ -46,6 +46,10 @@ public class Farm {
     @Column(name = "pasture_type")
     private String pastureType;
 
+    @Column(name = "iot_enabled")
+    @Builder.Default
+    private Boolean iotEnabled = true;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

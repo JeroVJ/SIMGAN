@@ -19,7 +19,7 @@ import { sensorApi } from '../services/api'
  *     updateSensor(id, data) → updates sensor data
  *     deleteSensor(id)       → deletes sensor
  */
-export function useSensor(parcelId) {
+export function useSensor(parcelId, { enabled = true } = {}) {
   const [sensors, setSensors] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -27,7 +27,11 @@ export function useSensor(parcelId) {
   // ── Data loading ───────────────────────────────────────────────────────────
 
   const reload = useCallback(async () => {
-    if (!parcelId) return
+    if (!parcelId || !enabled) {
+      setSensors([])
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -39,7 +43,7 @@ export function useSensor(parcelId) {
     } finally {
       setLoading(false)
     }
-  }, [parcelId])
+  }, [parcelId, enabled])
 
   useEffect(() => {
     reload()
@@ -49,6 +53,9 @@ export function useSensor(parcelId) {
 
   const addSensor = useCallback(
     async (payload) => {
+      if (!enabled) {
+        throw new Error('IoT deshabilitado para esta finca')
+      }
       try {
         const sensor = await sensorApi.create({
           ...payload,
@@ -62,11 +69,14 @@ export function useSensor(parcelId) {
         throw err
       }
     },
-    [parcelId, reload]
+    [enabled, parcelId, reload]
   )
 
   const updateSensor = useCallback(
     async (sensorId, data) => {
+      if (!enabled) {
+        throw new Error('IoT deshabilitado para esta finca')
+      }
       try {
         const updated = await sensorApi.update(sensorId, data)
         toast.success('Sensor actualizado')
@@ -77,11 +87,14 @@ export function useSensor(parcelId) {
         throw err
       }
     },
-    [reload]
+    [enabled, reload]
   )
 
   const deleteSensor = useCallback(
     async (sensorId) => {
+      if (!enabled) {
+        throw new Error('IoT deshabilitado para esta finca')
+      }
       try {
         await sensorApi.delete(sensorId)
         toast.success('Sensor eliminado')
@@ -91,7 +104,7 @@ export function useSensor(parcelId) {
         throw err
       }
     },
-    [reload]
+    [enabled, reload]
   )
 
   return {

@@ -523,20 +523,24 @@ export default function ParcelsPage() {
                   <button
                     onClick={(e) => {
                       e.stopPropagation()
+                      if (!farm?.iotEnabled) {
+                        toast.error('IoT deshabilitado para esta finca')
+                        return
+                      }
                       navigate(`/parcels/${p.id}/sensors`)
                     }}
                     style={{
-                      background: '#3b82f6',
+                      background: farm?.iotEnabled ? '#3b82f6' : '#9ca3af',
                       color: 'white',
                       border: 'none',
                       padding: '4px 8px',
                       borderRadius: '4px',
-                      cursor: 'pointer',
+                      cursor: farm?.iotEnabled ? 'pointer' : 'not-allowed',
                       fontSize: 11,
                       fontWeight: 500
                     }}
                   >
-                     Sensores
+                     {farm?.iotEnabled ? 'Sensores' : 'IoT OFF'}
                   </button>
                   <button
                     onClick={(e) => {
