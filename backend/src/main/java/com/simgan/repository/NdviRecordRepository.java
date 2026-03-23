@@ -36,6 +36,8 @@ public interface NdviRecordRepository extends JpaRepository<NdviRecord, Long> {
     @Query("SELECT n FROM NdviRecord n WHERE n.terrain.id = :terrainId AND n.captureDate = :date")
     List<NdviRecord> findByTerrainIdAndDate(@Param("terrainId") Long terrainId, @Param("date") LocalDate date);
 
+        Optional<NdviRecord> findByParcelIdAndCaptureDate(Long parcelId, LocalDate captureDate);
+
     boolean existsByParcelIdAndCaptureDate(Long parcelId, LocalDate captureDate);
 
     long countByTerrainId(Long terrainId);

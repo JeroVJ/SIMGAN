@@ -91,7 +91,12 @@ export const ndviApi = {
   acknowledgeAlert: (alertId) => api.patch(`/ndvi/alerts/${alertId}/acknowledge`),
 
   // Ejecutar análisis
-  analyze: (terrainId) => api.post(`/ndvi/analyze/${terrainId}`).then(r => r.data),
+  analyze: (terrainId, startDate, endDate) => {
+    const params = {}
+    if (startDate) params.startDate = startDate
+    if (endDate) params.endDate = endDate
+    return api.post(`/ndvi/analyze/${terrainId}`, null, { params }).then(r => r.data)
+  },
 
   // Estado Planet Labs
   getPlanetStatus: () => api.get('/ndvi/planet/status').then(r => r.data),

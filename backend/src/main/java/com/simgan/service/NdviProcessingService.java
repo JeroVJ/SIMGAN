@@ -2,29 +2,17 @@ package com.simgan.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.simgan.dto.ProcessedParcelNdviDto;
 import com.simgan.entity.*;
 import com.simgan.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.geotools.coverage.grid.GridCoverage2D;
-import org.geotools.gce.geotiff.GeoTiffReader;
 import org.locationtech.jts.geom.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.awt.geom.Point2D;
-import java.awt.image.BufferedImage;
-import java.awt.image.Raster;
-import java.awt.image.RenderedImage;
-import java.io.File;
 import java.time.LocalDate;
 import java.util.*;
-import javax.imageio.ImageIO;
-import org.geotools.api.referencing.crs.CoordinateReferenceSystem;
-import org.geotools.api.referencing.operation.MathTransform;
-import org.geotools.referencing.CRS;
-import org.geotools.geometry.jts.JTS;
-import org.locationtech.jts.geom.*;
 
 
 /**
@@ -68,145 +56,6 @@ public class NdviProcessingService {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * Procesa un GeoTIFF completo y calcula NDVI para todas las parcelas del terreno.
-     */
-    public List<NdviRecord> processGeoTiff(File geotiffFile, Long terrainId, LocalDate captureDate, String sceneId) {
-        try {
-            Terrain terrain = terrainRepository.findById(terrainId)
-                    .orElseThrow(() -> new RuntimeException("Terreno no encontrado: " + terrainId));
-
-            List<Parcel> parcels = parcelRepository.findByTerrainId(terrainId);
-            if (parcels.isEmpty()) {
-                log.warn("No hay parcelas en el terreno {}", terrainId);
-                return Collections.emptyList();
-            }
-
-            // Read GeoTIFF
-            GeoTiffReader reader = new GeoTiffReader(geotiffFile);
-            GridCoverage2D coverage = reader.read(null);
-            RenderedImage image = coverage.getRenderedImage();
-            Raster raster = image.getData();
-
-            int width = raster.getWidth();
-            int height = raster.getHeight();
-            int numBands = raster.getNumBands();
-
-            log.info("GeoTIFF loaded: {}x{}, {} bands", width, height, numBands);
-
-            if (numBands < 4) {
-                log.error("GeoTIFF necesita mínimo 4 bandas (tiene {})", numBands);
-                reader.dispose();
-                return Collections.emptyList();
-            }
-
-            // Determinar índices Red/NIR según número de bandas
-            // 4-band PlanetScope: B1=Blue, B2=Green, B3=Red, B4=NIR
-            // 8-band PlanetScope: B1=coastal, B2=blue, B3=greenI, B4=green, B5=yellow, B6=Red, B7=redEdge, B8=NIR
-            int redIdx = numBands >= 8 ? 5 : 2;
-            int nirIdx = numBands >= 8 ? 7 : 3;
-            log.info("Usando bandas: Red=idx{} NIR=idx{} ({}-band mode)", redIdx, nirIdx, numBands >= 8 ? 8 : 4);
-
-            List<NdviRecord> records = new ArrayList<>();
-
-            for (Parcel parcel : parcels) {
-                // Skip if already processed for this date
-                if (ndviRecordRepository.existsByParcelIdAndCaptureDate(parcel.getId(), captureDate)) {
-                    continue;
-                }
-
-                try {
-                    Geometry parcelGeom = parseGeoJsonGeometry(parcel.getGeoJson());
-                    NdviRecord record = calculateNdviForParcel(coverage, raster, parcelGeom, parcel, terrain, captureDate, sceneId, redIdx, nirIdx);
-                    if (record != null) {
-                        records.add(ndviRecordRepository.save(record));
-                        checkAndCreateAlerts(record);
-                    }
-                } catch (Exception e) {
-                    log.error("Error procesando parcela {}: {}", parcel.getId(), e.getMessage());
-                }
-            }
-
-            reader.dispose();
-            log.info("Procesadas {} parcelas para terreno {}", records.size(), terrainId);
-            return records;
-
-        } catch (Exception e) {
-            log.error("Error procesando GeoTIFF: {}", e.getMessage(), e);
-            return Collections.emptyList();
-        }
-    }
-
-    /**
-     * Calcula NDVI para una parcela individual
-     */
-    private NdviRecord calculateNdviForParcel(
-            GridCoverage2D coverage, Raster raster,
-            Geometry parcelGeom, Parcel parcel, Terrain terrain,
-            LocalDate captureDate, String sceneId,
-            int redIdx, int nirIdx) {
-
-        List<Double> ndviValues = new ArrayList<>();
-
-        try {
-            // 1. Obtener el CRS de la imagen (usa la interfaz de org.geotools.api)
-            CoordinateReferenceSystem tiffCrs = coverage.getCoordinateReferenceSystem();
-
-            // 2. Definir el CRS de la parcela
-            CoordinateReferenceSystem parcelCrs = CRS.decode("EPSG:4326", true);
-
-            // 3. Crear la transformación (esto ahora devolverá org.geotools.api.referencing.operation.MathTransform)
-            MathTransform transform = CRS.findMathTransform(parcelCrs, tiffCrs, true);
-
-            // 4. Transformar la geometría
-            Geometry projectedParcel = JTS.transform(parcelGeom, transform);
-
-            org.locationtech.jts.geom.Envelope env = projectedParcel.getEnvelopeInternal();
-            double step = 3.0;
-            GeometryFactory factory = projectedParcel.getFactory();
-
-            for (double x = env.getMinX(); x <= env.getMaxX(); x += step) {
-                for (double y = env.getMinY(); y <= env.getMaxY(); y += step) {
-                    Point point = factory.createPoint(new Coordinate(x, y));
-
-                    if (projectedParcel.contains(point)) {
-                        try {
-                            Point2D pos = new Point2D.Double(x, y);
-                            double[] values = coverage.evaluate(pos, (double[]) null);
-
-                            if (values != null && values.length > Math.max(redIdx, nirIdx)) {
-                                double red = values[redIdx];
-                                double nir = values[nirIdx];
-
-                                if (red > 0 || nir > 0) {
-                                    double ndvi = (nir - red) / (nir + red);
-                                    if (ndvi >= -1.0 && ndvi <= 1.0) {
-                                        ndviValues.add(ndvi);
-                                    }
-                                }
-                            }
-                        } catch (Exception e) {
-                            // Punto fuera de la cobertura física de la imagen
-                        }
-                    }
-                }
-            }
-
-            log.info("Parcela {}: {} pixeles válidos extraídos", parcel.getId(), ndviValues.size());
-
-        } catch (Exception e) {
-            log.error("Error proyectando coordenadas para parcela {}: {}", parcel.getId(), e.getMessage());
-            return null;
-        }
-
-        if (ndviValues.isEmpty()) {
-            log.warn("No se encontraron pixeles NDVI para parcela {}", parcel.getId());
-            return null;
-        }
-
-        return buildNdviRecord(ndviValues, parcel, terrain, captureDate, sceneId, "PLANET");
-    }
-
-    /**
      * Construye un NdviRecord a partir de valores NDVI crudos.
      * Usado tanto por el procesamiento real como por el seed.
      */
@@ -243,6 +92,75 @@ public class NdviProcessingService {
                 .cloudCoverPercent(0.0)
                 .source(source)
                 .build();
+    }
+
+        public List<NdviRecord> persistProcessedResults(
+            Terrain terrain,
+            LocalDate captureDate,
+            String sceneId,
+            Double cloudCoverPercent,
+            String source,
+            Collection<ProcessedParcelNdviDto> parcelResults,
+            Map<Long, Parcel> parcelsById) {
+
+        if (parcelResults == null || parcelResults.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        List<NdviRecord> records = new ArrayList<>();
+
+        for (ProcessedParcelNdviDto parcelResult : parcelResults) {
+            if (parcelResult == null || parcelResult.getParcelId() == null) {
+                continue;
+            }
+
+            Parcel parcel = parcelsById.get(parcelResult.getParcelId());
+            if (parcel == null) {
+                continue;
+            }
+
+            if (parcelResult.getPixelCount() == null || parcelResult.getPixelCount() <= 0) {
+                continue;
+            }
+
+            NdviRecord record = ndviRecordRepository.findByParcelIdAndCaptureDate(parcel.getId(), captureDate)
+                    .orElseGet(() -> NdviRecord.builder()
+                            .parcel(parcel)
+                            .terrain(terrain)
+                            .captureDate(captureDate)
+                            .build());
+
+            record.setParcel(parcel);
+            record.setTerrain(terrain);
+            record.setCaptureDate(captureDate);
+            record.setMeanNdvi(parcelResult.getMeanNdvi());
+            record.setMinNdvi(parcelResult.getMinNdvi());
+            record.setMaxNdvi(parcelResult.getMaxNdvi());
+            record.setStdNdvi(parcelResult.getStdNdvi());
+            record.setMedianNdvi(parcelResult.getMedianNdvi());
+            record.setPixelCount(parcelResult.getPixelCount());
+            record.setBiomassKgPerHa(parcelResult.getBiomassKgPerHa());
+            record.setVegetationCoverPercent(parcelResult.getVegetationCoverPercent());
+            record.setPlanetSceneId(sceneId);
+            record.setCloudCoverPercent(cloudCoverPercent);
+            record.setSource(source);
+
+            NdviRecord savedRecord = ndviRecordRepository.save(record);
+            checkAndCreateAlerts(savedRecord);
+            records.add(savedRecord);
+        }
+
+        return records;
+    }
+
+    public List<NdviRecord> persistSentinelResults(
+            Terrain terrain,
+            LocalDate captureDate,
+            String sceneId,
+            Double cloudCoverPercent,
+            Collection<ProcessedParcelNdviDto> parcelResults,
+            Map<Long, Parcel> parcelsById) {
+        return persistProcessedResults(terrain, captureDate, sceneId, cloudCoverPercent, "SENTINEL", parcelResults, parcelsById);
     }
 
     /**
@@ -286,7 +204,7 @@ public class NdviProcessingService {
                     .message(message)
                     .build();
 
-            alertRepository.save(alert);
+                upsertActiveAlert(alert);
             log.info("Alerta creada: {} para parcela {}", type, record.getParcel().getId());
         }
 
@@ -301,9 +219,28 @@ public class NdviProcessingService {
                     .message(String.format("✅ %s lista para pastoreo. NDVI=%.2f, Biomasa=%.0f kg/ha.",
                             record.getParcel().getName(), ndvi, record.getBiomassKgPerHa()))
                     .build();
-            alertRepository.save(alert);
+                upsertActiveAlert(alert);
         }
     }
+
+            private void upsertActiveAlert(NdviAlert alert) {
+            Optional<NdviAlert> existingAlert = alertRepository
+                .findFirstByParcelIdAndAlertTypeAndAcknowledgedFalseOrderByCreatedAtDesc(
+                    alert.getParcel().getId(),
+                    alert.getAlertType());
+
+            if (existingAlert.isPresent()) {
+                NdviAlert persistedAlert = existingAlert.get();
+                persistedAlert.setSeverity(alert.getSeverity());
+                persistedAlert.setThreshold(alert.getThreshold());
+                persistedAlert.setCurrentValue(alert.getCurrentValue());
+                persistedAlert.setMessage(alert.getMessage());
+                alertRepository.save(persistedAlert);
+                return;
+            }
+
+            alertRepository.save(alert);
+            }
 
     private Geometry parseGeoJsonGeometry(String geoJson) throws Exception {
         JsonNode node = objectMapper.readTree(geoJson);
@@ -369,110 +306,4 @@ public class NdviProcessingService {
      * @param captureDate  Fecha de captura
      * @param sceneId      ID de la escena Sentinel-2
      */
-    public List<NdviRecord> processSentinelBands(File redBandFile, File nirBandFile,
-                                                  int epsg, double ulx, double uly,
-                                                  Long terrainId, LocalDate captureDate, String sceneId) {
-        try {
-            Terrain terrain = terrainRepository.findById(terrainId)
-                    .orElseThrow(() -> new RuntimeException("Terreno no encontrado: " + terrainId));
-
-            List<Parcel> parcels = parcelRepository.findByTerrainId(terrainId);
-            if (parcels.isEmpty()) {
-                log.warn("No hay parcelas en terreno {}", terrainId);
-                return Collections.emptyList();
-            }
-
-            // 1. Read band images
-            log.info("Leyendo bandas Sentinel-2: B04={}, B08={}", redBandFile.getName(), nirBandFile.getName());
-            BufferedImage redImage = ImageIO.read(redBandFile);
-            BufferedImage nirImage = ImageIO.read(nirBandFile);
-
-            if (redImage == null || nirImage == null) {
-                log.error("No se pudieron leer las imágenes JP2. ¿Falta jai-imageio-jpeg2000 en classpath?");
-                return Collections.emptyList();
-            }
-
-            Raster redRaster = redImage.getRaster();
-            Raster nirRaster = nirImage.getRaster();
-
-            int width = redRaster.getWidth();
-            int height = redRaster.getHeight();
-            double pixelSize = 10.0; // 10m resolution for Sentinel-2 R10m bands
-
-            log.info("Sentinel-2 bandas: {}x{} pixels, EPSG:{}, ULX={}, ULY={}", width, height, epsg, ulx, uly);
-
-            // 2. Setup CRS transformation (WGS84 → UTM of the tile)
-            CoordinateReferenceSystem parcelCrs = CRS.decode("EPSG:4326", true);
-            CoordinateReferenceSystem tileCrs = CRS.decode("EPSG:" + epsg, true);
-            MathTransform toUtm = CRS.findMathTransform(parcelCrs, tileCrs, true);
-
-            List<NdviRecord> records = new ArrayList<>();
-
-            for (Parcel parcel : parcels) {
-                if (ndviRecordRepository.existsByParcelIdAndCaptureDate(parcel.getId(), captureDate)) {
-                    continue;
-                }
-
-                try {
-                    Geometry parcelGeom = parseGeoJsonGeometry(parcel.getGeoJson());
-                    Geometry utmParcel = JTS.transform(parcelGeom, toUtm);
-                    Envelope env = utmParcel.getEnvelopeInternal();
-                    GeometryFactory factory = utmParcel.getFactory();
-
-                    List<Double> ndviValues = new ArrayList<>();
-
-                    // 3. Sample pixels inside parcel polygon
-                    for (double x = env.getMinX(); x <= env.getMaxX(); x += pixelSize) {
-                        for (double y = env.getMinY(); y <= env.getMaxY(); y += pixelSize) {
-                            Point point = factory.createPoint(new Coordinate(x, y));
-                            if (!utmParcel.contains(point)) continue;
-
-                            // Convert UTM coords to pixel coords
-                            int px = (int) ((x - ulx) / pixelSize);
-                            int py = (int) ((uly - y) / pixelSize); // Y is inverted
-
-                            if (px < 0 || px >= width || py < 0 || py >= height) continue;
-
-                            try {
-                                double red = redRaster.getSampleDouble(px, py, 0);
-                                double nir = nirRaster.getSampleDouble(px, py, 0);
-
-                                // Sentinel-2 L2A: values are reflectance * 10000
-                                // Skip nodata (0) and saturated (65535)
-                                if (red <= 0 || nir <= 0 || red >= 65535 || nir >= 65535) continue;
-
-                                // Normalize to 0-1 reflectance
-                                double redRefl = red / 10000.0;
-                                double nirRefl = nir / 10000.0;
-
-                                double ndvi = (nirRefl - redRefl) / (nirRefl + redRefl);
-                                if (ndvi >= -1.0 && ndvi <= 1.0) {
-                                    ndviValues.add(ndvi);
-                                }
-                            } catch (Exception e) {
-                                // Pixel outside raster bounds
-                            }
-                        }
-                    }
-
-                    log.info("Parcela {}: {} pixels NDVI válidos (Sentinel-2)", parcel.getId(), ndviValues.size());
-
-                    if (!ndviValues.isEmpty()) {
-                        NdviRecord record = buildNdviRecord(ndviValues, parcel, terrain, captureDate, sceneId, "SENTINEL");
-                        records.add(ndviRecordRepository.save(record));
-                        checkAndCreateAlerts(record);
-                    }
-                } catch (Exception e) {
-                    log.error("Error procesando parcela {} con Sentinel: {}", parcel.getId(), e.getMessage());
-                }
-            }
-
-            log.info("Sentinel-2: {} parcelas procesadas para terreno {}", records.size(), terrainId);
-            return records;
-
-        } catch (Exception e) {
-            log.error("Error procesando bandas Sentinel-2: {}", e.getMessage(), e);
-            return Collections.emptyList();
-        }
-    }
 }

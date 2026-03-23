@@ -62,10 +62,10 @@ export function useNdvi(terrainId) {
     reload()
   }, [reload])
 
-  const analyze = useCallback(async () => {
+  const analyze = useCallback(async (startDate, endDate) => {
     setAnalyzing(true)
     try {
-      const result = await ndviApi.analyze(terrainId)
+      const result = await ndviApi.analyze(terrainId, startDate, endDate)
       if (result.message)      toast.success(result.message, { duration: 6000 })
       if (result.planetNote)   toast(result.planetNote,   { icon: '🛰️', duration: 4000 })
       if (result.sentinelNote) toast(result.sentinelNote, { icon: '🌍', duration: 4000 })

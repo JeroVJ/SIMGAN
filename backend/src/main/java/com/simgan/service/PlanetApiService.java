@@ -46,6 +46,15 @@ public class PlanetApiService {
     @Value("${planet.download.dir:${java.io.tmpdir}/simgan-planet}")
     private String downloadDir;
 
+    @Value("${planet.activation.poll-enabled:false}")
+    private boolean activationPollEnabled;
+
+    @Value("${planet.activation.max-wait-seconds:20}")
+    private int activationMaxWaitSeconds;
+
+    @Value("${planet.activation.poll-interval-millis:2000}")
+    private long activationPollIntervalMillis;
+
     private final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(java.time.Duration.ofSeconds(30))
             .readTimeout(java.time.Duration.ofSeconds(120))
@@ -277,7 +286,8 @@ public class PlanetApiService {
 
             log.info("Assets disponibles para {}: {}", sceneId, String.join(", ", availableAssets));
 
-            // Try each asset type in order
+            List<String> pendingAssetTypes = new ArrayList<>();
+
             for (String tryAssetType : ASSET_FALLBACKS) {
                 JsonNode asset = assets.get(tryAssetType);
                 if (asset == null) continue;
@@ -285,54 +295,85 @@ public class PlanetApiService {
                 String status = asset.get("status").asText();
                 log.info("Probando asset {} para {}: estado={}", tryAssetType, sceneId, status);
 
-                String downloadUrl = null;
-
                 if ("active".equals(status)) {
-                    downloadUrl = asset.get("location").asText();
-                } else if ("inactive".equals(status) || "activating".equals(status)) {
-                    // Activate if needed
-                    if ("inactive".equals(status) && asset.has("_links") && asset.get("_links").has("activate")) {
-                        String activateUrl = asset.get("_links").get("activate").asText();
-                        Request activate = new Request.Builder()
-                                .url(activateUrl)
-                                .post(RequestBody.create("", MediaType.parse("application/json")))
-                                .addHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((apiKey + ":").getBytes()))
-                                .build();
-                        try (Response activateResp = client.newCall(activate).execute()) {
-                            log.info("Activación enviada para {} ({}): HTTP {}", sceneId, tryAssetType, activateResp.code());
-                        }
-                    }
+                    return buildAssetResult(sceneId, tryAssetType, asset.get("location").asText());
+                }
 
-                    // Poll until active (max 5 min)
-                    log.info("Esperando activación de {} ({})...", sceneId, tryAssetType);
-                    for (int i = 0; i < 60; i++) {
-                        Thread.sleep(5000);
-                        try (Response pollResp = client.newCall(getAssets).execute()) {
-                            JsonNode pollAssets = mapper.readTree(pollResp.body().string());
-                            JsonNode pollAsset = pollAssets.get(tryAssetType);
-                            if (pollAsset != null && "active".equals(pollAsset.get("status").asText())) {
-                                downloadUrl = pollAsset.get("location").asText();
-                                log.info("Asset {} activado exitosamente para {}", tryAssetType, sceneId);
-                                break;
-                            }
-                        }
+                if ("inactive".equals(status) && asset.has("_links") && asset.get("_links").has("activate")) {
+                    String activateUrl = asset.get("_links").get("activate").asText();
+                    Request activate = new Request.Builder()
+                            .url(activateUrl)
+                            .post(RequestBody.create("", MediaType.parse("application/json")))
+                            .addHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((apiKey + ":").getBytes()))
+                            .build();
+                    try (Response activateResp = client.newCall(activate).execute()) {
+                        log.info("Activación enviada para {} ({}): HTTP {}", sceneId, tryAssetType, activateResp.code());
                     }
                 }
 
-                if (downloadUrl != null) {
-                    int numBands = tryAssetType.contains("8b") ? 8 : 4;
-                    Map<String, Object> result = new HashMap<>();
-                    result.put("url", downloadUrl);
-                    result.put("assetType", tryAssetType);
-                    result.put("numBands", numBands);
-                    log.info("✅ Asset listo: {} ({} bandas) para escena {}", tryAssetType, numBands, sceneId);
-                    return result;
+                if ("inactive".equals(status) || "activating".equals(status)) {
+                    pendingAssetTypes.add(tryAssetType);
                 }
             }
 
-            log.warn("Ningún asset analítico disponible para escena {}", sceneId);
+            if (pendingAssetTypes.isEmpty()) {
+                log.warn("Ningún asset analítico utilizable para escena {}", sceneId);
+                return null;
+            }
+
+            if (!activationPollEnabled || activationMaxWaitSeconds <= 0) {
+                log.info(
+                        "Assets de Planet activados pero no se esperará su disponibilidad para escena {}. Pendientes={}. El flujo continuará con otras escenas/fuentes.",
+                        sceneId,
+                        pendingAssetTypes
+                );
+                return null;
+            }
+
+            long deadline = System.currentTimeMillis() + (activationMaxWaitSeconds * 1000L);
+            log.info(
+                    "Esperando activación de Planet para escena {} hasta {}s. Assets pendientes={}",
+                    sceneId,
+                    activationMaxWaitSeconds,
+                    pendingAssetTypes
+            );
+
+            while (System.currentTimeMillis() < deadline) {
+                Thread.sleep(Math.max(250L, activationPollIntervalMillis));
+                try (Response pollResp = client.newCall(getAssets).execute()) {
+                    if (!pollResp.isSuccessful()) {
+                        log.warn("Poll de Planet falló para escena {}: HTTP {}", sceneId, pollResp.code());
+                        continue;
+                    }
+
+                    JsonNode pollAssets = mapper.readTree(pollResp.body().string());
+                    for (String pendingAssetType : pendingAssetTypes) {
+                        JsonNode pollAsset = pollAssets.get(pendingAssetType);
+                        if (pollAsset != null && "active".equals(pollAsset.path("status").asText()) && pollAsset.has("location")) {
+                            log.info("Asset {} activado exitosamente para {}", pendingAssetType, sceneId);
+                            return buildAssetResult(sceneId, pendingAssetType, pollAsset.get("location").asText());
+                        }
+                    }
+                }
+            }
+
+            log.info(
+                    "Timeout esperando activación de Planet para escena {}. Assets pendientes={}. Se continuará sin bloquear la request.",
+                    sceneId,
+                    pendingAssetTypes
+            );
             return null;
         }
+    }
+
+    private Map<String, Object> buildAssetResult(String sceneId, String assetType, String downloadUrl) {
+        int numBands = assetType.contains("8b") ? 8 : 4;
+        Map<String, Object> result = new HashMap<>();
+        result.put("url", downloadUrl);
+        result.put("assetType", assetType);
+        result.put("numBands", numBands);
+        log.info("✅ Asset listo: {} ({} bandas) para escena {}", assetType, numBands, sceneId);
+        return result;
     }
 
     /**

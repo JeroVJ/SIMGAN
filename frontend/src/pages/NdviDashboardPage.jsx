@@ -36,6 +36,11 @@ export default function NdviDashboardPage() {
   } = useNdvi(terrainId)
 
   const [activeTab, setActiveTab] = useState('overview')
+  const today = new Date().toISOString().slice(0, 10)
+  const [analysisStartDate, setAnalysisStartDate] = useState(
+    new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  )
+  const [analysisEndDate, setAnalysisEndDate] = useState(today)
 
   if (loading) return <Spinner page label="Cargando analíticas NDVI..." />
 
@@ -59,10 +64,44 @@ export default function NdviDashboardPage() {
             <h2>🛰️ Analíticas NDVI</h2>
             <p>{dashboard?.terrainName} — {dashboard?.terrainAreaHa?.toFixed(2)} ha · {dashboard?.parcels?.length} parcelas</p>
           </div>
-          <button className="action-btn action-btn--primary" onClick={analyze} disabled={analyzing}>
-            {analyzing ? <><span className="spinner" /> Analizando...</> : '🛰️ Ejecutar Análisis'}
-          </button>
+          <div className="ndvi-analysis-controls">
+            <div className="ndvi-date-field">
+              <label htmlFor="analysisStartDate" className="ndvi-date-label">
+                Fecha inicial
+              </label>
+              <input
+                className="ndvi-date-input"
+                id="analysisStartDate"
+                type="date"
+                value={analysisStartDate}
+                max={analysisEndDate || today}
+                onChange={(e) => setAnalysisStartDate(e.target.value)}
+                disabled={analyzing}
+              />
+              <p className="ndvi-date-hint">Inicio del rango a consultar.</p>
+            </div>
+            <div className="ndvi-date-field">
+              <label htmlFor="analysisEndDate" className="ndvi-date-label">
+                Fecha final
+              </label>
+              <input
+                className="ndvi-date-input"
+                id="analysisEndDate"
+                type="date"
+                value={analysisEndDate}
+                min={analysisStartDate}
+                max={today}
+                onChange={(e) => setAnalysisEndDate(e.target.value)}
+                disabled={analyzing}
+              />
+              <p className="ndvi-date-hint">Fin del rango a consultar.</p>
+            </div>
+            <button className="action-btn action-btn--primary" onClick={() => analyze(analysisStartDate, analysisEndDate)} disabled={analyzing || !analysisStartDate || !analysisEndDate || analysisStartDate > analysisEndDate}>
+              {analyzing ? <><span className="spinner" /> Analizando...</> : '🛰️ Ejecutar Análisis'}
+            </button>
+          </div>
         </div>
+        <p className="ndvi-analysis-steps">1) Elige la fecha inicial · 2) Elige la fecha final · 3) Haz clic en <strong>🛰️ Ejecutar Análisis</strong></p>
       </div>
 
       {!hasData ? (
@@ -70,11 +109,6 @@ export default function NdviDashboardPage() {
           icon="🛰️"
           title="Sin datos NDVI"
           description="Ejecuta un análisis para generar datos satelitales de este terreno."
-          action={
-            <button className="action-btn action-btn--primary" onClick={analyze} disabled={analyzing}>
-              {analyzing ? 'Analizando...' : '🛰️ Ejecutar Primer Análisis'}
-            </button>
-          }
         />
       ) : (
         <>

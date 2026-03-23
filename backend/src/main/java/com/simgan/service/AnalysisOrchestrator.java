@@ -1,5 +1,7 @@
 package com.simgan.service;
 
+import com.simgan.dto.PlanetImageProcessingResponse;
+import com.simgan.dto.SentinelImageProcessingResponse;
 import com.simgan.entity.*;
 import com.simgan.repository.*;
 import lombok.RequiredArgsConstructor;
@@ -33,8 +35,9 @@ public class AnalysisOrchestrator {
 
     private final PlanetApiService planetApi;
     private final SentinelApiService sentinelApi;
+    private final ImageProcessingClientService imageProcessingClientService;
     private final NdviProcessingService processingService;
-    private final NdviSeedService seedService;
+    //private final NdviSeedService seedService;
     private final TerrainRepository terrainRepository;
     private final ParcelRepository parcelRepository;
     private final NdviRecordRepository ndviRecordRepository;
@@ -45,7 +48,9 @@ public class AnalysisOrchestrator {
     /**
      * Ejecuta el análisis completo para un terreno.
      * Intenta Planet → Sentinel → Seed data como fallback.
-     */
+     */ 
+
+    /* 
     public Map<String, Object> runAnalysis(Long terrainId) {
         Map<String, Object> result = new LinkedHashMap<>();
 
@@ -239,7 +244,341 @@ public class AnalysisOrchestrator {
 
         return result;
     }
+    
+     */   
 
+
+    /* 
+    public Map<String, Object> runAnalysis(Long terrainId) {
+    LocalDate endDate = LocalDate.now();
+    LocalDate startDate = endDate.minusDays(180);
+    return runAnalysis(terrainId, startDate, endDate);
+}
+
+*/
+
+    public Map<String, Object> runAnalysis(Long terrainId, LocalDate startDate, LocalDate endDate) {
+    Map<String, Object> result = new LinkedHashMap<>();
+
+    Terrain terrain = terrainRepository.findById(terrainId)
+            .orElseThrow(() -> new RuntimeException("Terreno no encontrado: " + terrainId));
+
+    List<Parcel> parcels = parcelRepository.findByTerrainId(terrainId);
+    if (parcels.isEmpty()) {
+        result.put("error", "No hay parcelas definidas en este terreno.");
+        return result;
+    }
+
+    result.put("terrainId", terrainId);
+    result.put("terrainName", terrain.getName());
+    result.put("parcelCount", parcels.size());
+
+    String geoJson = terrain.getGeoJson();
+
+    result.put("startDate", startDate);
+    result.put("endDate", endDate);
+
+    int totalRecordsProcessed = 0;
+    int totalScenesProcessed = 0;
+    int planetRecordsProcessed = 0;
+    int planetScenesProcessed = 0;
+    int sentinelRecordsProcessed = 0;
+    int sentinelScenesProcessed = 0;
+    long totalProcessingDurationMs = 0L;
+    Set<String> sourcesUsed = new LinkedHashSet<>();
+    Set<LocalDate> processedDates = new LinkedHashSet<>();
+    String planetLastError = null;
+
+    // =========================
+    // 1. PLANET
+    // =========================
+    try {
+        if (planetApi.isConfigured()) {
+            List<Map<String, Object>> scenes =
+                    planetApi.searchScenes(geoJson, startDate, endDate, 0.2);
+
+            if (!scenes.isEmpty()) {
+
+                scenes.sort(Comparator
+                    .comparing((Map<String, Object> scene) -> extractSceneDate(scene, "acquired"))
+                    .thenComparingDouble(this::extractCloudCover));
+
+                for (Map<String, Object> scene : scenes) {
+                    String sceneId = (String) scene.get("id");
+
+                    try {
+                        String acquired = (String) scene.get("acquired");
+
+                        Map<String, Object> asset = planetApi.activateAndGetDownloadUrl(sceneId);
+                        if (asset == null) {
+                            continue;
+                        }
+
+                        File geotiff = planetApi.downloadGeoTiff((String) asset.get("url"), sceneId);
+                        if (geotiff == null || !geotiff.exists()) {
+                            continue;
+                        }
+
+                        log.info(
+                                "Descarga Planet finalizada para escena {}: {} imagen descargada y enviada a procesamientoImagen. Archivo={}",
+                                sceneId,
+                                1,
+                                geotiff.getName()
+                        );
+
+                        LocalDate captureDate = LocalDate.parse(acquired.substring(0, 10));
+
+                        Map<Long, Parcel> pendingParcels = new LinkedHashMap<>();
+                        for (Parcel parcel : parcels) {
+                            pendingParcels.put(parcel.getId(), parcel);
+                        }
+
+                        Double cloudCover = null;
+                        Object cloudCoverValue = scene.get("cloud_cover");
+                        if (cloudCoverValue instanceof Number number) {
+                            cloudCover = number.doubleValue();
+                        }
+
+                        PlanetImageProcessingResponse processingResponse = imageProcessingClientService.processPlanetScene(
+                                terrain,
+                                new ArrayList<>(pendingParcels.values()),
+                                geotiff,
+                                captureDate,
+                                sceneId,
+                                (String) asset.get("assetType"),
+                                (Integer) asset.get("numBands"),
+                                cloudCover
+                        );
+
+                        List<NdviRecord> records = processingService.persistProcessedResults(
+                                terrain,
+                                captureDate,
+                                sceneId,
+                                cloudCover,
+                                "PLANET",
+                                processingResponse.getParcelResults(),
+                                pendingParcels);
+
+                        geotiff.delete();
+
+                        if (records != null && !records.isEmpty()) {
+                            int recordCount = records.size();
+                            totalRecordsProcessed += recordCount;
+                            totalScenesProcessed++;
+                            planetRecordsProcessed += recordCount;
+                            planetScenesProcessed++;
+                            totalProcessingDurationMs += processingResponse.getProcessingDurationMs();
+                            sourcesUsed.add("PLANET");
+                            processedDates.add(captureDate);
+
+                            result.put("assetType", processingResponse.getAssetType());
+                            result.put("numBands", processingResponse.getNumBands());
+                            result.put("rasterWidth", processingResponse.getRasterWidth());
+                            result.put("rasterHeight", processingResponse.getRasterHeight());
+
+                            log.info(
+                                    "Escena Planet {} procesada correctamente: {} registros NDVI generados para fecha {}",
+                                    sceneId,
+                                    recordCount,
+                                    captureDate
+                            );
+                        } else {
+                            log.warn("Planet escena {} no generó registros NDVI persistibles", sceneId);
+                        }
+                    } catch (Exception sceneError) {
+                        planetLastError = sceneError.getMessage();
+                        log.warn("Error procesando escena Planet {}: {}", sceneId, sceneError.getMessage());
+                    }
+                }
+            }
+        }
+    } catch (Exception e) {
+        log.warn("Error con Planet: {}", e.getMessage());
+        planetLastError = e.getMessage();
+    }
+
+    // =========================
+    // 2. SENTINEL
+    // =========================
+    String sentinelLastError = null;
+    try {
+        List<Map<String, Object>> scenes =
+                sentinelApi.searchScenes(geoJson, startDate, endDate, 0.6);
+
+        if (!scenes.isEmpty()) {
+
+            scenes.sort(Comparator
+                    .comparing((Map<String, Object> scene) -> extractSceneDate(scene, "datetime"))
+                    .thenComparingDouble(this::extractCloudCover));
+
+            for (Map<String, Object> scene : scenes) {
+                String sceneId = (String) scene.get("id");
+
+                try {
+                    Map<String, Object> bandData = sentinelApi.downloadAndExtractBands(scene);
+                    if (bandData == null) {
+                        continue;
+                    }
+
+                    File red = (File) bandData.get("redFile");
+                    File nir = (File) bandData.get("nirFile");
+
+                    int downloadedImages = 0;
+                    if (red != null && red.exists()) {
+                        downloadedImages++;
+                    }
+                    if (nir != null && nir.exists()) {
+                        downloadedImages++;
+                    }
+
+                    log.info(
+                            "Descarga Sentinel finalizada para escena {}: {} imagenes descargadas y enviadas a procesamientoImagen. Red={} NIR={}",
+                            sceneId,
+                            downloadedImages,
+                            red != null ? red.getName() : "N/A",
+                            nir != null ? nir.getName() : "N/A"
+                    );
+
+                    LocalDate date = LocalDate.parse(
+                            ((String) scene.get("datetime")).substring(0, 10));
+
+                    Map<Long, Parcel> pendingParcels = new LinkedHashMap<>();
+                    for (Parcel parcel : parcels) {
+                        pendingParcels.put(parcel.getId(), parcel);
+                    }
+
+                    Double cloudCover = null;
+                    Object cloudCoverValue = scene.get("cloud_cover");
+                    if (cloudCoverValue instanceof Number number) {
+                        cloudCover = number.doubleValue();
+                    }
+
+                    SentinelImageProcessingResponse processingResponse = imageProcessingClientService.processSentinelScene(
+                            terrain,
+                            new ArrayList<>(pendingParcels.values()),
+                            red,
+                            nir,
+                            (int) bandData.getOrDefault("epsg", 32618),
+                            (double) bandData.getOrDefault("ulx", 0.0),
+                            (double) bandData.getOrDefault("uly", 0.0),
+                            date,
+                            sceneId,
+                            cloudCover
+                    );
+
+                    List<NdviRecord> records = processingService.persistSentinelResults(
+                            terrain,
+                            date,
+                            sceneId,
+                            cloudCover,
+                            processingResponse.getParcelResults(),
+                            pendingParcels
+                    );
+
+                    if (records != null && !records.isEmpty()) {
+                        int recordCount = records.size();
+                        totalRecordsProcessed += recordCount;
+                        totalScenesProcessed++;
+                        sentinelRecordsProcessed += recordCount;
+                        sentinelScenesProcessed++;
+                        totalProcessingDurationMs += processingResponse.getProcessingDurationMs();
+                        sourcesUsed.add("SENTINEL");
+                        processedDates.add(date);
+
+                        result.put("rasterWidth", processingResponse.getRasterWidth());
+                        result.put("rasterHeight", processingResponse.getRasterHeight());
+                        result.put("pixelSize", processingResponse.getPixelSize());
+
+                        log.info(
+                                "Escena Sentinel {} procesada correctamente: {} registros NDVI generados para fecha {}",
+                                sceneId,
+                                recordCount,
+                                date
+                        );
+                    } else {
+                        sentinelLastError = processingResponse.getWarnings() == null || processingResponse.getWarnings().isEmpty()
+                                ? "procesamientoImagen no devolvió parcelas válidas para la escena Sentinel."
+                                : String.join(" | ", processingResponse.getWarnings());
+                        log.warn("Sentinel escena {} no generó registros NDVI persistibles", sceneId);
+                    }
+                } catch (Exception sceneError) {
+                    sentinelLastError = sceneError.getMessage();
+                    log.warn("Error procesando escena Sentinel {}: {}", sceneId, sceneError.getMessage());
+                }
+            }
+        }
+    } catch (Exception e) {
+        log.warn("Error con Sentinel: {}", e.getMessage());
+        sentinelLastError = e.getMessage();
+    }
+
+    if (totalRecordsProcessed > 0) {
+        if (!sourcesUsed.isEmpty()) {
+            result.put("source", String.join("+", sourcesUsed));
+        }
+        result.put("recordsProcessed", totalRecordsProcessed);
+        result.put("scenesProcessed", totalScenesProcessed);
+        result.put("datesProcessed", processedDates.size());
+        result.put("processingDurationMs", totalProcessingDurationMs);
+
+        if (planetScenesProcessed > 0) {
+            result.put("planetScenesProcessed", planetScenesProcessed);
+            result.put("planetRecordsProcessed", planetRecordsProcessed);
+        }
+        if (sentinelScenesProcessed > 0) {
+            result.put("sentinelScenesProcessed", sentinelScenesProcessed);
+            result.put("sentinelRecordsProcessed", sentinelRecordsProcessed);
+        }
+        result.put(
+                "message",
+                String.format(
+                        "Análisis completado. Se generaron %d registros NDVI a partir de %d escenas en %d fechas dentro del rango solicitado.",
+                        totalRecordsProcessed,
+                        totalScenesProcessed,
+                        processedDates.size()
+                )
+        );
+        return result;
+    }
+
+    // =========================
+    // 3. SIN DATOS
+    // =========================
+    result.put("source", "NONE");
+    if (sentinelLastError != null && !sentinelLastError.isBlank()) {
+        result.put("sentinelError", sentinelLastError);
+        result.put("message", "Se encontraron imágenes Sentinel en el rango, pero el procesamiento falló al decodificar bandas JP2 grandes.");
+    } else if (planetLastError != null && !planetLastError.isBlank()) {
+        result.put("planetError", planetLastError);
+        result.put("message", "Se encontraron imágenes Planet en el rango, pero no fue posible procesarlas correctamente.");
+    } else {
+        result.put("message", "No hay datos disponibles ni en Planet ni en Sentinel para este rango de fechas.");
+    }
+
+    return result;
+}
+
+    private LocalDate extractSceneDate(Map<String, Object> scene, String key) {
+        Object rawValue = scene.get(key);
+        if (rawValue instanceof String value && value.length() >= 10) {
+            try {
+                return LocalDate.parse(value.substring(0, 10));
+            } catch (Exception ignored) {
+                // Keep invalid dates at the end of the processing order.
+            }
+        }
+        return LocalDate.MAX;
+    }
+
+    private double extractCloudCover(Map<String, Object> scene) {
+        Object rawValue = scene.get("cloud_cover");
+        if (rawValue instanceof Number number) {
+            return number.doubleValue();
+        }
+        return Double.MAX_VALUE;
+    }
+
+    
     /**
      * Generate alerts for parcels where the estimated grazing days are low
      * or where NDVI/biomass indicates the parcel needs rest.

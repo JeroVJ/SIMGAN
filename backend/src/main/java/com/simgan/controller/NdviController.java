@@ -21,7 +21,6 @@ import java.util.stream.Collectors;
 public class NdviController {
 
     private final NdviRecommendationService recommendationService;
-    private final NdviProcessingService processingService;
     private final NdviSeedService seedService;
     private final PlanetApiService planetApiService;
     private final SentinelApiService sentinelApiService;
@@ -130,9 +129,33 @@ public class NdviController {
      * Ejecuta pipeline completo: Planet → Sentinel → Seed data
      */
     @PostMapping("/analyze/{terrainId}")
-    public ResponseEntity<Map<String, Object>> analyzeTerrain(@PathVariable Long terrainId) {
-        log.info("Iniciando análisis NDVI para terreno {}", terrainId);
-        Map<String, Object> result = analysisOrchestrator.runAnalysis(terrainId);
+    public ResponseEntity<Map<String, Object>> analyzeTerrain(
+            @PathVariable Long terrainId,
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate) {
+
+        LocalDate today = LocalDate.now();
+        LocalDate end = (endDate != null && !endDate.isBlank())
+            ? LocalDate.parse(endDate)
+            : today;
+        LocalDate start = (startDate != null && !startDate.isBlank())
+                ? LocalDate.parse(startDate)
+                : end.minusDays(180);
+
+        if (start.isAfter(end)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "La fecha inicial no puede ser mayor que la fecha final."
+            ));
+        }
+
+        if (end.isAfter(today)) {
+            return ResponseEntity.badRequest().body(Map.of(
+                "error", "La fecha final no puede ser mayor que hoy."
+            ));
+        }
+
+        log.info("Iniciando análisis NDVI para terreno {} en rango {} -> {}", terrainId, start, end);
+        Map<String, Object> result = analysisOrchestrator.runAnalysis(terrainId, start, end);
         return ResponseEntity.ok(result);
     }
 

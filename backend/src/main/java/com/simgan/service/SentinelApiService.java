@@ -12,7 +12,9 @@ import java.nio.file.*;
 import java.time.LocalDate;
 import java.util.*;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.zip.ZipFile;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Integración completa con Copernicus Data Space (Sentinel-2 L2A).
@@ -39,6 +41,7 @@ public class SentinelApiService {
     private static final String ODATA_CATALOG = "https://catalogue.dataspace.copernicus.eu/odata/v1";
     private static final String ODATA_DOWNLOAD = "https://zipper.dataspace.copernicus.eu/odata/v1";
     private static final String DOWNLOAD_DIR = System.getProperty("java.io.tmpdir") + "/simgan-sentinel";
+    private static final int MIN_ZIP_SIZE_BYTES = 10000;
 
     private final OkHttpClient client = new OkHttpClient.Builder()
             .connectTimeout(java.time.Duration.ofSeconds(30))
@@ -225,7 +228,7 @@ public class SentinelApiService {
     // ===== DOWNLOAD + EXTRACT =====
 
     /**
-     * Descarga un producto Sentinel-2 y extrae B04 + B08.
+    * Descarga un producto Sentinel-2 y extrae B04 + B08.
      * Primero busca el UUID del producto vía OData catálogo.
      */
     @SuppressWarnings("unchecked")
@@ -246,8 +249,16 @@ public class SentinelApiService {
         File redFile = findBand(workDir, "B04");
         File nirFile = findBand(workDir, "B08");
         if (redFile != null && nirFile != null) {
-            log.info("Bandas en caché: {}, {}", redFile.getName(), nirFile.getName());
-            return buildResult(redFile, nirFile, workDir);
+            if (isUsableBandFile(redFile) && isUsableBandFile(nirFile)) {
+                log.info("Bandas en caché: {}, {}", redFile.getName(), nirFile.getName());
+                return buildResult(redFile, nirFile, workDir);
+            }
+
+            log.warn("Bandas en caché inválidas/corruptas. Limpiando caché local para re-descargar {}", sceneId);
+            deleteQuietly(redFile);
+            deleteQuietly(nirFile);
+            deleteQuietly(new File(workDir, "MTD_TL.xml"));
+            deleteQuietly(new File(workDir, "product.zip"));
         }
 
         // 1. Get download URL (STAC href OR OData search by name)
@@ -268,13 +279,54 @@ public class SentinelApiService {
 
         // 2. Download ZIP
         File zipFile = new File(workDir, "product.zip");
-        if (!zipFile.exists() || zipFile.length() < 10000) {
-            log.info("Descargando producto: {}", downloadUrl.substring(0, Math.min(100, downloadUrl.length())));
-            downloadWithAuth(downloadUrl, zipFile, token);
+        if (zipFile.exists() && !isValidZip(zipFile)) {
+            log.warn("ZIP en caché inválido/corrupto ({} MB). Se elimina para re-descargar.", zipFile.length() / (1024 * 1024));
+            Files.deleteIfExists(zipFile.toPath());
         }
 
-        if (!zipFile.exists() || zipFile.length() < 10000) {
-            log.error("Descarga fallida para {}", sceneId);
+        if (!zipFile.exists() || zipFile.length() < MIN_ZIP_SIZE_BYTES) {
+            boolean downloaded = false;
+            IOException lastError = null;
+
+            for (int attempt = 1; attempt <= 3; attempt++) {
+                try {
+                    log.info("Descargando producto (intento {}/3): {}", attempt,
+                            downloadUrl.substring(0, Math.min(100, downloadUrl.length())));
+                    downloadWithAuth(downloadUrl, zipFile, token);
+
+                    if (isValidZip(zipFile)) {
+                        downloaded = true;
+                        break;
+                    }
+
+                    log.warn("ZIP descargado pero inválido en intento {}/3. Reintentando...", attempt);
+                    Files.deleteIfExists(zipFile.toPath());
+                } catch (IOException ex) {
+                    lastError = ex;
+                    log.warn("Fallo de descarga intento {}/3: {}", attempt, ex.getMessage());
+                    Files.deleteIfExists(zipFile.toPath());
+                }
+
+                try {
+                    Thread.sleep(attempt * 2000L);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+
+            if (!downloaded) {
+                if (lastError != null) {
+                    log.error("Descarga fallida para {}: {}", sceneId, lastError.getMessage());
+                } else {
+                    log.error("Descarga fallida para {}", sceneId);
+                }
+                return null;
+            }
+        }
+
+        if (!zipFile.exists() || zipFile.length() < MIN_ZIP_SIZE_BYTES || !isValidZip(zipFile)) {
+            log.error("Descarga fallida para {} (ZIP inválido)", sceneId);
             return null;
         }
         log.info("Producto descargado: {} MB", zipFile.length() / (1024 * 1024));
@@ -336,8 +388,16 @@ public class SentinelApiService {
                 throw new IOException("Download failed: HTTP " + response.code());
             }
 
-            try (InputStream is = response.body().byteStream();
-                 FileOutputStream fos = new FileOutputStream(output)) {
+            ResponseBody body = response.body();
+            if (body == null) {
+                throw new IOException("Download failed: empty response body");
+            }
+
+            long expectedSize = body.contentLength();
+            File tempFile = new File(output.getParentFile(), output.getName() + ".part");
+
+            try (InputStream is = body.byteStream();
+                 FileOutputStream fos = new FileOutputStream(tempFile)) {
                 byte[] buffer = new byte[65536];
                 int bytesRead;
                 long total = 0;
@@ -348,31 +408,68 @@ public class SentinelApiService {
                         log.info("  descargando... {} MB", total / (1024 * 1024));
                     }
                 }
+
+                fos.getFD().sync();
+
+                if (expectedSize > 0 && total != expectedSize) {
+                    throw new IOException("Download incomplete: expected " + expectedSize + " bytes, got " + total);
+                }
+
                 log.info("Descarga completa: {} MB", total / (1024 * 1024));
             }
+
+            Files.move(tempFile.toPath(), output.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        }
+    }
+
+    private boolean isValidZip(File zipFile) {
+        if (zipFile == null || !zipFile.exists() || zipFile.length() < MIN_ZIP_SIZE_BYTES) {
+            return false;
+        }
+        try (ZipFile zf = new ZipFile(zipFile)) {
+            Enumeration<? extends ZipEntry> entries = zf.entries();
+            return entries.hasMoreElements();
+        } catch (IOException e) {
+            log.warn("ZIP inválido {}: {}", zipFile.getAbsolutePath(), e.getMessage());
+            return false;
         }
     }
 
     private Map<String, Object> extractBandsFromZip(File zipFile, File outputDir) {
         File redFile = null, nirFile = null, metadataFile = null;
 
-        try (ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile))) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                String name = entry.getName();
-                boolean isB04 = name.contains("_B04_10m.jp2") || name.contains("_B04_10m.tif");
-                boolean isB08 = name.contains("_B08_10m.jp2") || name.contains("_B08_10m.tif");
-                boolean isMtd = name.endsWith("MTD_TL.xml") && name.contains("GRANULE");
+        try (ZipFile zf = new ZipFile(zipFile)) {
+            Enumeration<? extends ZipEntry> entries = zf.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                if (entry.isDirectory()) continue;
 
-                if ((isB04 || isB08 || isMtd) && !entry.isDirectory()) {
-                    String outName = isB04 ? "B04_10m.jp2" : isB08 ? "B08_10m.jp2" : "MTD_TL.xml";
+                String name = entry.getName();
+                String lowerName = name.toLowerCase(Locale.ROOT);
+                boolean isB04 = lowerName.contains("_b04_10m.jp2") || lowerName.contains("_b04_10m.tif");
+                boolean isB08 = lowerName.contains("_b08_10m.jp2") || lowerName.contains("_b08_10m.tif");
+                boolean isMtd = lowerName.endsWith("mtd_tl.xml") && lowerName.contains("granule");
+
+                if (isB04 || isB08 || isMtd) {
+                    String outName;
+                    if (isB04) {
+                        outName = lowerName.endsWith(".tif") ? "B04_10m.tif" : "B04_10m.jp2";
+                    } else if (isB08) {
+                        outName = lowerName.endsWith(".tif") ? "B08_10m.tif" : "B08_10m.jp2";
+                    } else {
+                        outName = "MTD_TL.xml";
+                    }
+
                     File outFile = new File(outputDir, outName);
                     log.info("Extrayendo: {} → {}", name, outName);
 
-                    try (FileOutputStream fos = new FileOutputStream(outFile)) {
+                    try (InputStream is = zf.getInputStream(entry);
+                         FileOutputStream fos = new FileOutputStream(outFile)) {
                         byte[] buffer = new byte[65536];
                         int len;
-                        while ((len = zis.read(buffer)) > 0) fos.write(buffer, 0, len);
+                        while ((len = is.read(buffer)) != -1) {
+                            fos.write(buffer, 0, len);
+                        }
                     }
 
                     if (isB04) redFile = outFile;
@@ -380,7 +477,6 @@ public class SentinelApiService {
                     if (isMtd) metadataFile = outFile;
                     if (redFile != null && nirFile != null && metadataFile != null) break;
                 }
-                zis.closeEntry();
             }
         } catch (IOException e) {
             log.error("Error extrayendo ZIP: {}", e.getMessage());
@@ -388,6 +484,13 @@ public class SentinelApiService {
 
         if (redFile == null || nirFile == null) {
             log.error("❌ B04/B08 no encontrados en el ZIP");
+            return null;
+        }
+
+        if (!isUsableBandFile(redFile) || !isUsableBandFile(nirFile)) {
+            log.error("❌ B04/B08 extraídos pero inválidos (corrupción o formato no legible). Forzando reintento en próxima ejecución.");
+            deleteQuietly(redFile);
+            deleteQuietly(nirFile);
             return null;
         }
 
@@ -403,7 +506,6 @@ public class SentinelApiService {
             result.put("ulx", 600000.0);
             result.put("uly", 500000.0);
         }
-
         log.info("✅ Bandas extraídas: B04={} MB, B08={} MB, EPSG:{}",
                 redFile.length()/(1024*1024), nirFile.length()/(1024*1024), result.get("epsg"));
         return result;
@@ -413,19 +515,28 @@ public class SentinelApiService {
         try {
             String xml = Files.readString(mtdFile.toPath());
             int epsg = 32618;
-            int epsgIdx = xml.indexOf("EPSG:");
-            if (epsgIdx >= 0) {
-                String code = xml.substring(epsgIdx + 5).split("[<\\s\"]")[0];
-                epsg = Integer.parseInt(code.trim());
+            double ulx = 600000.0;
+            double uly = 500000.0;
+
+            Pattern epsgPattern = Pattern.compile("EPSG:(\\d+)");
+            Matcher epsgMatcher = epsgPattern.matcher(xml);
+            if (epsgMatcher.find()) {
+                epsg = Integer.parseInt(epsgMatcher.group(1));
             }
 
-            double ulx = 0, uly = 0;
-            int geoIdx = xml.indexOf("resolution=\"10\"");
-            if (geoIdx > 0) {
-                String block = xml.substring(geoIdx, Math.min(geoIdx + 300, xml.length()));
-                ulx = parseXmlVal(block, "ULX");
-                uly = parseXmlVal(block, "ULY");
+            Pattern ulxPattern = Pattern.compile("<Geoposition\\s+resolution=\"10\"[\\s\\S]*?<ULX>([-0-9.]+)</ULX>");
+            Pattern ulyPattern = Pattern.compile("<Geoposition\\s+resolution=\"10\"[\\s\\S]*?<ULY>([-0-9.]+)</ULY>");
+
+            Matcher ulxMatcher = ulxPattern.matcher(xml);
+            if (ulxMatcher.find()) {
+                ulx = Double.parseDouble(ulxMatcher.group(1));
             }
+
+            Matcher ulyMatcher = ulyPattern.matcher(xml);
+            if (ulyMatcher.find()) {
+                uly = Double.parseDouble(ulyMatcher.group(1));
+            }
+
             result.put("epsg", epsg);
             result.put("ulx", ulx);
             result.put("uly", uly);
@@ -463,5 +574,49 @@ public class SentinelApiService {
         if (!dir.exists()) return null;
         File[] files = dir.listFiles((d, n) -> n.contains(band) && (n.endsWith(".jp2") || n.endsWith(".tif")));
         return (files != null && files.length > 0 && files[0].length() > 1000) ? files[0] : null;
+    }
+
+    private boolean isUsableBandFile(File file) {
+        if (file == null || !file.exists() || file.length() < 1000) {
+            return false;
+        }
+
+        String name = file.getName().toLowerCase(Locale.ROOT);
+
+        if (name.endsWith(".jp2")) {
+            try (InputStream is = new FileInputStream(file)) {
+                byte[] header = new byte[12];
+                int read = is.read(header);
+                if (read < 12) return false;
+                boolean jp2Signature = header[4] == 0x6A && header[5] == 0x50 && header[6] == 0x20 && header[7] == 0x20;
+                return jp2Signature;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        if (name.endsWith(".tif") || name.endsWith(".tiff")) {
+            try (InputStream is = new FileInputStream(file)) {
+                byte[] header = new byte[4];
+                int read = is.read(header);
+                if (read < 4) return false;
+                boolean littleEndian = header[0] == 0x49 && header[1] == 0x49 && header[2] == 0x2A && header[3] == 0x00;
+                boolean bigEndian = header[0] == 0x4D && header[1] == 0x4D && header[2] == 0x00 && header[3] == 0x2A;
+                return littleEndian || bigEndian;
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void deleteQuietly(File file) {
+        try {
+            if (file != null && file.exists()) {
+                Files.deleteIfExists(file.toPath());
+            }
+        } catch (Exception ignored) {
+        }
     }
 }
