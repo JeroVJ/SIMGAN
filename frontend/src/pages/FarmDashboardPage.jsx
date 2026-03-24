@@ -28,7 +28,6 @@ export default function FarmDashboardPage() {
         <div>
           <h1 className="dashboard-title">{farm.name}</h1>
           <div className="dashboard-meta">
-            {farm.owner && <span>Propietario: {farm.owner}</span>}
             {farm.department && <span>{farm.municipality && `${farm.municipality}, `}{farm.department}</span>}
           </div>
         </div>

@@ -22,7 +22,6 @@ export default function CreateFarmPage() {
 
   const [form, setForm] = useState({
     name: '',
-    owner: '',
     department: '',
     municipality: '',
     centerLat: '',
@@ -131,16 +130,6 @@ export default function CreateFarmPage() {
                 placeholder="Ej: Hacienda Los Robles"
               />
               {errors.name && <span style={{ color: 'red', fontSize: '12px' }}>{errors.name}</span>}
-            </div>
-
-            <div className="form-group">
-              <label>Propietario *</label>
-              <input
-                name="owner"
-                value={form.owner}
-                onChange={handleChange}
-                placeholder="Ej: Carlos Rodríguez"
-              />
             </div>
 
             <div className="form-group">

@@ -11,6 +11,7 @@ export default function FarmsPage() {
   const [terrainsByFarm, setTerrainsByFarm] = useState({})
   const [loading, setLoading] = useState(true)
   const [confirm, setConfirm] = useState(null)
+  const [expandedFarmId, setExpandedFarmId] = useState(null)
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -56,6 +57,10 @@ export default function FarmsPage() {
     })
   }
 
+  function toggleFarmDetails(id) {
+    setExpandedFarmId((currentId) => (currentId === id ? null : id))
+  }
+
   if (loading) return <Spinner page label="Cargando fincas..." />
 
   return (
@@ -83,12 +88,13 @@ export default function FarmsPage() {
         <div className="farms-grid">
           {farms.map(farm => {
             const terrains = terrainsByFarm[farm.id] || []
+            const isExpanded = expandedFarmId === farm.id
 
             return (
               <div
                 key={farm.id}
                 className="farm-card"
-                onClick={() => navigate(`/farms/${farm.id}`)}
+                onClick={() => toggleFarmDetails(farm.id)}
               >
                 <div className="farm-card__header">
                   <div className="farm-card__initial">
@@ -115,15 +121,37 @@ export default function FarmsPage() {
                 </div>
 
                 <div className="farm-card__meta">
-                  {farm.owner && <span>{farm.owner}</span>}
-
-                  {farm.department && (
-                    <span>
-                      {farm.municipality ? `${farm.municipality}, ` : ''}
-                      {farm.department}
-                    </span>
-                  )}
+                  <span>{isExpanded ? 'Toca para ocultar detalles' : 'Toca para ver detalles'}</span>
                 </div>
+
+                {isExpanded && (
+                  <div className="farm-card__terrains" onClick={e => e.stopPropagation()}>
+                    <div className="farm-terrain-row">
+                      <span>Municipio</span>
+                      <span className="ftr-area">{farm.municipality || 'No registrado'}</span>
+                    </div>
+                    <div className="farm-terrain-row">
+                      <span>Departamento</span>
+                      <span className="ftr-area">{farm.department || 'No registrado'}</span>
+                    </div>
+                    <div className="farm-terrain-row">
+                      <span>Finca homogénea</span>
+                      <span className="ftr-area">{farm.isHomogeneous ? 'Sí' : 'No'}</span>
+                    </div>
+                    {farm.isHomogeneous && (
+                      <>
+                        <div className="farm-terrain-row">
+                          <span>Tipo de suelo</span>
+                          <span className="ftr-area">{farm.soilType || 'No registrado'}</span>
+                        </div>
+                        <div className="farm-terrain-row">
+                          <span>Tipo de pasto</span>
+                          <span className="ftr-area">{farm.pastureType || 'No registrado'}</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
 
                 <div className="farm-card__stat">
                   <span className="fcs-val">{terrains.length}</span>
