@@ -8,7 +8,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.io.File;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -314,18 +313,6 @@ public class AnalysisOrchestrator {
                             continue;
                         }
 
-                        File geotiff = planetApi.downloadGeoTiff((String) asset.get("url"), sceneId);
-                        if (geotiff == null || !geotiff.exists()) {
-                            continue;
-                        }
-
-                        log.info(
-                                "Descarga Planet finalizada para escena {}: {} imagen descargada y enviada a procesamientoImagen. Archivo={}",
-                                sceneId,
-                                1,
-                                geotiff.getName()
-                        );
-
                         LocalDate captureDate = LocalDate.parse(acquired.substring(0, 10));
 
                         Map<Long, Parcel> pendingParcels = new LinkedHashMap<>();
@@ -342,9 +329,9 @@ public class AnalysisOrchestrator {
                         PlanetImageProcessingResponse processingResponse = imageProcessingClientService.processPlanetScene(
                                 terrain,
                                 new ArrayList<>(pendingParcels.values()),
-                                geotiff,
                                 captureDate,
                                 sceneId,
+                            (String) asset.get("url"),
                                 (String) asset.get("assetType"),
                                 (Integer) asset.get("numBands"),
                                 cloudCover
@@ -358,8 +345,6 @@ public class AnalysisOrchestrator {
                                 "PLANET",
                                 processingResponse.getParcelResults(),
                                 pendingParcels);
-
-                        geotiff.delete();
 
                         if (records != null && !records.isEmpty()) {
                             int recordCount = records.size();
@@ -395,6 +380,8 @@ public class AnalysisOrchestrator {
     } catch (Exception e) {
         log.warn("Error con Planet: {}", e.getMessage());
         planetLastError = e.getMessage();
+    } finally {
+        try { planetApi.cleanDownloadDir(); } catch (Exception ignored) {}
     }
 
     // =========================
@@ -415,30 +402,6 @@ public class AnalysisOrchestrator {
                 String sceneId = (String) scene.get("id");
 
                 try {
-                    Map<String, Object> bandData = sentinelApi.downloadAndExtractBands(scene);
-                    if (bandData == null) {
-                        continue;
-                    }
-
-                    File red = (File) bandData.get("redFile");
-                    File nir = (File) bandData.get("nirFile");
-
-                    int downloadedImages = 0;
-                    if (red != null && red.exists()) {
-                        downloadedImages++;
-                    }
-                    if (nir != null && nir.exists()) {
-                        downloadedImages++;
-                    }
-
-                    log.info(
-                            "Descarga Sentinel finalizada para escena {}: {} imagenes descargadas y enviadas a procesamientoImagen. Red={} NIR={}",
-                            sceneId,
-                            downloadedImages,
-                            red != null ? red.getName() : "N/A",
-                            nir != null ? nir.getName() : "N/A"
-                    );
-
                     LocalDate date = LocalDate.parse(
                             ((String) scene.get("datetime")).substring(0, 10));
 
@@ -456,11 +419,7 @@ public class AnalysisOrchestrator {
                     SentinelImageProcessingResponse processingResponse = imageProcessingClientService.processSentinelScene(
                             terrain,
                             new ArrayList<>(pendingParcels.values()),
-                            red,
-                            nir,
-                            (int) bandData.getOrDefault("epsg", 32618),
-                            (double) bandData.getOrDefault("ulx", 0.0),
-                            (double) bandData.getOrDefault("uly", 0.0),
+                            scene,
                             date,
                             sceneId,
                             cloudCover
@@ -510,6 +469,8 @@ public class AnalysisOrchestrator {
     } catch (Exception e) {
         log.warn("Error con Sentinel: {}", e.getMessage());
         sentinelLastError = e.getMessage();
+    } finally {
+        try { sentinelApi.cleanDownloadDir(); } catch (Exception ignored) {}
     }
 
     if (totalRecordsProcessed > 0) {

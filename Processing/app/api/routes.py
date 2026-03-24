@@ -2,9 +2,15 @@ import logging
 
 from fastapi import APIRouter, File, Form, UploadFile
 
-from app.models import PlanetProcessResponse, SentinelProcessResponse
-from app.services.planet import process_planet_request
-from app.services.sentinel import process_sentinel_request
+from app.models import (
+    # PlanetProcessRequest,
+    # PlanetProcessResponse,
+    SentinelProcessRequest,
+    SentinelProcessResponse,
+)
+# Planet Lab deshabilitado temporalmente (cuota agotada)
+# from app.services.planet import analyze_planet_request, process_planet_request
+from app.services.sentinel import analyze_sentinel_request, process_sentinel_request
 
 
 router = APIRouter(tags=["ndvi"])
@@ -26,14 +32,37 @@ async def process_sentinel(
     return await process_sentinel_request(request, redBand, nirBand)
 
 
-@router.post("/ndvi/planet/process", response_model=PlanetProcessResponse)
-async def process_planet(
-    request: str = Form(...),
-    image: UploadFile = File(...),
-) -> PlanetProcessResponse:
+@router.post("/ndvi/sentinel/analyze", response_model=SentinelProcessResponse)
+async def analyze_sentinel(request: SentinelProcessRequest) -> SentinelProcessResponse:
     logger.info(
-        "Request Planet recibido image=%s requestBytes=%s",
-        image.filename,
-        len(request),
+        "Request Sentinel analyze recibido sceneId=%s terrainId=%s parcelas=%s",
+        request.sceneId,
+        request.terrainId,
+        len(request.parcels),
     )
-    return await process_planet_request(request, image)
+    return await analyze_sentinel_request(request)
+
+
+# --- Planet Lab deshabilitado temporalmente (cuota agotada) ---
+# @router.post("/ndvi/planet/process", response_model=PlanetProcessResponse)
+# async def process_planet(
+#     request: str = Form(...),
+#     image: UploadFile = File(...),
+# ) -> PlanetProcessResponse:
+#     logger.info(
+#         "Request Planet recibido image=%s requestBytes=%s",
+#         image.filename,
+#         len(request),
+#     )
+#     return await process_planet_request(request, image)
+#
+#
+# @router.post("/ndvi/planet/analyze", response_model=PlanetProcessResponse)
+# async def analyze_planet(request: PlanetProcessRequest) -> PlanetProcessResponse:
+#     logger.info(
+#         "Request Planet analyze recibido sceneId=%s terrainId=%s parcelas=%s",
+#         request.sceneId,
+#         request.terrainId,
+#         len(request.parcels),
+#     )
+#     return await analyze_planet_request(request)

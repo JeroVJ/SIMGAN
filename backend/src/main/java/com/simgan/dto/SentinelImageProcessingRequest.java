@@ -18,8 +18,10 @@ public class SentinelImageProcessingRequest {
 
     private Long terrainId;
     private String terrainName;
+    private String terrainGeoJson;
     private String sceneId;
     private LocalDate captureDate;
+    private String downloadUrl;
     private Integer epsg;
     private Double ulx;
     private Double uly;

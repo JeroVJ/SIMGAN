@@ -18,8 +18,10 @@ public class PlanetImageProcessingRequest {
 
     private Long terrainId;
     private String terrainName;
+    private String terrainGeoJson;
     private String sceneId;
     private LocalDate captureDate;
+    private String downloadUrl;
     private String assetType;
     private Integer numBands;
     private Double cloudCoverPercent;

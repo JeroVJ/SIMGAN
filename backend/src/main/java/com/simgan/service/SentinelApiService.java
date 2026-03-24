@@ -251,7 +251,9 @@ public class SentinelApiService {
         if (redFile != null && nirFile != null) {
             if (isUsableBandFile(redFile) && isUsableBandFile(nirFile)) {
                 log.info("Bandas en caché: {}, {}", redFile.getName(), nirFile.getName());
-                return buildResult(redFile, nirFile, workDir);
+                Map<String, Object> bandResult = buildResult(redFile, nirFile, workDir);
+                bandResult.put("workDir", workDir);
+                return bandResult;
             }
 
             log.warn("Bandas en caché inválidas/corruptas. Limpiando caché local para re-descargar {}", sceneId);
@@ -332,7 +334,11 @@ public class SentinelApiService {
         log.info("Producto descargado: {} MB", zipFile.length() / (1024 * 1024));
 
         // 3. Extract B04, B08, MTD_TL.xml
-        return extractBandsFromZip(zipFile, workDir);
+        Map<String, Object> bandResult = extractBandsFromZip(zipFile, workDir);
+        if (bandResult != null) {
+            bandResult.put("workDir", workDir);
+        }
+        return bandResult;
     }
 
     /**
@@ -618,5 +624,30 @@ public class SentinelApiService {
             }
         } catch (Exception ignored) {
         }
+    }
+
+    public void cleanDownloadDir() {
+        File dir = new File(DOWNLOAD_DIR);
+        if (dir.exists() && dir.isDirectory()) {
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File f : files) {
+                    deleteRecursive(f);
+                }
+            }
+            log.info("Directorio sentinel limpiado: {}", DOWNLOAD_DIR);
+        }
+    }
+
+    private void deleteRecursive(File file) {
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteRecursive(child);
+                }
+            }
+        }
+        file.delete();
     }
 }

@@ -24,11 +24,13 @@ class ProcessedParcelNdviResponse(BaseModel):
 class SentinelProcessRequest(BaseModel):
     terrainId: int
     terrainName: str | None = None
+    terrainGeoJson: str | None = None
     sceneId: str
     captureDate: str
-    epsg: int
-    ulx: float
-    uly: float
+    downloadUrl: str | None = None
+    epsg: int | None = None
+    ulx: float | None = None
+    uly: float | None = None
     pixelSize: float | None = 10.0
     cloudCoverPercent: float | None = None
     parcels: list[ParcelProcessRequest]
@@ -60,8 +62,10 @@ class SentinelProcessResponse(BaseModel):
 class PlanetProcessRequest(BaseModel):
     terrainId: int
     terrainName: str | None = None
+    terrainGeoJson: str | None = None
     sceneId: str
     captureDate: str
+    downloadUrl: str | None = None
     assetType: str | None = None
     numBands: int | None = None
     cloudCoverPercent: float | None = None

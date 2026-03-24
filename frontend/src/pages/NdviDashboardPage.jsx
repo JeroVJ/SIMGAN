@@ -16,9 +16,9 @@ const HEALTH_COLORS = {
 }
 
 const STATUS_LABELS = {
-  DISPONIBLE:  { label: 'Disponible', icon: '🌿', color: '#4ade80' },
-  EN_USO:      { label: 'En uso',     icon: '🐄', color: '#f59e0b' },
-  EN_DESCANSO: { label: 'En descanso',icon: '💤', color: '#3b82f6' },
+  DISPONIBLE:  { label: 'Disponible', color: '#4ade80' },
+  EN_USO:      { label: 'En uso',   color: '#f59e0b' },
+  EN_DESCANSO: { label: 'En descanso', color: '#3b82f6' },
 }
 
 const SEVERITY_COLORS = {
@@ -61,7 +61,7 @@ export default function NdviDashboardPage() {
         </div>
         <div className="flex justify-between items-center">
           <div>
-            <h2>🛰️ Analíticas NDVI</h2>
+            <h2> Analíticas NDVI</h2>
             <p>{dashboard?.terrainName} — {dashboard?.terrainAreaHa?.toFixed(2)} ha · {dashboard?.parcels?.length} parcelas</p>
           </div>
           <div className="ndvi-analysis-controls">
@@ -97,11 +97,11 @@ export default function NdviDashboardPage() {
               <p className="ndvi-date-hint">Fin del rango a consultar.</p>
             </div>
             <button className="action-btn action-btn--primary" onClick={() => analyze(analysisStartDate, analysisEndDate)} disabled={analyzing || !analysisStartDate || !analysisEndDate || analysisStartDate > analysisEndDate}>
-              {analyzing ? <><span className="spinner" /> Analizando...</> : '🛰️ Ejecutar Análisis'}
+              {analyzing ? <><span className="spinner" /> Analizando...</> : 'Ejecutar Análisis'}
             </button>
           </div>
         </div>
-        <p className="ndvi-analysis-steps">1) Elige la fecha inicial · 2) Elige la fecha final · 3) Haz clic en <strong>🛰️ Ejecutar Análisis</strong></p>
+        <p className="ndvi-analysis-steps">1) Elige la fecha inicial · 2) Elige la fecha final · 3) Haz clic en <strong> Ejecutar Análisis</strong></p>
       </div>
 
       {!hasData ? (
@@ -133,7 +133,7 @@ export default function NdviDashboardPage() {
               <div className="ndvi-summary-value" style={{ color: '#14b8a6' }}>
                 {dashboard?.avgBiomassPerHa?.toFixed(0)}
               </div>
-              <div className="ndvi-summary-sub">kg MS/ha promedio</div>
+              <div className="ndvi-summary-sub">kg Biomasa/ha promedio</div>
             </div>
             <div className="ndvi-summary-card">
               <div className="ndvi-summary-label">Alertas Activas</div>
@@ -147,12 +147,12 @@ export default function NdviDashboardPage() {
           {/* Tabs */}
           <div className="ndvi-tabs">
             {[
-              { key: 'overview',        label: '📊 Evolución NDVI' },
-              { key: 'comparison',      label: '📋 Comparación' },
-              { key: 'recommendations', label: '🎯 Recomendaciones' },
-              { key: 'alerts',          label: `⚠️ Alertas (${dashboard?.activeAlerts || 0})` },
-              { key: 'history',         label: '📜 Historial' },
-              { key: 'biomass',         label: '🌱 Biomasa' },
+              { key: 'overview',        label: ' Evolución NDVI' },
+              { key: 'comparison',      label: ' Comparación' },
+              { key: 'recommendations', label: ' Recomendaciones' },
+              { key: 'alerts',          label: ` Alertas (${dashboard?.activeAlerts || 0})` },
+              { key: 'history',         label: ' Historial' },
+              { key: 'biomass',         label: ' Biomasa' },
             ].map(tab => (
               <button
                 key={tab.key}
@@ -224,7 +224,7 @@ export default function NdviDashboardPage() {
                         <div>
                           <span className="label">Tendencia</span>
                           <span className="value">
-                            {p.trendSlope > 0.001 ? '📈 Mejorando' : p.trendSlope < -0.001 ? '📉 Bajando' : '➡️ Estable'}
+                            {p.trendSlope > 0.001 ? 'Mejorando' : p.trendSlope < -0.001 ? ' Bajando' : ' Estable'}
                           </span>
                         </div>
                       </div>
@@ -283,7 +283,7 @@ export default function NdviDashboardPage() {
               <div>
                 {recommendations.length === 0 ? (
                   <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)' }}>
-                    ✅ Todas las parcelas están en su estado óptimo. No hay cambios recomendados.
+                     Todas las parcelas están en su estado óptimo. No hay cambios recomendados.
                   </div>
                 ) : (
                   <div className="ndvi-recs-list">
@@ -318,7 +318,7 @@ export default function NdviDashboardPage() {
               <div>
                 {(!dashboard?.alerts || dashboard.alerts.length === 0) ? (
                   <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)' }}>
-                    ✅ Sin alertas. Todas las parcelas están dentro de los umbrales normales.
+                     Sin alertas. Todas las parcelas están dentro de los umbrales normales.
                   </div>
                 ) : (
                   <div className="ndvi-alerts-list">
@@ -398,7 +398,7 @@ export default function NdviDashboardPage() {
               <div>
                 <div className="card mb-24">
                   <div className="card-header">
-                    <h3>🌱 Materia Vegetal por Parcela</h3>
+                    <h3> Biomasa por Parcela</h3>
                     <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>kg de materia seca / hectárea</span>
                   </div>
                   <ResponsiveContainer width="100%" height={350}>
@@ -452,7 +452,7 @@ export default function NdviDashboardPage() {
 
           <div className="flex gap-12 mt-24">
             <button className="action-btn" onClick={() => navigate(`/terrains/${terrainId}/parcels`)}>← Parcelas</button>
-            <button className="action-btn" onClick={() => navigate(`/terrains/${terrainId}/rotation`)}>🔄 Rotación</button>
+            <button className="action-btn" onClick={() => navigate(`/terrains/${terrainId}/rotation`)}> Rotación</button>
           </div>
         </>
       )}

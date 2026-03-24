@@ -1,17 +1,16 @@
 import json
 import logging
 import shutil
-import subprocess
 import time
 from pathlib import Path
 from typing import TypeVar
 
 import numpy as np
+import rasterio
 from fastapi import HTTPException, UploadFile
 from pydantic import BaseModel
 from shapely.geometry import shape
 
-from app.config import settings
 from app.models import ParcelProcessRequest, ProcessedParcelNdviResponse
 
 
@@ -44,37 +43,30 @@ def save_upload(upload: UploadFile, work_dir: Path) -> Path:
 
 
 def convert_jp2_to_tiff(input_path: Path, output_path: Path) -> None:
-    command = [
-        settings.gdal_translate_command,
-        "-of", "GTiff",
-        "-ot", "UInt16",
-        "-co", "NBITS=16",
-        str(input_path),
-        str(output_path),
-    ]
-    logger.info("Ejecutando GDAL command=%s", " ".join(command))
+    logger.info("Convirtiendo JP2→GeoTIFF input=%s output=%s", input_path, output_path)
     started = time.perf_counter()
-    process = subprocess.run(command, capture_output=True, text=True)
-    elapsed_ms = int((time.perf_counter() - started) * 1000)
-    if process.returncode != 0 or not output_path.exists() or output_path.stat().st_size == 0:
-        output = (process.stdout + process.stderr).strip()
+    try:
+        with rasterio.open(input_path) as src:
+            profile = src.profile.copy()
+            profile.update(
+                driver="GTiff",
+                dtype="uint16",
+                nbits=16,
+            )
+            with rasterio.open(output_path, "w", **profile) as dst:
+                for i in range(1, src.count + 1):
+                    dst.write(src.read(i), i)
+    except Exception as exc:
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
         logger.error(
-            "GDAL falló input=%s output=%s exitCode=%s durationMs=%s stdout=%s stderr=%s",
-            input_path,
-            output_path,
-            process.returncode,
-            elapsed_ms,
-            process.stdout.strip(),
-            process.stderr.strip(),
+            "Conversión JP2→TIFF falló input=%s output=%s durationMs=%s error=%s",
+            input_path, output_path, elapsed_ms, exc,
         )
-        raise RuntimeError(f"GDAL no pudo convertir {input_path.name}. Salida: {output}")
+        raise RuntimeError(f"No se pudo convertir {input_path.name}: {exc}") from exc
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
     logger.info(
-        "GDAL finalizado input=%s output=%s exitCode=%s durationMs=%s outputSizeBytes=%s",
-        input_path.name,
-        output_path.name,
-        process.returncode,
-        elapsed_ms,
-        output_path.stat().st_size,
+        "Conversión JP2→TIFF finalizada input=%s output=%s durationMs=%s outputSizeBytes=%s",
+        input_path.name, output_path.name, elapsed_ms, output_path.stat().st_size,
     )
 
 

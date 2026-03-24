@@ -1,9 +1,12 @@
 import logging
+import re
 import tempfile
 import time
+import zipfile
 from pathlib import Path
 
 import rasterio
+import requests
 from fastapi import HTTPException, UploadFile
 from pyproj import Transformer
 from rasterio.errors import RasterioIOError
@@ -23,6 +26,250 @@ from app.services.common import (
 
 
 logger = logging.getLogger(__name__)
+
+TOKEN_URL = "https://identity.dataspace.copernicus.eu/auth/realms/CDSE/protocol/openid-connect/token"
+ODATA_CATALOG = "https://catalogue.dataspace.copernicus.eu/odata/v1"
+ODATA_DOWNLOAD = "https://zipper.dataspace.copernicus.eu/odata/v1"
+MIN_ZIP_SIZE_BYTES = 10_000
+
+_cached_token: str | None = None
+_token_expiry_epoch: float = 0.0
+
+
+def _safe_scene_name(scene_id: str) -> str:
+    return "".join(char if char.isalnum() or char in {"-", "_"} else "_" for char in scene_id)
+
+
+def _delete_quietly(path: Path | None) -> None:
+    try:
+        if path and path.exists():
+            path.unlink()
+    except Exception:
+        pass
+
+
+def _is_valid_zip(path: Path) -> bool:
+    if not path.exists() or path.stat().st_size < MIN_ZIP_SIZE_BYTES:
+        return False
+    try:
+        with zipfile.ZipFile(path) as handle:
+            return any(True for _ in handle.infolist())
+    except Exception:
+        return False
+
+
+def _is_usable_band_file(path: Path | None) -> bool:
+    if path is None or not path.exists() or path.stat().st_size < 1000:
+        return False
+
+    suffix = path.suffix.lower()
+    with path.open("rb") as handle:
+        header = handle.read(12)
+    if suffix == ".jp2":
+        return len(header) >= 8 and header[4:8] == b"jP  "
+    if suffix in {".tif", ".tiff"}:
+        return len(header) >= 4 and header[:4] in {b"II*\x00", b"MM\x00*"}
+    return True
+
+
+def _parse_granule_metadata(metadata_file: Path) -> tuple[int, float, float]:
+    content = metadata_file.read_text(encoding="utf-8", errors="ignore")
+    epsg_match = re.search(r"EPSG:(\d+)", content)
+    ulx_match = re.search(r'<Geoposition\s+resolution="10"[\s\S]*?<ULX>([-0-9.]+)</ULX>', content)
+    uly_match = re.search(r'<Geoposition\s+resolution="10"[\s\S]*?<ULY>([-0-9.]+)</ULY>', content)
+    epsg = int(epsg_match.group(1)) if epsg_match else 32618
+    ulx = float(ulx_match.group(1)) if ulx_match else 600000.0
+    uly = float(uly_match.group(1)) if uly_match else 500000.0
+    return epsg, ulx, uly
+
+
+def _extract_bands_from_zip(zip_path: Path, output_dir: Path) -> tuple[Path, Path, int, float, float]:
+    red_file: Path | None = None
+    nir_file: Path | None = None
+    metadata_file: Path | None = None
+
+    with zipfile.ZipFile(zip_path) as archive:
+        for entry in archive.infolist():
+            if entry.is_dir():
+                continue
+            name = entry.filename.lower()
+            is_b04 = "_b04_10m.jp2" in name or "_b04_10m.tif" in name
+            is_b08 = "_b08_10m.jp2" in name or "_b08_10m.tif" in name
+            is_mtd = name.endswith("mtd_tl.xml") and "granule" in name
+            if not any((is_b04, is_b08, is_mtd)):
+                continue
+
+            if is_b04:
+                target = output_dir / ("B04_10m.tif" if name.endswith(".tif") else "B04_10m.jp2")
+            elif is_b08:
+                target = output_dir / ("B08_10m.tif" if name.endswith(".tif") else "B08_10m.jp2")
+            else:
+                target = output_dir / "MTD_TL.xml"
+
+            logger.info("Extrayendo Sentinel entry=%s target=%s", entry.filename, target.name)
+            with archive.open(entry) as source, target.open("wb") as destination:
+                destination.write(source.read())
+
+            if is_b04:
+                red_file = target
+            elif is_b08:
+                nir_file = target
+            elif is_mtd:
+                metadata_file = target
+
+    if not _is_usable_band_file(red_file) or not _is_usable_band_file(nir_file):
+        raise RuntimeError("Las bandas B04/B08 extraídas desde Sentinel no son válidas.")
+
+    if metadata_file and metadata_file.exists():
+        epsg, ulx, uly = _parse_granule_metadata(metadata_file)
+    else:
+        epsg, ulx, uly = 32618, 600000.0, 500000.0
+
+    return red_file, nir_file, epsg, ulx, uly
+
+
+def _get_access_token() -> str:
+    global _cached_token, _token_expiry_epoch
+
+    if _cached_token and time.time() < _token_expiry_epoch:
+        return _cached_token
+
+    if not settings.copernicus_username or not settings.copernicus_password:
+        raise RuntimeError("Processing no tiene COPERNICUS_USERNAME/COPERNICUS_PASSWORD configurados.")
+
+    response = requests.post(
+        TOKEN_URL,
+        data={
+            "grant_type": "password",
+            "username": settings.copernicus_username,
+            "password": settings.copernicus_password,
+            "client_id": "cdse-public",
+        },
+        timeout=(30, 120),
+    )
+    response.raise_for_status()
+    payload = response.json()
+    _cached_token = payload["access_token"]
+    _token_expiry_epoch = time.time() + max(int(payload.get("expires_in", 600)) - 30, 60)
+    return _cached_token
+
+
+def _find_product_uuid(product_name: str) -> str | None:
+    clean_name = product_name.replace(".SAFE", "")
+    response = requests.get(
+        f"{ODATA_CATALOG}/Products?$filter=contains(Name,'{clean_name}')&$top=1",
+        headers={"Accept": "application/json"},
+        timeout=(30, 120),
+    )
+    response.raise_for_status()
+    values = response.json().get("value", [])
+    if not values:
+        return None
+    return values[0].get("Id")
+
+
+def _download_with_auth(url: str, output: Path, token: str) -> None:
+    with requests.get(url, headers={"Authorization": f"Bearer {token}"}, stream=True, timeout=(30, 300)) as response:
+        response.raise_for_status()
+        with output.open("wb") as handle:
+            for chunk in response.iter_content(chunk_size=1024 * 1024):
+                if chunk:
+                    handle.write(chunk)
+
+
+def _download_and_extract_bands(payload: SentinelProcessRequest, work_dir: Path) -> tuple[Path, Path, int, float, float]:
+    token = _get_access_token()
+    download_url = payload.downloadUrl
+
+    if not download_url or "('S2" in download_url:
+        uuid = _find_product_uuid(payload.sceneId)
+        if not uuid:
+            raise RuntimeError(f"No se encontró UUID OData para la escena Sentinel {payload.sceneId}.")
+        download_url = f"{ODATA_DOWNLOAD}/Products({uuid})/$value"
+
+    zip_path = work_dir / "product.zip"
+    if zip_path.exists() and not _is_valid_zip(zip_path):
+        _delete_quietly(zip_path)
+
+    if not zip_path.exists():
+        _download_with_auth(download_url, zip_path, token)
+
+    if not _is_valid_zip(zip_path):
+        raise RuntimeError(f"El ZIP descargado para Sentinel {payload.sceneId} es inválido.")
+
+    return _extract_bands_from_zip(zip_path, work_dir)
+
+
+def _process_sentinel_files(
+    payload: SentinelProcessRequest,
+    red_path: Path,
+    nir_path: Path,
+    epsg: int,
+    ulx: float,
+    uly: float,
+    started: float,
+) -> SentinelProcessResponse:
+    warnings: list[str] = []
+    red_tiff = red_path if red_path.suffix.lower() in {".tif", ".tiff"} else red_path.with_suffix(".tif")
+    nir_tiff = nir_path if nir_path.suffix.lower() in {".tif", ".tiff"} else nir_path.with_suffix(".tif")
+
+    if red_tiff != red_path:
+        convert_jp2_to_tiff(red_path, red_tiff)
+    if nir_tiff != nir_path:
+        convert_jp2_to_tiff(nir_path, nir_tiff)
+
+    transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
+    with rasterio.open(red_tiff) as red_dataset, rasterio.open(nir_tiff) as nir_dataset:
+        logger.info(
+            "Raster Sentinel abierto red=%s nir=%s width=%s height=%s dtypes=%s/%s crs=%s",
+            red_tiff.name,
+            nir_tiff.name,
+            red_dataset.width,
+            red_dataset.height,
+            red_dataset.dtypes[0],
+            nir_dataset.dtypes[0],
+            red_dataset.crs,
+        )
+        parcel_results = [
+            _process_sentinel_parcel(
+                parcel,
+                red_dataset,
+                nir_dataset,
+                transformer,
+                ulx,
+                uly,
+                payload.pixelSize or 10.0,
+            )
+            for parcel in payload.parcels
+        ]
+
+        for result in parcel_results:
+            if result.warning:
+                warnings.append(f"Parcela {result.parcelId}: {result.warning}")
+
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        return SentinelProcessResponse(
+            terrainId=payload.terrainId,
+            terrainName=payload.terrainName,
+            sceneId=payload.sceneId,
+            captureDate=payload.captureDate,
+            source="SENTINEL",
+            epsg=epsg,
+            ulx=ulx,
+            uly=uly,
+            pixelSize=payload.pixelSize or 10.0,
+            cloudCoverPercent=payload.cloudCoverPercent,
+            rasterWidth=red_dataset.width,
+            rasterHeight=red_dataset.height,
+            redBandName=red_path.name,
+            nirBandName=nir_path.name,
+            redGeoTiffName=red_tiff.name,
+            nirGeoTiffName=nir_tiff.name,
+            processedParcelCount=sum(1 for item in parcel_results if item.pixelCount > 0),
+            processingDurationMs=elapsed_ms,
+            warnings=warnings,
+            parcelResults=parcel_results,
+        )
 
 
 def _process_sentinel_parcel(
@@ -96,78 +343,50 @@ async def process_sentinel_request(
     try:
         red_path = save_upload(red_band, work_dir)
         nir_path = save_upload(nir_band, work_dir)
-        red_tiff = red_path if red_path.suffix.lower() in {".tif", ".tiff"} else work_dir / f"{red_path.stem}.tif"
-        nir_tiff = nir_path if nir_path.suffix.lower() in {".tif", ".tiff"} else work_dir / f"{nir_path.stem}.tif"
-
-        if red_tiff != red_path:
-            convert_jp2_to_tiff(red_path, red_tiff)
-        if nir_tiff != nir_path:
-            convert_jp2_to_tiff(nir_path, nir_tiff)
-
-        transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{payload.epsg}", always_xy=True)
-        with rasterio.open(red_tiff) as red_dataset, rasterio.open(nir_tiff) as nir_dataset:
-            logger.info(
-                "Raster Sentinel abierto red=%s nir=%s width=%s height=%s dtypes=%s/%s crs=%s",
-                red_tiff.name,
-                nir_tiff.name,
-                red_dataset.width,
-                red_dataset.height,
-                red_dataset.dtypes[0],
-                nir_dataset.dtypes[0],
-                red_dataset.crs,
-            )
-            parcel_results = [
-                _process_sentinel_parcel(
-                    parcel,
-                    red_dataset,
-                    nir_dataset,
-                    transformer,
-                    payload.ulx,
-                    payload.uly,
-                    payload.pixelSize or 10.0,
-                )
-                for parcel in payload.parcels
-            ]
-
-            for result in parcel_results:
-                if result.warning:
-                    warnings.append(f"Parcela {result.parcelId}: {result.warning}")
-
-            elapsed_ms = int((time.perf_counter() - started) * 1000)
-            logger.info(
-                "Fin procesamiento Sentinel terrainId=%s sceneId=%s processedParcels=%s warnings=%s durationMs=%s",
-                payload.terrainId,
-                payload.sceneId,
-                sum(1 for item in parcel_results if item.pixelCount > 0),
-                len(warnings),
-                elapsed_ms,
-            )
-
-            return SentinelProcessResponse(
-                terrainId=payload.terrainId,
-                terrainName=payload.terrainName,
-                sceneId=payload.sceneId,
-                captureDate=payload.captureDate,
-                source="SENTINEL",
-                epsg=payload.epsg,
-                ulx=payload.ulx,
-                uly=payload.uly,
-                pixelSize=payload.pixelSize or 10.0,
-                cloudCoverPercent=payload.cloudCoverPercent,
-                rasterWidth=red_dataset.width,
-                rasterHeight=red_dataset.height,
-                redBandName=red_path.name,
-                nirBandName=nir_path.name,
-                redGeoTiffName=red_tiff.name,
-                nirGeoTiffName=nir_tiff.name,
-                processedParcelCount=sum(1 for item in parcel_results if item.pixelCount > 0),
-                processingDurationMs=elapsed_ms,
-                warnings=warnings,
-                parcelResults=parcel_results,
-            )
+        epsg = payload.epsg or 32618
+        ulx = payload.ulx or 600000.0
+        uly = payload.uly or 500000.0
+        return _process_sentinel_files(payload, red_path, nir_path, epsg, ulx, uly, started)
     except RasterioIOError as exc:
         logger.exception("Error abriendo raster Sentinel terrainId=%s sceneId=%s", payload.terrainId, payload.sceneId)
         raise HTTPException(status_code=500, detail=f"No fue posible leer raster Sentinel: {exc}") from exc
     except Exception as exc:
         logger.exception("Error procesando Sentinel terrainId=%s sceneId=%s", payload.terrainId, payload.sceneId)
         raise HTTPException(status_code=500, detail=f"procesamientoImagen no pudo calcular NDVI: {exc}") from exc
+    finally:
+        import shutil
+        try:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        except Exception:
+            logger.warning("No se pudo eliminar directorio temporal workDir=%s", work_dir)
+
+
+async def analyze_sentinel_request(payload: SentinelProcessRequest) -> SentinelProcessResponse:
+    work_dir = Path(tempfile.mkdtemp(prefix="sentinel-remote-", dir=str(settings.gdal_temp_dir)))
+    started = time.perf_counter()
+    logger.info(
+        "Inicio procesamiento Sentinel remoto terrainId=%s sceneId=%s parcelas=%s workDir=%s",
+        payload.terrainId,
+        payload.sceneId,
+        len(payload.parcels),
+        work_dir,
+    )
+
+    try:
+        red_path, nir_path, epsg, ulx, uly = _download_and_extract_bands(payload, work_dir)
+        return _process_sentinel_files(payload, red_path, nir_path, epsg, ulx, uly, started)
+    except requests.HTTPError as exc:
+        logger.exception("Error descargando Sentinel sceneId=%s", payload.sceneId)
+        raise HTTPException(status_code=502, detail=f"No fue posible descargar Sentinel: {exc}") from exc
+    except RasterioIOError as exc:
+        logger.exception("Error abriendo raster Sentinel remoto terrainId=%s sceneId=%s", payload.terrainId, payload.sceneId)
+        raise HTTPException(status_code=500, detail=f"No fue posible leer raster Sentinel: {exc}") from exc
+    except Exception as exc:
+        logger.exception("Error procesando Sentinel remoto terrainId=%s sceneId=%s", payload.terrainId, payload.sceneId)
+        raise HTTPException(status_code=500, detail=f"procesamientoImagen no pudo calcular NDVI: {exc}") from exc
+    finally:
+        import shutil
+        try:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        except Exception:
+            logger.warning("No se pudo eliminar directorio temporal workDir=%s", work_dir)

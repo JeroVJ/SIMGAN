@@ -377,17 +377,14 @@ public class PlanetApiService {
     }
 
     /**
-     * Descarga un GeoTIFF desde Planet a un archivo local
+     * Descarga un GeoTIFF desde Planet a un archivo temporal.
+     * El archivo debe ser eliminado por el llamador después de procesarlo.
      */
     public File downloadGeoTiff(String downloadUrl, String sceneId) throws IOException {
         File dir = new File(downloadDir);
         if (!dir.exists()) dir.mkdirs();
 
         File outputFile = new File(dir, sceneId + ".tif");
-        if (outputFile.exists()) {
-            log.info("GeoTIFF ya descargado: {}", outputFile.getAbsolutePath());
-            return outputFile;
-        }
 
         Request request = new Request.Builder()
                 .url(downloadUrl)
@@ -411,5 +408,22 @@ public class PlanetApiService {
 
         log.info("GeoTIFF descargado: {} ({} MB)", outputFile.getName(), outputFile.length() / (1024 * 1024));
         return outputFile;
+    }
+
+    /**
+     * Limpia todos los archivos GeoTIFF del directorio de descargas.
+     */
+    public void cleanDownloadDir() {
+        File dir = new File(downloadDir);
+        if (dir.exists() && dir.isDirectory()) {
+            File[] files = dir.listFiles();
+            if (files != null) {
+                for (File file : files) {
+                    if (file.delete()) {
+                        log.debug("Archivo temporal eliminado: {}", file.getName());
+                    }
+                }
+            }
+        }
     }
 }
