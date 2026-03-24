@@ -91,10 +91,11 @@ export const ndviApi = {
   acknowledgeAlert: (alertId) => api.patch(`/ndvi/alerts/${alertId}/acknowledge`),
 
   // Ejecutar análisis
-  analyze: (terrainId, startDate, endDate) => {
+  analyze: (terrainId, startDate, endDate, biomassMethod) => {
     const params = {}
     if (startDate) params.startDate = startDate
     if (endDate) params.endDate = endDate
+    if (biomassMethod) params.biomassMethod = biomassMethod
     return api.post(`/ndvi/analyze/${terrainId}`, null, { params }).then(r => r.data)
   },
 

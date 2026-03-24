@@ -41,6 +41,7 @@ export default function NdviDashboardPage() {
     new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
   )
   const [analysisEndDate, setAnalysisEndDate] = useState(today)
+  const [biomassMethod, setBiomassMethod] = useState('DEFAULT')
 
   if (loading) return <Spinner page label="Cargando analíticas NDVI..." />
 
@@ -96,12 +97,28 @@ export default function NdviDashboardPage() {
               />
               <p className="ndvi-date-hint">Fin del rango a consultar.</p>
             </div>
-            <button className="action-btn action-btn--primary" onClick={() => analyze(analysisStartDate, analysisEndDate)} disabled={analyzing || !analysisStartDate || !analysisEndDate || analysisStartDate > analysisEndDate}>
+            <div className="ndvi-date-field">
+              <label htmlFor="biomassMethod" className="ndvi-date-label">
+                Cálculo de Biomasa
+              </label>
+              <select
+                className="ndvi-date-input"
+                id="biomassMethod"
+                value={biomassMethod}
+                onChange={(e) => setBiomassMethod(e.target.value)}
+                disabled={analyzing}
+              >
+                <option value="DEFAULT">Por defecto (fórmula)</option>
+                <option value="SAMPLING" disabled>Por muestreo (próximamente)</option>
+              </select>
+              <p className="ndvi-date-hint">Método para estimar biomasa.</p>
+            </div>
+            <button className="action-btn action-btn--primary" onClick={() => analyze(analysisStartDate, analysisEndDate, biomassMethod)} disabled={analyzing || !analysisStartDate || !analysisEndDate || analysisStartDate > analysisEndDate}>
               {analyzing ? <><span className="spinner" /> Analizando...</> : 'Ejecutar Análisis'}
             </button>
           </div>
         </div>
-        <p className="ndvi-analysis-steps">1) Elige la fecha inicial · 2) Elige la fecha final · 3) Haz clic en <strong> Ejecutar Análisis</strong></p>
+        <p className="ndvi-analysis-steps">1) Elige la fecha inicial · 2) Elige la fecha final · 3) Selecciona el método de biomasa · 4) Haz clic en <strong> Ejecutar Análisis</strong></p>
       </div>
 
       {!hasData ? (
