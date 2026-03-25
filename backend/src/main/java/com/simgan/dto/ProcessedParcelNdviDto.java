@@ -25,3 +25,4 @@ public class ProcessedParcelNdviDto {
     private Double vegetationCoverPercent;
     private String warning;
 }
+

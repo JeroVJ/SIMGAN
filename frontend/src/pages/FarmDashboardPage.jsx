@@ -42,14 +42,14 @@ export default function FarmDashboardPage() {
         <StatCard
           label="Terrenos"
           value={terrains.length}
-          sub="registrados"
+          sub="registradas"
           icon={<Layers size={18} strokeWidth={1.75} />}
           accent="green"
         />
         <StatCard
-          label="Parcelas"
+          label="Potreros"
           value={stats.totalParcels}
-          sub="delimitadas"
+          sub="delimitados"
           icon={<LayoutGrid size={18} strokeWidth={1.75} />}
           accent="blue"
         />
@@ -81,7 +81,7 @@ export default function FarmDashboardPage() {
         <EmptyState
           icon="🗺️"
           title="Sin terrenos"
-          description="Crea tu primer terreno para empezar a gestionar parcelas y ganado."
+          description="Crea tu primer terreno para empezar a gestionar potreros y ganado."
           action={
             <button className="action-btn action-btn--primary" onClick={() => navigate(`/farms/${farmId}/terrain/new`)}>
               Crear Terreno
@@ -117,7 +117,7 @@ export default function FarmDashboardPage() {
                 <div className="terrain-card__stats">
                   <div>
                     <span className="tcs__val">{data.parcels.length}</span>
-                    <span className="tcs__lbl">Parcelas</span>
+                    <span className="tcs__lbl">Potreros</span>
                   </div>
                   <div>
                     <span className="tcs__val">{aLotes.length}</span>
@@ -137,7 +137,7 @@ export default function FarmDashboardPage() {
 
                 <div className="terrain-card__footer-nav">
                   <button className="terrain-card__footer-nav-item" onClick={() => navigate(`/terrains/${t.id}/parcels`)}>
-                    Parcelas
+                    Potreros
                   </button>
                   <button className="terrain-card__footer-nav-item" onClick={() => navigate(`/terrains/${t.id}/lotes`)}>
                     Ganado
@@ -146,7 +146,7 @@ export default function FarmDashboardPage() {
                     NDVI
                   </button>
                   <button className="terrain-card__footer-nav-item" onClick={() => navigate(`/terrains/${t.id}/rotation`)}>
-                    Rotación
+                    Pastoreo
                   </button>
                 </div>
               </div>

@@ -63,7 +63,7 @@ export default function NdviDashboardPage() {
         <div className="flex justify-between items-center">
           <div>
             <h2> Analíticas NDVI</h2>
-            <p>{dashboard?.terrainName} — {dashboard?.terrainAreaHa?.toFixed(2)} ha · {dashboard?.parcels?.length} parcelas</p>
+            <p>{dashboard?.terrainName} — {dashboard?.terrainAreaHa?.toFixed(2)} ha · {dashboard?.parcels?.length} potreros</p>
           </div>
           <div className="ndvi-analysis-controls">
             <div className="ndvi-date-field">
@@ -186,7 +186,7 @@ export default function NdviDashboardPage() {
               <div>
                 <div className="card mb-24">
                   <div className="card-header">
-                    <h3>Evolución NDVI por Parcela</h3>
+                    <h3>Evolución NDVI por Potrero</h3>
                     <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                       Último análisis: {dashboard?.lastAnalysisDate}
                     </span>
@@ -256,12 +256,12 @@ export default function NdviDashboardPage() {
 
             {activeTab === 'comparison' && (
               <div className="card">
-                <div className="card-header"><h3>Ranking de Parcelas por NDVI</h3></div>
+                <div className="card-header"><h3>Ranking de Potreros por NDVI</h3></div>
                 <div className="table-container">
                   <table>
                     <thead>
                       <tr>
-                        <th>#</th><th>Parcela</th><th>Área (ha)</th><th>Estado</th>
+                        <th>#</th><th>Potrero</th><th>Área (ha)</th><th>Estado</th>
                         <th>NDVI Actual</th><th>NDVI Promedio</th><th>Biomasa (kg/ha)</th>
                         <th>Salud</th><th>Recomendación</th>
                       </tr>
@@ -300,7 +300,7 @@ export default function NdviDashboardPage() {
               <div>
                 {recommendations.length === 0 ? (
                   <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)' }}>
-                     Todas las parcelas están en su estado óptimo. No hay cambios recomendados.
+                    Todos los potreros están en su estado óptimo. No hay cambios recomendados.
                   </div>
                 ) : (
                   <div className="ndvi-recs-list">
@@ -335,7 +335,7 @@ export default function NdviDashboardPage() {
               <div>
                 {(!dashboard?.alerts || dashboard.alerts.length === 0) ? (
                   <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)' }}>
-                     Sin alertas. Todas las parcelas están dentro de los umbrales normales.
+                    Sin alertas. Todos los potreros están dentro de los umbrales normales.
                   </div>
                 ) : (
                   <div className="ndvi-alerts-list">
@@ -373,10 +373,10 @@ export default function NdviDashboardPage() {
 
             {activeTab === 'history' && (
               <div className="card">
-                <div className="card-header"><h3>Historial de Rotación</h3></div>
+                <div className="card-header"><h3>Historial de Terrenos</h3></div>
                 {history.length === 0 ? (
                   <p style={{ color: 'var(--color-text-muted)', textAlign: 'center', padding: 24 }}>
-                    Sin historial de rotación registrado.
+                    Sin historial de terrenos registrado.
                   </p>
                 ) : (
                   <div className="ndvi-history-list">
@@ -415,7 +415,7 @@ export default function NdviDashboardPage() {
               <div>
                 <div className="card mb-24">
                   <div className="card-header">
-                    <h3> Biomasa por Parcela</h3>
+                    <h3> Biomasa por Potrero</h3>
                     <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>kg de materia seca / hectárea</span>
                   </div>
                   <ResponsiveContainer width="100%" height={350}>
@@ -450,7 +450,7 @@ export default function NdviDashboardPage() {
                     <div className="guide-row">
                       <span className="guide-bar" style={{ background: '#84cc16', width: '55%' }} />
                       <span className="guide-label">2,500 - 5,000 kg/ha</span>
-                      <span className="guide-desc">Buen estado. Apto para pastoreo rotacional.</span>
+                      <span className="guide-desc">Buen estado. Apto para pastoreo.</span>
                     </div>
                     <div className="guide-row">
                       <span className="guide-bar" style={{ background: '#4ade80', width: '80%' }} />
@@ -468,8 +468,8 @@ export default function NdviDashboardPage() {
           </div>
 
           <div className="flex gap-12 mt-24">
-            <button className="action-btn" onClick={() => navigate(`/terrains/${terrainId}/parcels`)}>← Parcelas</button>
-            <button className="action-btn" onClick={() => navigate(`/terrains/${terrainId}/rotation`)}> Rotación</button>
+            <button className="action-btn" onClick={() => navigate(`/terrains/${terrainId}/parcels`)}>← Potreros</button>
+            <button className="action-btn" onClick={() => navigate(`/terrains/${terrainId}/rotation`)}> Terrenos</button>
           </div>
         </>
       )}

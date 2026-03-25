@@ -165,7 +165,7 @@ export default function CreateTerrainPage() {
               <input
                 value={terrainName}
                 onChange={(e) => setTerrainName(e.target.value)}
-                placeholder="Ej: Potrero Norte"
+                placeholder="Ej: Terreno Norte"
               />
             </div>
             <div style={{ padding: '12px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16 }}>
@@ -207,7 +207,7 @@ export default function CreateTerrainPage() {
                     <span className="area">{t.areaHectares?.toFixed(2)} ha</span>
                   </div>
                   <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-                    {t.parcelCount} parcela{t.parcelCount !== 1 ? 's' : ''}
+                    {t.parcelCount} potrero{t.parcelCount !== 1 ? 's' : ''}
                   </span>
                 </div>
               ))}

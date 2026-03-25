@@ -6,7 +6,6 @@ import EmptyState from '../components/EmptyState'
 import ConfirmDialog from '../components/ConfirmDialog'
 
 const TIPOS = ['NOVILLO', 'NOVILLA', 'TORO', 'VACA']
-const TIPO_ICONS = { NOVILLO: '🐂', NOVILLA: '🐄', TORO: '🐃', VACA: '🐄' }
 const TIPO_COLORS = {
   NOVILLO: 'var(--color-info)',
   NOVILLA: '#ec4899',
@@ -133,7 +132,7 @@ export default function LoteDetailPage() {
           <p style={{ margin: '4px 0 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
             {lote.terrainName} · Ingreso: {lote.fechaIngreso}
             {lote.fechaSalida && ` · Salida: ${lote.fechaSalida}`}
-            {lote.currentParcelName && <> · Parcela: <strong style={{ color: 'var(--color-primary)' }}>{lote.currentParcelName}</strong></>}
+            {lote.currentParcelName && <> · Potrero: <strong style={{ color: 'var(--color-primary)' }}>{lote.currentParcelName}</strong></>}
           </p>
         </div>
         <button onClick={() => navigate(`/terrains/${lote.terrainId}/lotes`)} className="action-btn">
@@ -171,14 +170,14 @@ export default function LoteDetailPage() {
             background: 'var(--color-surface-2)', color: TIPO_COLORS[t],
             border: `1px solid var(--color-border)`,
           }}>
-            {TIPO_ICONS[t]} {t}: {tipoCount[t]}
+            {t}: {tipoCount[t]}
           </span>
         ))}
       </div>
 
       {/* Tabs */}
       <div className="ndvi-tabs" style={{ marginBottom: 20 }}>
-        {[{ key: 'ganado', label: '🐄 Ganado' }, { key: 'historial', label: '🔄 Historial Rotación' }].map(tab => (
+        {[{ key: 'ganado', label: 'Ganado' }, { key: 'historial', label: '🔄 Historial Terrenos' }].map(tab => (
           <button
             key={tab.key}
             className={`ndvi-tab${activeTab === tab.key ? ' ndvi-tab--active' : ''}`}
@@ -286,7 +285,7 @@ export default function LoteDetailPage() {
 
           {ganados.length === 0 ? (
             <EmptyState
-              icon="🐄"
+              icon=""
               title="Sin ganado registrado"
               description="Agrega animales a este lote para comenzar el seguimiento."
               card={false}
@@ -332,9 +331,7 @@ export default function LoteDetailPage() {
                         <>
                           <td style={{ fontWeight: 500 }}>{g.numeracion}</td>
                           <td>
-                            <span style={{ color: TIPO_COLORS[g.tipo] }}>
-                              {TIPO_ICONS[g.tipo]} {g.tipo}
-                            </span>
+                            <span style={{ color: TIPO_COLORS[g.tipo] }}>{g.tipo}</span>
                           </td>
                           <td>{g.pesoInicial}</td>
                           <td style={{ fontWeight: 600 }}>{g.pesoActual}</td>
@@ -377,8 +374,8 @@ export default function LoteDetailPage() {
           {(!lote.parcelHistory || lote.parcelHistory.length === 0) ? (
             <EmptyState
               icon="🔄"
-              title="Sin historial de rotación"
-              description="Asigna una parcela al lote para comenzar el seguimiento de rotación."
+              title="Sin historial de terrenos"
+              description="Asigna un potrero al lote para comenzar el seguimiento."
               card={false}
             />
           ) : (
@@ -392,7 +389,7 @@ export default function LoteDetailPage() {
                       Ingreso: {h.fechaIngreso}
                       {h.fechaSalida
                         ? ` · Salida: ${h.fechaSalida}`
-                        : <span style={{ color: 'var(--color-primary)' }}> · Actualmente en esta parcela</span>
+                        : <span style={{ color: 'var(--color-primary)' }}> · Actualmente en este potrero</span>
                       }
                     </div>
                   </div>

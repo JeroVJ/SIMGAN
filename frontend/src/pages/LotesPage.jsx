@@ -76,7 +76,7 @@ export default function LotesPage() {
   function handleUnassign(loteId) {
     setConfirm({
       title: 'Mover lote',
-      message: '¿Retirar el lote de la parcela actual?',
+      message: '¿Retirar el lote del potrero actual?',
       confirmLabel: 'Retirar',
       variant: 'warning',
       onConfirm: async () => {
@@ -148,7 +148,7 @@ export default function LotesPage() {
         {/* LEFT: Map */}
         <div className="lotes-map-panel">
           <div className="panel-header">
-            <h3>Parcelas</h3>
+            <h3>Potreros</h3>
             <div className="map-legend">
               <span className="legend-item">
                 <span className="legend-dot" style={{ background: 'var(--color-status-disponible)' }} /> Disponible
@@ -208,7 +208,7 @@ export default function LotesPage() {
                         )}
                         {info.lote && (
                           <div style={{ fontSize: 12, color: '#b45309', marginBottom: 4, fontWeight: 600, padding: '3px 0' }}>
-                            🐄 {info.lote.name} — {info.lote.cabezas} cabezas
+                            {info.lote.name} — {info.lote.cabezas} cabezas
                           </div>
                         )}
                         {info.grazingDays != null && (
@@ -240,9 +240,9 @@ export default function LotesPage() {
           </div>
 
           <div className="side-nav-buttons" style={{ marginTop: 10, flexDirection: 'row' }}>
-            <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/parcels`)}>Parcelas</button>
+            <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/parcels`)}>Potreros</button>
             <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/ndvi`)}>NDVI</button>
-            <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/rotation`)}>Rotacion</button>
+            <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/rotation`)}>Pastoreo</button>
           </div>
         </div>
 
@@ -296,7 +296,7 @@ export default function LotesPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="lote-card-v2__no-parcel">Sin parcela asignada</div>
+                  <div className="lote-card-v2__no-parcel">Sin potrero asignado</div>
                 )}
 
                 <div className="lote-card-v2__stats">
@@ -312,7 +312,7 @@ export default function LotesPage() {
                     <div className="lote-stat__value" style={{ color: dailyConsumption ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
                       {dailyConsumption || '—'}<span className="lote-stat__unit">kg/dia</span>
                     </div>
-                    <div className="lote-stat__label">Consumo MS</div>
+                    <div className="lote-stat__label">Consumo forraje</div>
                   </div>
                   <div className="lote-stat">
                     <div className="lote-stat__value" style={{
@@ -348,7 +348,7 @@ export default function LotesPage() {
                   <button className="action-btn action-btn--nav-sm" onClick={() => navigate(`/lotes/${lote.id}`)}>Gestionar</button>
                   {!lote.currentParcelId ? (
                     <button className="action-btn action-btn--nav-sm action-btn--accent"
-                      onClick={() => setShowAssign(showAssign === lote.id ? null : lote.id)}>Asignar Parcela</button>
+                      onClick={() => setShowAssign(showAssign === lote.id ? null : lote.id)}>Asignar Potrero</button>
                   ) : (
                     <button className="action-btn action-btn--nav-sm action-btn--warning"
                       onClick={() => handleUnassign(lote.id)}>Mover</button>
@@ -375,7 +375,7 @@ export default function LotesPage() {
                 {showAssign === lote.id && (
                   <div className="assign-dropdown">
                     {availableParcels.length === 0
-                      ? <p style={{ color: 'var(--color-danger)', fontSize: 13, margin: 0 }}>No hay parcelas disponibles</p>
+                      ? <p style={{ color: 'var(--color-danger)', fontSize: 13, margin: 0 }}>No hay potreros disponibles</p>
                       : <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         {availableParcels.map(p => {
                           const pInfo = parcelInfo[p.id] || {}

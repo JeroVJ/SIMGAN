@@ -112,7 +112,7 @@ export default function ParcelsPage() {
         const inside = turf.booleanContains(terrainGeo, geoJson)
 
         if (!inside) {
-          toast('⚠️ La parcela no está completamente dentro del terreno', { icon: '⚠️' })
+          toast(' El potrero no está completamente dentro del terreno')
         }
 
       } catch {}
@@ -133,7 +133,7 @@ export default function ParcelsPage() {
   async function handleSaveParcel() {
 
     if (!drawnParcel) {
-      toast.error('Dibuja una parcela primero')
+      toast.error('Dibuja un potrero primero')
       return
     }
 
@@ -154,7 +154,7 @@ export default function ParcelsPage() {
     try {
 
       const parcelData = {
-        name: parcelName.trim() || `Parcela ${parcels.length + 1}`,
+        name: parcelName.trim() || `Potrero ${parcels.length + 1}`,
         terrainId: parseInt(terrainId),
         geoJson: JSON.stringify(drawnParcel),
         areaSqMeters: drawnArea.sqm,
@@ -179,11 +179,11 @@ export default function ParcelsPage() {
         featureGroupRef.current.clearLayers()
       }
 
-      toast.success('Parcela guardada')
+      toast.success('Potrero guardado')
 
     } catch (err) {
-      console.error('Error guardando parcela:', err)
-      toast.error(err?.message || 'Error guardando parcela')
+      console.error('Error guardando potrero:', err)
+      toast.error(err?.message || 'Error guardando potrero')
     }
 
     finally {
@@ -203,7 +203,7 @@ export default function ParcelsPage() {
   function handleDeleteParcel(id) {
     setConfirm({
       id,
-      message: '¿Eliminar esta parcela? Esta acción no se puede deshacer.'
+      message: '¿Eliminar este potrero? Esta acción no se puede deshacer.'
     })
   }
 
@@ -233,17 +233,17 @@ export default function ParcelsPage() {
 
       <ConfirmDialog
         open={!!confirm}
-        title="Eliminar parcela"
+        title="Eliminar potrero"
         message={confirm?.message}
         confirmLabel="Eliminar"
         variant="danger"
         onConfirm={async () => {
           try {
             await deleteParcel(confirm.id)
-            toast.success('Parcela eliminada')
+            toast.success('Potrero eliminado')
           } catch (err) {
-            console.error('Error eliminando parcela:', err)
-            toast.error('Error eliminando parcela')
+            console.error('Error eliminando potrero:', err)
+            toast.error('Error eliminando potrero')
           }
           setConfirm(null)
         }}
@@ -268,11 +268,11 @@ export default function ParcelsPage() {
 
           <span>›</span>
 
-          <span>Parcelas</span>
+          <span>Potreros</span>
 
         </div>
 
-        <h2>Parcelas del Terreno</h2>
+        <h2>Potreros del Terreno</h2>
 
         <p>
           {terrain?.name} — {terrain?.areaHectares?.toFixed(2)} ha
@@ -412,10 +412,10 @@ export default function ParcelsPage() {
         <div className="col-side">
           <div className="card">
             <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 16 }}>
-              Nueva Parcela
+              Nuevo Potrero
             </h3>
             <div className="form-group mb-16">
-              <label>Nombre de la Parcela</label>
+              <label>Nombre del Potrero</label>
               <input
                 value={parcelName}
                 onChange={(e) => setParcelName(e.target.value)}
@@ -471,7 +471,7 @@ export default function ParcelsPage() {
                   onClick={handleSaveParcel}
                   disabled={saving}
                 >
-                  {saving ? <><span className="spinner" /> Guardando...</> : '✓ Guardar Parcela'}
+                  {saving ? <><span className="spinner" /> Guardando...</> : '✓ Guardar Potrero'}
                 </button>
               </>
             )}
@@ -489,10 +489,10 @@ export default function ParcelsPage() {
           {parcels.length > 0 && (
             <div className="card">
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
-                Parcelas Existentes ({parcels.length})
+                Potreros Existentes ({parcels.length})
               </h3>
               <div style={{ fontSize: 13, marginBottom: 16, color: 'var(--color-text-secondary)' }}>
-                <strong>Cobertura:</strong> {coveragePercent.toFixed(1)}% del terreno
+                <strong>Cobertura:</strong> {coveragePercent.toFixed(1)}% del Terreno
               </div>
               <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
                 {Object.entries(STATUS_LABELS).map(([status, label]) => (

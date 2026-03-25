@@ -132,7 +132,8 @@ public class NdviController {
     public ResponseEntity<Map<String, Object>> analyzeTerrain(
             @PathVariable Long terrainId,
             @RequestParam(required = false) String startDate,
-            @RequestParam(required = false) String endDate) {
+            @RequestParam(required = false) String endDate,
+            @RequestParam(required = false, defaultValue = "DEFAULT") String biomassMethod) {
 
         LocalDate today = LocalDate.now();
         LocalDate end = (endDate != null && !endDate.isBlank())
@@ -154,8 +155,8 @@ public class NdviController {
             ));
         }
 
-        log.info("Iniciando análisis NDVI para terreno {} en rango {} -> {}", terrainId, start, end);
-        Map<String, Object> result = analysisOrchestrator.runAnalysis(terrainId, start, end);
+        log.info("Iniciando análisis NDVI para terreno {} en rango {} -> {} con método biomasa={}", terrainId, start, end, biomassMethod);
+        Map<String, Object> result = analysisOrchestrator.runAnalysis(terrainId, start, end, biomassMethod);
         return ResponseEntity.ok(result);
     }
 

@@ -1,5 +1,6 @@
 package com.simgan.service;
 
+import com.simgan.dto.ProcessedParcelNdviDto;
 import com.simgan.dto.PlanetImageProcessingResponse;
 import com.simgan.dto.SentinelImageProcessingResponse;
 import com.simgan.entity.*;
@@ -14,18 +15,11 @@ import java.util.*;
 /**
  * Orquestador del pipeline de análisis NDVI.
  *
- * Orden de prioridad:
- *   1. Planet Labs (si API key configurada)
- *   2. Sentinel-2 / Copernicus (gratuito, búsqueda STAC)
- *   3. Seed data (datos demo realistas)
- *
- * Pipeline completo:
+ * Pipeline:
  *   1. Obtener GeoJSON del terreno
- *   2. Buscar escenas disponibles (Planet o Sentinel)
- *   3. Seleccionar mejor escena (menor nubosidad, más reciente)
- *   4. Activar/descargar assets
- *   5. Procesar GeoTIFF → calcular NDVI por parcela
- *   6. Guardar registros + generar alertas
+ *   2. Buscar escenas disponibles (Sentinel-2)
+ *   3. Enviar al servicio de procesamiento Python
+ *   4. Guardar registros + generar alertas
  */
 @Service
 @Slf4j
@@ -36,7 +30,6 @@ public class AnalysisOrchestrator {
     private final SentinelApiService sentinelApi;
     private final ImageProcessingClientService imageProcessingClientService;
     private final NdviProcessingService processingService;
-    //private final NdviSeedService seedService;
     private final TerrainRepository terrainRepository;
     private final ParcelRepository parcelRepository;
     private final NdviRecordRepository ndviRecordRepository;
@@ -44,219 +37,7 @@ public class AnalysisOrchestrator {
     private final GanadoRepository ganadoRepository;
     private final NdviAlertRepository ndviAlertRepository;
 
-    /**
-     * Ejecuta el análisis completo para un terreno.
-     * Intenta Planet → Sentinel → Seed data como fallback.
-     */ 
-
-    /* 
-    public Map<String, Object> runAnalysis(Long terrainId) {
-        Map<String, Object> result = new LinkedHashMap<>();
-
-        Terrain terrain = terrainRepository.findById(terrainId)
-                .orElseThrow(() -> new RuntimeException("Terreno no encontrado: " + terrainId));
-
-        List<Parcel> parcels = parcelRepository.findByTerrainId(terrainId);
-        if (parcels.isEmpty()) {
-            result.put("error", "No hay parcelas definidas en este terreno. Crea parcelas primero.");
-            return result;
-        }
-
-        result.put("terrainId", terrainId);
-        result.put("terrainName", terrain.getName());
-        result.put("parcelCount", parcels.size());
-
-        String geoJson = terrain.getGeoJson();
-        LocalDate endDate = LocalDate.now().minusDays(35);
-        LocalDate startDate = endDate.minusDays(180);
-
-        // ===== 1. Try Planet Labs =====
-        if (planetApi.isConfigured()) {
-            log.info("Intentando análisis con Planet Labs para terreno {}", terrainId);
-            result.put("source", "PLANET");
-
-            try {
-
-                // Buscamos escenas con un umbral de nubes aceptable (ej: 20%)
-                List<Map<String, Object>> scenes = planetApi.searchScenes(terrain.getGeoJson(), startDate, endDate, 0.2);
-
-                if (!scenes.isEmpty()) {
-                    result.put("scenesFound", scenes.size());
-                    log.info("Planet: {} escenas encontradas en los últimos 15 días", scenes.size());
-
-                    // Ordenamos las escenas por fecha de adquisición (la más reciente primero)
-                    scenes.sort((a, b) -> ((String) b.get("acquired")).compareTo((String) a.get("acquired")));
-
-                    boolean processedSuccess = false;
-
-                    // Lógica de reintento: Intentamos con las 5 más recientes
-                    for (int i = 0; i < Math.min(scenes.size(), 5); i++) {
-                        Map<String, Object> currentScene = scenes.get(i);
-                        String sceneId = (String) currentScene.get("id");
-                        Double cloudCover = (Double) currentScene.get("cloud_cover");
-                        String acquiredStr = (String) currentScene.get("acquired");
-
-                        log.info("Planet: Evaluando escena {}/{} -> ID: {} (Fecha: {}, Nubes: {}%)",
-                                (i + 1), Math.min(scenes.size(), 5), sceneId, acquiredStr, cloudCover);
-
-                        // activateAndGetDownloadUrl ahora retorna Map con url, assetType, numBands
-                        Map<String, Object> assetInfo = planetApi.activateAndGetDownloadUrl(sceneId);
-
-                        if (assetInfo != null) {
-                            String downloadUrl = (String) assetInfo.get("url");
-                            String usedAssetType = (String) assetInfo.get("assetType");
-                            int numBands = (int) assetInfo.get("numBands");
-
-                            File geotiff = planetApi.downloadGeoTiff(downloadUrl, sceneId);
-
-                            if (geotiff != null && geotiff.exists()) {
-                                LocalDate captureDate = LocalDate.parse(acquiredStr.substring(0, 10));
-
-                                // Procesar GeoTIFF — pasar info de bandas
-                                List<NdviRecord> records = processingService.processGeoTiff(
-                                        geotiff, terrainId, captureDate, sceneId);
-
-                                if (records != null && !records.isEmpty()) {
-                                    result.put("selectedScene", sceneId);
-                                    result.put("assetType", usedAssetType);
-                                    result.put("numBands", numBands);
-                                    result.put("cloudCover", cloudCover);
-                                    result.put("recordsProcessed", records.size());
-                                    result.put("message", String.format(
-                                            "✅ Análisis completado. %d parcelas analizadas. Escena: %s (%s, %d bandas)",
-                                            records.size(), captureDate, usedAssetType, numBands));
-
-                                    geotiff.delete();
-                                    processedSuccess = true;
-                                    break;
-                                }
-                                geotiff.delete();
-                            }
-                        } else {
-                            log.warn("Planet: Ningún asset analítico disponible para escena {}.", sceneId);
-                        }
-                    }
-
-                    if (processedSuccess) {
-                        return result;
-                    } else {
-                        result.put("planetNote", "Escenas recientes encontradas pero sus assets aún están en preparación.");
-                    }
-
-                } else {
-                    log.info("Planet: no hay fotos recientes (últimos 15 días)");
-                    result.put("planetNote", "Sin imágenes recientes disponibles. Intentando Sentinel-2...");
-                }
-            } catch (Exception e) {
-                log.error("Error en pipeline Planet: {}", e.getMessage(), e);
-                result.put("planetError", e.getMessage());
-                result.put("planetNote", "Error técnico con Planet Labs. Intentando Sentinel-2...");
-            }
-        }
-
-        // ===== 2. Try Sentinel-2 =====
-        log.info("Intentando análisis con Sentinel-2 para terreno {}", terrainId);
-        try {
-            List<Map<String, Object>> scenes = sentinelApi.searchScenes(geoJson, startDate, endDate, 0.6);
-
-            if (!scenes.isEmpty()) {
-                result.put("source", result.containsKey("source") ? "PLANET+SENTINEL" : "SENTINEL");
-                result.put("sentinelScenesFound", scenes.size());
-                log.info("Sentinel: {} escenas encontradas. Intentando descarga...", scenes.size());
-
-                // SIEMPRE intentar descargar - isConfigured() logea el error si falta auth
-                for (int si = 0; si < Math.min(scenes.size(), 3); si++) {
-                    Map<String, Object> bestScene = scenes.get(si);
-                    String sentSceneId = (String) bestScene.get("id");
-                    log.info("Sentinel: Procesando escena {}/{}: {} (nubes: {}%)",
-                            si + 1, Math.min(scenes.size(), 3), sentSceneId, bestScene.get("cloud_cover"));
-
-                    try {
-                        Map<String, Object> bandData = sentinelApi.downloadAndExtractBands(bestScene);
-
-                        if (bandData != null) {
-                            File redFile = (File) bandData.get("redFile");
-                            File nirFile = (File) bandData.get("nirFile");
-                            int sentEpsg = (int) bandData.getOrDefault("epsg", 32618);
-                            double sentUlx = (double) bandData.getOrDefault("ulx", 600000.0);
-                            double sentUly = (double) bandData.getOrDefault("uly", 500000.0);
-
-                            String dtStr = (String) bestScene.getOrDefault("datetime", "");
-                            LocalDate sentCaptureDate = !dtStr.isEmpty()
-                                    ? LocalDate.parse(dtStr.substring(0, 10)) : endDate;
-
-                            List<NdviRecord> sentRecords = processingService.processSentinelBands(
-                                    redFile, nirFile, sentEpsg, sentUlx, sentUly,
-                                    terrainId, sentCaptureDate, sentSceneId);
-
-                            if (sentRecords != null && !sentRecords.isEmpty()) {
-                                result.put("selectedScene", sentSceneId);
-                                result.put("sentinelCloudCover", bestScene.get("cloud_cover"));
-                                result.put("recordsProcessed", sentRecords.size());
-                                result.put("message", String.format(
-                                        "✅ Análisis Sentinel-2 completado. %d parcelas procesadas (EPSG:%d). Escena: %s",
-                                        sentRecords.size(), sentEpsg, sentCaptureDate));
-                                return result;
-                            } else {
-                                log.warn("Sentinel: bandas descargadas pero 0 NDVI records generados para escena {}", sentSceneId);
-                            }
-                        }
-                    } catch (Exception e) {
-                        log.error("Error procesando Sentinel escena {}: {}", sentSceneId, e.getMessage());
-                        result.put("sentinelError", e.getMessage());
-                    }
-                }
-                result.put("sentinelNote", "Escenas encontradas pero la descarga/procesamiento falló. Ver logs del backend.");
-            } else {
-                log.info("Sentinel: sin escenas en rango");
-                result.put("sentinelNote", "Sin escenas Sentinel-2 en los últimos 90 días.");
-            }
-        } catch (Exception e) {
-            log.warn("Error buscando Sentinel-2: {}", e.getMessage());
-            result.put("sentinelError", e.getMessage());
-        }
-
-        // ===== 3. Fallback: Seed Data =====
-        boolean hasExistingData = ndviRecordRepository.countByTerrainId(terrainId) > 0;
-
-        if (!hasExistingData) {
-            log.info("Generando seed data para terreno {}", terrainId);
-            int seedCount = seedService.seedTerrainData(terrainId);
-            result.put("source", result.getOrDefault("source", "") + "+SEED");
-            result.put("seedRecords", seedCount);
-            result.put("message", String.format(
-                    "Se generaron %d registros NDVI demo (6 meses de histórico simulado). " +
-                    "Configure API keys para usar imágenes satelitales reales.", seedCount));
-        } else if (!result.containsKey("recordsProcessed")) {
-            // Has existing data but no new records from Planet/Sentinel
-            long existingCount = ndviRecordRepository.countByTerrainId(terrainId);
-            result.put("existingRecords", existingCount);
-            if (!result.containsKey("message")) {
-                result.put("message", String.format(
-                        "Ya existen %d registros NDVI. Los datos de Planet/Sentinel no generaron nuevos registros. " +
-                        "Los datos existentes se muestran en el dashboard.", existingCount));
-            }
-        }
-
-        // ===== 4. Generate grazing-based alerts =====
-        generateGrazingAlerts(terrainId);
-
-        return result;
-    }
-    
-     */   
-
-
-    /* 
-    public Map<String, Object> runAnalysis(Long terrainId) {
-    LocalDate endDate = LocalDate.now();
-    LocalDate startDate = endDate.minusDays(180);
-    return runAnalysis(terrainId, startDate, endDate);
-}
-
-*/
-
-    public Map<String, Object> runAnalysis(Long terrainId, LocalDate startDate, LocalDate endDate) {
+    public Map<String, Object> runAnalysis(Long terrainId, LocalDate startDate, LocalDate endDate, String biomassMethod) {
     Map<String, Object> result = new LinkedHashMap<>();
 
     Terrain terrain = terrainRepository.findById(terrainId)
@@ -336,6 +117,8 @@ public class AnalysisOrchestrator {
                                 (Integer) asset.get("numBands"),
                                 cloudCover
                         );
+
+                        calculateBiomassIfNeeded(processingResponse.getParcelResults(), biomassMethod);
 
                         List<NdviRecord> records = processingService.persistProcessedResults(
                                 terrain,
@@ -424,6 +207,8 @@ public class AnalysisOrchestrator {
                             sceneId,
                             cloudCover
                     );
+
+                    calculateBiomassIfNeeded(processingResponse.getParcelResults(), biomassMethod);
 
                     List<NdviRecord> records = processingService.persistSentinelResults(
                             terrain,
@@ -537,6 +322,23 @@ public class AnalysisOrchestrator {
             return number.doubleValue();
         }
         return Double.MAX_VALUE;
+    }
+
+    /**
+     * Calcula biomasa en los resultados de parcela según el método seleccionado.
+     * DEFAULT: biomass_kg_ha = max(0, (meanNDVI - 0.1) * 12000)
+     * SAMPLING: (no implementado aún)
+     */
+    private void calculateBiomassIfNeeded(Collection<ProcessedParcelNdviDto> parcelResults, String biomassMethod) {
+        if (parcelResults == null || !"DEFAULT".equalsIgnoreCase(biomassMethod)) {
+            return;
+        }
+        for (ProcessedParcelNdviDto dto : parcelResults) {
+            if (dto.getMeanNdvi() != null) {
+                double biomass = Math.max(0.0, (dto.getMeanNdvi() - 0.1) * 12000.0);
+                dto.setBiomassKgPerHa(Math.round(biomass * 100.0) / 100.0);
+            }
+        }
     }
 
     

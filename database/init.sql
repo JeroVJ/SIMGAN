@@ -48,24 +48,7 @@ CREATE TABLE IF NOT EXISTS farms (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'farms' AND column_name = 'propietario'
-    ) THEN
-        ALTER TABLE farms DROP COLUMN propietario;
-    END IF;
 
-    IF EXISTS (
-        SELECT 1
-        FROM information_schema.columns
-        WHERE table_name = 'farms' AND column_name = 'owner'
-    ) THEN
-        ALTER TABLE farms DROP COLUMN owner;
-    END IF;
-END $$;
 
 -- Terrains
 CREATE TABLE IF NOT EXISTS terrains (

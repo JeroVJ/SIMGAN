@@ -117,11 +117,11 @@ export function useTerrain(terrainId) {
     async (payload) => {
       try {
         const parcel = await parcelApi.create(payload)
-        toast.success('Parcela guardada')
+        toast.success('Potrero guardado')
         setParcels(await parcelApi.getByTerrain(terrainId))
         return parcel
       } catch (err) {
-        toast.error('Error guardando parcela')
+        toast.error('Error guardando potrero')
         throw err
       }
     },
@@ -133,7 +133,7 @@ export function useTerrain(terrainId) {
       const info = parcelInfo[parcelId]
       if (info?.lote) {
         toast.error(
-          `No se puede cambiar: parcela en uso por "${info.lote.name}". Retire el lote primero.`
+          `No se puede cambiar: potrero en uso por "${info.lote.name}". Retire el lote primero.`
         )
         return
       }
@@ -153,15 +153,15 @@ export function useTerrain(terrainId) {
     async (parcelId) => {
       const info = parcelInfo[parcelId]
       if (info?.lote) {
-        toast.error(`No se puede eliminar: parcela en uso por "${info.lote.name}"`)
+        toast.error(`No se puede eliminar: potrero en uso por "${info.lote.name}"`)
         return
       }
       try {
         await parcelApi.delete(parcelId)
         setParcels(await parcelApi.getByTerrain(terrainId))
-        toast.success('Parcela eliminada')
+        toast.success('Potrero eliminado')
       } catch (err) {
-        toast.error('Error eliminando parcela')
+        toast.error('Error eliminando potrero')
         throw err
       }
     },
@@ -192,10 +192,10 @@ export function useTerrain(terrainId) {
     async (loteId, parcelId) => {
       try {
         await loteApi.assignParcel(loteId, parcelId)
-        toast.success('Parcela asignada')
+        toast.success('Potrero asignado')
         await reload()
       } catch (err) {
-        toast.error(err.response?.data?.message || 'Error asignando parcela')
+        toast.error(err.response?.data?.message || 'Error asignando potrero')
         throw err
       }
     },

@@ -16,7 +16,6 @@ class ProcessedParcelNdviResponse(BaseModel):
     stdNdvi: float | None = None
     medianNdvi: float | None = None
     pixelCount: int
-    biomassKgPerHa: float | None = None
     vegetationCoverPercent: float | None = None
     warning: str | None = None
 

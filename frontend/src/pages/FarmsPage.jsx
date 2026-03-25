@@ -67,14 +67,13 @@ export default function FarmsPage() {
     <div className="page-container">
       <div className="page-header">
         <h2>Mis Fincas</h2>
-        <p>Gestiona tus fincas ganaderas y sus terrenos</p>
+        <p>Gestiona tus fincas ganaderas y sus Terrenos</p>
       </div>
 
       {farms.length === 0 ? (
         <EmptyState
-          icon="🌾"
           title="Sin fincas registradas"
-          description="Crea tu primera finca para comenzar a gestionar terrenos y parcelas."
+          description="Crea tu primera finca para comenzar a gestionar tus terrenos y potreros."
           action={
             <button
               className="action-btn action-btn--primary"
@@ -156,7 +155,7 @@ export default function FarmsPage() {
                 <div className="farm-card__stat">
                   <span className="fcs-val">{terrains.length}</span>
                   <span className="fcs-lbl">
-                    terreno{terrains.length !== 1 ? 's' : ''}
+                    Terreno{terrains.length !== 1 ? 's' : ''}
                   </span>
                 </div>
 

@@ -26,9 +26,9 @@ function FitBounds({ geoJson }) {
 }
 
 const STATUS_CONFIG = {
-  DISPONIBLE: { label: 'Disponible', color: '#4ade80', bgAlpha: 0.35, icon: '🌿' },
-  EN_USO: { label: 'En uso', color: '#f59e0b', bgAlpha: 0.45, icon: '🐄' },
-  EN_DESCANSO: { label: 'En descanso', color: '#3b82f6', bgAlpha: 0.3, icon: '💤' }
+  DISPONIBLE: { label: 'Disponible', color: '#4ade80', bgAlpha: 0.35 },
+  EN_USO: { label: 'En uso', color: '#f59e0b', bgAlpha: 0.45 },
+  EN_DESCANSO: { label: 'En descanso', color: '#3b82f6', bgAlpha: 0.3}
 }
 
 export default function RotationPage() {
@@ -49,7 +49,7 @@ export default function RotationPage() {
     } catch {}
   }
 
-  if (loading) return <Spinner page label="Cargando rotación..." />
+  if (loading) return <Spinner page label="Cargando terreno..." />
 
   const terrainGeoJson = (() => {
     try {
@@ -83,14 +83,14 @@ export default function RotationPage() {
 
           <span>›</span>
 
-          <span>Rotación</span>
+          <span>Terrenos</span>
 
         </div>
 
-        <h2>Rotación de Pastoreo</h2>
+        <h2>Pastoreo</h2>
 
         <p>
-          Gestiona el estado de cada parcela para la rotación del ganado
+          Gestiona el estado de cada potrero para el manejo del ganado
         </p>
 
       </div>
@@ -237,7 +237,7 @@ export default function RotationPage() {
                               fontWeight: 500
                             }}
                           >
-                            🐄 {info.lote.name} ({info.lote.cabezas})
+                             {info.lote.name} ({info.lote.cabezas})
                           </div>
 
                         )}
@@ -295,7 +295,7 @@ export default function RotationPage() {
                 marginBottom: 16
               }}
             >
-              Control de Parcelas
+              Control de Potreros
             </h3>
 
             <div className="rotation-grid">
@@ -326,7 +326,7 @@ export default function RotationPage() {
                       <div>
 
                         <h4 style={{ fontSize: 16 }}>
-                          {isLocked && '🔒 '}
+                          {isLocked  }
                           {p.name}
                         </h4>
 
@@ -365,21 +365,21 @@ export default function RotationPage() {
               className="action-btn action-btn--nav"
               onClick={() => navigate(`/terrains/${terrainId}/parcels`)}
             >
-              ← Volver a Parcelas
+              ← Volver a Potreros
             </button>
 
             <button
               className="action-btn action-btn--nav"
               onClick={() => navigate(`/terrains/${terrainId}/lotes`)}
             >
-              🐄 Lotes
+               Lotes
             </button>
 
             <button
               className="action-btn action-btn--nav action-btn--primary"
               onClick={() => navigate(`/terrains/${terrainId}/ndvi`)}
             >
-              🛰️ Dashboard NDVI
+               Dashboard NDVI
             </button>
 
           </div>

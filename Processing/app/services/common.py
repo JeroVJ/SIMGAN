@@ -100,7 +100,6 @@ def build_result(parcel: ParcelProcessRequest, ndvi_values: list[float]) -> Proc
     median = float(np.median(values))
     std = float(values.std())
     vegetation_cover = float((values > 0.2).sum() / values.size * 100.0)
-    biomass = max(0.0, (mean - 0.1) * 12000.0)
     return ProcessedParcelNdviResponse(
         parcelId=parcel.parcelId,
         parcelName=parcel.parcelName,
@@ -110,6 +109,5 @@ def build_result(parcel: ParcelProcessRequest, ndvi_values: list[float]) -> Proc
         stdNdvi=round(std, 4),
         medianNdvi=round(median, 4),
         pixelCount=int(values.size),
-        biomassKgPerHa=round(biomass, 2),
         vegetationCoverPercent=round(vegetation_cover, 2),
     )

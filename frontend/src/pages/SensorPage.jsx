@@ -451,7 +451,7 @@ export default function SensorPage() {
           {sensors.length === 0 && !loading && (
             <div className="card">
               <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>📡</div>
+                <div style={{ fontSize: 32, marginBottom: 8 }}></div>
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Sin sensores</div>
                 <div style={{ fontSize: 12 }}>
                   Crea el primer sensor haciendo click en el mapa →
