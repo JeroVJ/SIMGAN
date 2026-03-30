@@ -106,6 +106,14 @@ export const ndviApi = {
   getGrazingEstimate: (terrainId) => api.get(`/ndvi/grazing-estimate/${terrainId}`).then(r => r.data)
 }
 
+// ===== CALIBRACIÓN NDVI =====
+export const calibrationApi = {
+  getStatus: (terrainId, type = 'OPTIM') =>
+    api.get(`/ndvi/calibration/status/${terrainId}`, { params: { type } }).then(r => r.data),
+  runCalibration: (terrainId, calibrationDate, type = 'OPTIM') =>
+    api.post(`/ndvi/calibration/${terrainId}`, null, { params: { calibrationDate, type } }).then(r => r.data),
+}
+
 // ===== LOTES (GANADO) =====
 export const loteApi = {
   // Lotes

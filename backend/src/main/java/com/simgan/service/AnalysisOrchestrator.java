@@ -32,10 +32,7 @@ public class AnalysisOrchestrator {
     private final NdviProcessingService processingService;
     private final TerrainRepository terrainRepository;
     private final ParcelRepository parcelRepository;
-    private final NdviRecordRepository ndviRecordRepository;
-    private final LoteRepository loteRepository;
-    private final GanadoRepository ganadoRepository;
-    private final NdviAlertRepository ndviAlertRepository;
+     
 
     public Map<String, Object> runAnalysis(Long terrainId, LocalDate startDate, LocalDate endDate, String biomassMethod) {
     Map<String, Object> result = new LinkedHashMap<>();
@@ -78,7 +75,9 @@ public class AnalysisOrchestrator {
                     planetApi.searchScenes(geoJson, startDate, endDate, 0.2);
 
             if (!scenes.isEmpty()) {
-
+            //    - Ordena las escenas:
+            //    - Primero por fecha de adquisición
+            //    - Luego por menor cobertura de nubes
                 scenes.sort(Comparator
                     .comparing((Map<String, Object> scene) -> extractSceneDate(scene, "acquired"))
                     .thenComparingDouble(this::extractCloudCover));
@@ -181,73 +180,107 @@ public class AnalysisOrchestrator {
                     .comparing((Map<String, Object> scene) -> extractSceneDate(scene, "datetime"))
                     .thenComparingDouble(this::extractCloudCover));
 
+            // Agrupar escenas por fecha para evitar tiles redundantes
+            Map<LocalDate, List<Map<String, Object>>> scenesByDate = new LinkedHashMap<>();
             for (Map<String, Object> scene : scenes) {
-                String sceneId = (String) scene.get("id");
+                LocalDate date = extractSceneDate(scene, "datetime");
+                scenesByDate.computeIfAbsent(date, k -> new ArrayList<>()).add(scene);
+            }
 
-                try {
-                    LocalDate date = LocalDate.parse(
-                            ((String) scene.get("datetime")).substring(0, 10));
+            for (Map.Entry<LocalDate, List<Map<String, Object>>> entry : scenesByDate.entrySet()) {
+                LocalDate date = entry.getKey();
+                List<Map<String, Object>> tilesForDate = entry.getValue();
 
+                // Parcelas pendientes: las que aún no tienen resultado válido para esta fecha
+                Set<Long> coveredParcelIds = new HashSet<>();
+
+                for (Map<String, Object> scene : tilesForDate) {
+                    String sceneId = (String) scene.get("id");
+
+                    // Solo enviar parcelas que aún no están cubiertas
                     Map<Long, Parcel> pendingParcels = new LinkedHashMap<>();
                     for (Parcel parcel : parcels) {
-                        pendingParcels.put(parcel.getId(), parcel);
+                        if (!coveredParcelIds.contains(parcel.getId())) {
+                            pendingParcels.put(parcel.getId(), parcel);
+                        }
                     }
 
-                    Double cloudCover = null;
-                    Object cloudCoverValue = scene.get("cloud_cover");
-                    if (cloudCoverValue instanceof Number number) {
-                        cloudCover = number.doubleValue();
+                    if (pendingParcels.isEmpty()) {
+                        log.info("Sentinel tile {} omitido: todas las parcelas ya cubiertas para fecha {}", sceneId, date);
+                        break;
                     }
 
-                    SentinelImageProcessingResponse processingResponse = imageProcessingClientService.processSentinelScene(
-                            terrain,
-                            new ArrayList<>(pendingParcels.values()),
-                            scene,
-                            date,
-                            sceneId,
-                            cloudCover
-                    );
+                    try {
+                        Double cloudCover = null;
+                        Object cloudCoverValue = scene.get("cloud_cover");
+                        if (cloudCoverValue instanceof Number number) {
+                            cloudCover = number.doubleValue();
+                        }
 
-                    calculateBiomassIfNeeded(processingResponse.getParcelResults(), biomassMethod);
-
-                    List<NdviRecord> records = processingService.persistSentinelResults(
-                            terrain,
-                            date,
-                            sceneId,
-                            cloudCover,
-                            processingResponse.getParcelResults(),
-                            pendingParcels
-                    );
-
-                    if (records != null && !records.isEmpty()) {
-                        int recordCount = records.size();
-                        totalRecordsProcessed += recordCount;
-                        totalScenesProcessed++;
-                        sentinelRecordsProcessed += recordCount;
-                        sentinelScenesProcessed++;
-                        totalProcessingDurationMs += processingResponse.getProcessingDurationMs();
-                        sourcesUsed.add("SENTINEL");
-                        processedDates.add(date);
-
-                        result.put("rasterWidth", processingResponse.getRasterWidth());
-                        result.put("rasterHeight", processingResponse.getRasterHeight());
-                        result.put("pixelSize", processingResponse.getPixelSize());
-
-                        log.info(
-                                "Escena Sentinel {} procesada correctamente: {} registros NDVI generados para fecha {}",
+                        SentinelImageProcessingResponse processingResponse = imageProcessingClientService.processSentinelScene(
+                                terrain,
+                                new ArrayList<>(pendingParcels.values()),
+                                scene,
+                                date,
                                 sceneId,
-                                recordCount,
-                                date
+                                cloudCover
                         );
-                    } else {
-                        sentinelLastError = processingResponse.getWarnings() == null || processingResponse.getWarnings().isEmpty()
-                                ? "procesamientoImagen no devolvió parcelas válidas para la escena Sentinel."
-                                : String.join(" | ", processingResponse.getWarnings());
-                        log.warn("Sentinel escena {} no generó registros NDVI persistibles", sceneId);
+
+                        calculateBiomassIfNeeded(processingResponse.getParcelResults(), biomassMethod);
+
+                        // Filtrar solo parcelas con pixelCount > 0 (cobertura real del tile)
+                        List<ProcessedParcelNdviDto> validResults = new ArrayList<>();
+                        if (processingResponse.getParcelResults() != null) {
+                            for (ProcessedParcelNdviDto pr : processingResponse.getParcelResults()) {
+                                if (pr != null && pr.getParcelId() != null
+                                        && pr.getPixelCount() != null && pr.getPixelCount() > 0) {
+                                    validResults.add(pr);
+                                    coveredParcelIds.add(pr.getParcelId());
+                                }
+                            }
+                        }
+
+                        List<NdviRecord> records = processingService.persistSentinelResults(
+                                terrain,
+                                date,
+                                sceneId,
+                                cloudCover,
+                                validResults,
+                                pendingParcels
+                        );
+
+                        if (records != null && !records.isEmpty()) {
+                            int recordCount = records.size();
+                            totalRecordsProcessed += recordCount;
+                            totalScenesProcessed++;
+                            sentinelRecordsProcessed += recordCount;
+                            sentinelScenesProcessed++;
+                            totalProcessingDurationMs += processingResponse.getProcessingDurationMs();
+                            sourcesUsed.add("SENTINEL");
+                            processedDates.add(date);
+
+                            result.put("rasterWidth", processingResponse.getRasterWidth());
+                            result.put("rasterHeight", processingResponse.getRasterHeight());
+                            result.put("pixelSize", processingResponse.getPixelSize());
+
+                            log.info(
+                                    "Escena Sentinel {} procesada: {} registros NDVI para fecha {} (cubiertas {}/{} parcelas)",
+                                    sceneId,
+                                    recordCount,
+                                    date,
+                                    coveredParcelIds.size(),
+                                    parcels.size()
+                            );
+                        } else {
+                            sentinelLastError = processingResponse.getWarnings() == null || processingResponse.getWarnings().isEmpty()
+                                    ? "procesamientoImagen no devolvió parcelas válidas para la escena Sentinel."
+                                    : String.join(" | ", processingResponse.getWarnings());
+                            log.warn("Sentinel escena {} no generó registros NDVI persistibles", sceneId);
+                        }
+                    } catch (Exception sceneError) {
+                        sentinelLastError = sceneError.getMessage();
+                        log.warn("Error procesando escena Sentinel {}: {}", sceneId, sceneError.getMessage());
                     }
-                } catch (Exception sceneError) {
-                    sentinelLastError = sceneError.getMessage();
-                    log.warn("Error procesando escena Sentinel {}: {}", sceneId, sceneError.getMessage());
                 }
             }
         }
@@ -342,88 +375,5 @@ public class AnalysisOrchestrator {
     }
 
     
-    /**
-     * Generate alerts for parcels where the estimated grazing days are low
-     * or where NDVI/biomass indicates the parcel needs rest.
-     */
-    private void generateGrazingAlerts(Long terrainId) {
-        List<Parcel> parcels = parcelRepository.findByTerrainId(terrainId);
-
-        for (Parcel parcel : parcels) {
-            List<Lote> occupying = loteRepository.findByCurrentParcelId(parcel.getId());
-            Lote activeLote = occupying.stream()
-                    .filter(l -> l.getFechaSalida() == null)
-                    .findFirst().orElse(null);
-            if (activeLote == null) continue;
-
-            Optional<NdviRecord> latestNdvi = ndviRecordRepository
-                    .findFirstByParcelIdOrderByCaptureDateDesc(parcel.getId());
-            if (latestNdvi.isEmpty()) continue;
-
-            Double biomassKgPerHa = latestNdvi.get().getBiomassKgPerHa();
-            Double ndvi = latestNdvi.get().getMeanNdvi();
-            List<Ganado> ganados = ganadoRepository.findByLoteIdOrderByNumeracion(activeLote.getId());
-            if (ganados.isEmpty()) continue;
-
-            double pesoPromedio = ganados.stream().mapToDouble(Ganado::getPesoActual).average().orElse(0);
-            int cabezas = ganados.size();
-
-            // Calculate estimated days
-            if (biomassKgPerHa != null && parcel.getAreaHectares() != null) {
-                double totalBiomass = biomassKgPerHa * parcel.getAreaHectares();
-                double residual = totalBiomass * 0.30;
-                double available = Math.max(0, totalBiomass - residual);
-                double consumoDiarioMS = pesoPromedio * 0.025 * cabezas;
-                int estimatedDays = consumoDiarioMS > 0 ? (int) Math.floor(available / consumoDiarioMS) : 0;
-
-                if (estimatedDays == 0) {
-                    NdviAlert alert = NdviAlert.builder()
-                            .parcel(parcel)
-                            .alertType(NdviAlert.AlertType.PASTURE_DEPLETED)
-                            .severity(NdviAlert.AlertSeverity.CRITICAL)
-                            .threshold(0.0)
-                            .currentValue((double) estimatedDays)
-                            .message(String.format(
-                                "Sin pasto disponible en '%s' para el lote '%s' (%d cab.). "
-                                + "Retire el lote y ponga la parcela en descanso.",
-                                parcel.getName(), activeLote.getName(), cabezas))
-                            .build();
-                    ndviAlertRepository.save(alert);
-                    log.warn("ALERTA CRITICA: Pasto agotado en parcela {} para lote {}",
-                            parcel.getName(), activeLote.getName());
-                } else if (estimatedDays <= 3) {
-                    NdviAlert alert = NdviAlert.builder()
-                            .parcel(parcel)
-                            .alertType(NdviAlert.AlertType.GRAZING_DAYS_LOW)
-                            .severity(NdviAlert.AlertSeverity.HIGH)
-                            .threshold(3.0)
-                            .currentValue((double) estimatedDays)
-                            .message(String.format(
-                                "Solo %d dia(s) de pasto restante en '%s' para '%s' (%d cab.). "
-                                + "Planifique la rotacion.",
-                                estimatedDays, parcel.getName(), activeLote.getName(), cabezas))
-                            .build();
-                    ndviAlertRepository.save(alert);
-                    log.warn("ALERTA: {} dias de pasto en parcela {} para lote {}",
-                            estimatedDays, parcel.getName(), activeLote.getName());
-                }
-            }
-
-            // NDVI-based alert: if NDVI is critical and parcel is in use
-            if (ndvi != null && ndvi < 0.25) {
-                NdviAlert alert = NdviAlert.builder()
-                        .parcel(parcel)
-                        .alertType(NdviAlert.AlertType.REST_RECOMMENDED)
-                        .severity(NdviAlert.AlertSeverity.CRITICAL)
-                        .threshold(0.25)
-                        .currentValue(ndvi)
-                        .message(String.format(
-                            "NDVI critico (%.2f) en '%s' con lote '%s' activo. "
-                            + "El pasto se ha agotado. Se recomienda poner en descanso.",
-                            ndvi, parcel.getName(), activeLote.getName()))
-                        .build();
-                ndviAlertRepository.save(alert);
-            }
-        }
-    }
+   
 }

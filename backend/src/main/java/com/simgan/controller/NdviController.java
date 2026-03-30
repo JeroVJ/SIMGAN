@@ -110,55 +110,41 @@ public class NdviController {
                         .collect(Collectors.toList()));
     }
 
-    /**
-     * PATCH /api/ndvi/alerts/{alertId}/acknowledge
-     * Marcar alerta como leída
-     */
-    @PatchMapping("/alerts/{alertId}/acknowledge")
-    public ResponseEntity<Void> acknowledgeAlert(@PathVariable Long alertId) {
-        NdviAlert alert = alertRepository.findById(alertId)
-                .orElseThrow(() -> new RuntimeException("Alerta no encontrada"));
-        alert.setAcknowledged(true);
-        alert.setAcknowledgedAt(java.time.LocalDateTime.now());
-        alertRepository.save(alert);
-        return ResponseEntity.ok().build();
-    }
-
-    /**
-     * POST /api/ndvi/analyze/{terrainId}
-     * Ejecuta pipeline completo: Planet → Sentinel → Seed data
-     */
+    
     @PostMapping("/analyze/{terrainId}")
     public ResponseEntity<Map<String, Object>> analyzeTerrain(
-            @PathVariable Long terrainId,
-            @RequestParam(required = false) String startDate,
-            @RequestParam(required = false) String endDate,
-            @RequestParam(required = false, defaultValue = "DEFAULT") String biomassMethod) {
+        @PathVariable Long terrainId,
+        @RequestParam String startDate,
+        @RequestParam String endDate,
+        @RequestParam(required = false, defaultValue = "DEFAULT") String biomassMethod) {
 
-        LocalDate today = LocalDate.now();
-        LocalDate end = (endDate != null && !endDate.isBlank())
-            ? LocalDate.parse(endDate)
-            : today;
-        LocalDate start = (startDate != null && !startDate.isBlank())
-                ? LocalDate.parse(startDate)
-                : end.minusDays(180);
+    // Parse directo (sin try/catch)
+    LocalDate start = LocalDate.parse(startDate);
+    LocalDate end = LocalDate.parse(endDate);
+    LocalDate today = LocalDate.now();
 
-        if (start.isAfter(end)) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "error", "La fecha inicial no puede ser mayor que la fecha final."
-            ));
-        }
-
-        if (end.isAfter(today)) {
-            return ResponseEntity.badRequest().body(Map.of(
-                "error", "La fecha final no puede ser mayor que hoy."
-            ));
-        }
-
-        log.info("Iniciando análisis NDVI para terreno {} en rango {} -> {} con método biomasa={}", terrainId, start, end, biomassMethod);
-        Map<String, Object> result = analysisOrchestrator.runAnalysis(terrainId, start, end, biomassMethod);
-        return ResponseEntity.ok(result);
+    // Validaciones
+    if (start.isAfter(end)) {
+        return ResponseEntity.badRequest().body(Map.of(
+            "error", "La fecha inicial no puede ser mayor que la fecha final."
+        ));
     }
+
+    if (end.isAfter(today)) {
+        return ResponseEntity.badRequest().body(Map.of(
+            "error", "La fecha final no puede ser mayor que hoy."
+        ));
+    }
+
+    log.info("Iniciando análisis NDVI para terreno {} en rango {} -> {} con método biomasa={}",
+            terrainId, start, end, biomassMethod);
+
+    Map<String, Object> result =
+            analysisOrchestrator.runAnalysis(terrainId, start, end, biomassMethod);
+
+    return ResponseEntity.ok(result);
+    
+  }
 
     /**
      * GET /api/ndvi/planet/status

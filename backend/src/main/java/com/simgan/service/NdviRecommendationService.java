@@ -26,10 +26,12 @@ import java.util.stream.Collectors;
  * Biomasa (kg MS/ha) = max(0, (NDVI - 0.1) * 12000)
  * Capacidad de carga estimada (UGG/ha) = biomasa / 2000
  */
-@Service
+@Service   // Servicio de Motor de recomendaciones basado en NDVI
 @Slf4j
 @RequiredArgsConstructor
-public class NdviRecommendationService {
+public class NdviRecommendationService {     
+
+
 
     private final NdviRecordRepository ndviRecordRepository;
     private final NdviAlertRepository alertRepository;

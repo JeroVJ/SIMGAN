@@ -203,6 +203,26 @@ CREATE TABLE IF NOT EXISTS lote_parcel_history (
     fecha_salida DATE
 );
 
+-- NDVI Calibrations (reference optimal NDVI per terrain/parcel)
+CREATE TABLE IF NOT EXISTS ndvi_calibrations (
+    id BIGSERIAL PRIMARY KEY,
+    terrain_id BIGINT NOT NULL REFERENCES terrains(id) ON DELETE CASCADE,
+    parcel_id BIGINT REFERENCES parcels(id) ON DELETE CASCADE,
+    calibration_date DATE NOT NULL,
+    calibration_type VARCHAR(10) NOT NULL DEFAULT 'OPTIM',
+    reference_ndvi DOUBLE PRECISION NOT NULL,
+    reference_biomass DOUBLE PRECISION,
+    pasture_type VARCHAR(255),
+    source VARCHAR(20) DEFAULT 'SENTINEL',
+    scene_id VARCHAR(255),
+    cloud_cover_percent DOUBLE PRECISION,
+    pixel_count INTEGER,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ndvi_calibrations_terrain ON ndvi_calibrations(terrain_id);
+CREATE INDEX IF NOT EXISTS idx_ndvi_calibrations_parcel ON ndvi_calibrations(parcel_id);
+
 CREATE INDEX IF NOT EXISTS idx_lotes_terrain ON lotes(terrain_id);
 CREATE INDEX IF NOT EXISTS idx_ganados_lote ON ganados(lote_id);
 CREATE INDEX IF NOT EXISTS idx_lote_parcel_hist ON lote_parcel_history(lote_id, fecha_ingreso);

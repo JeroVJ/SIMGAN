@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Spinner from '../components/Spinner'
 import EmptyState from '../components/EmptyState'
@@ -7,6 +7,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { useNdvi } from '../hooks'
+import { useCalibration } from '../hooks'
 import { getHealthColor } from '../utils/ndvi'
 
 const PARCEL_COLORS = ['#4ade80', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#ec4899', '#14b8a6', '#f97316']
@@ -35,6 +36,9 @@ export default function NdviDashboardPage() {
     analyze, selectParcel, acknowledgeAlert,
   } = useNdvi(terrainId)
 
+  const { status: calOptim, loading: calOptimLoading } = useCalibration(terrainId, 'OPTIM')
+  const { status: calAlert, loading: calAlertLoading } = useCalibration(terrainId, 'ALERT')
+
   const [activeTab, setActiveTab] = useState('overview')
   const today = new Date().toISOString().slice(0, 10)
   const [analysisStartDate, setAnalysisStartDate] = useState(
@@ -43,7 +47,34 @@ export default function NdviDashboardPage() {
   const [analysisEndDate, setAnalysisEndDate] = useState(today)
   const [biomassMethod, setBiomassMethod] = useState('DEFAULT')
 
-  if (loading) return <Spinner page label="Cargando analíticas NDVI..." />
+  // Redirect to optim calibration if not yet calibrated
+  useEffect(() => {
+    if (!calOptimLoading && calOptim && !calOptim.calibrated) {
+      navigate(`/terrains/${terrainId}/ndvi/calibration-optim`, { replace: true })
+    }
+  }, [calOptimLoading, calOptim, terrainId, navigate])
+
+  // Redirect to alert calibration if optim done but alert not
+  useEffect(() => {
+    if (!calOptimLoading && calOptim?.calibrated && !calAlertLoading && calAlert && !calAlert.calibrated) {
+      navigate(`/terrains/${terrainId}/ndvi/calibration-alert`, { replace: true })
+    }
+  }, [calOptimLoading, calOptim, calAlertLoading, calAlert, terrainId, navigate])
+
+  // Compute calibrated reference values for chart lines
+  const optimNdvi = useMemo(() => {
+    if (!calOptim?.calibrations?.length) return 0.6
+    const vals = calOptim.calibrations.map(c => c.referenceNdvi).filter(Boolean)
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0.6
+  }, [calOptim])
+
+  const alertNdvi = useMemo(() => {
+    if (!calAlert?.calibrations?.length) return 0.3
+    const vals = calAlert.calibrations.map(c => c.referenceNdvi).filter(Boolean)
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0.3
+  }, [calAlert])
+
+  if (loading || calOptimLoading || calAlertLoading) return <Spinner page label="Cargando analíticas NDVI..." />
 
   const hasData = dashboard?.timeline?.length > 0
 
@@ -198,8 +229,8 @@ export default function NdviDashboardPage() {
                       <YAxis domain={[0, 1]} stroke="#5c7a5c" tick={{ fontSize: 11 }} />
                       <Tooltip contentStyle={{ background: '#172117', border: '1px solid #2a3d2a', borderRadius: 8 }} labelStyle={{ color: '#e8f5e8' }} />
                       <Legend />
-                      <ReferenceLine y={0.3} stroke="#ef4444" strokeDasharray="5 5" label={{ value: 'Umbral alerta', fill: '#ef4444', fontSize: 11 }} />
-                      <ReferenceLine y={0.6} stroke="#4ade80" strokeDasharray="5 5" label={{ value: 'Óptimo', fill: '#4ade80', fontSize: 11 }} />
+                      <ReferenceLine y={alertNdvi} stroke="#ef4444" strokeDasharray="5 5" label={{ value: `Umbral alerta (${alertNdvi.toFixed(2)})`, fill: '#ef4444', fontSize: 11 }} />
+                      <ReferenceLine y={optimNdvi} stroke="#4ade80" strokeDasharray="5 5" label={{ value: `Óptimo (${optimNdvi.toFixed(2)})`, fill: '#4ade80', fontSize: 11 }} />
                       {parcelNames.map((name, i) => (
                         <Line key={name} type="monotone" dataKey={name}
                           stroke={PARCEL_COLORS[i % PARCEL_COLORS.length]}

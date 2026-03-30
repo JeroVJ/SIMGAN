@@ -22,6 +22,9 @@ import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
 
+
+
+// Se comubnica con el microservicio de procesamiento de imágenes (procesamientoImagen) para enviarle las escenas satelitales y las geometrías de las parcelas para que él se encargue de descargar las imágenes, recortarlas por parcela, calcular NDVI y devolver los resultados. Esto desacopla la lógica de procesamiento pesado del backend principal y permite escalar o modificar el procesamiento sin afectar el resto del sistema.
 @Service
 @RequiredArgsConstructor
 public class ImageProcessingClientService {

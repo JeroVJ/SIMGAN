@@ -10,6 +10,11 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.*;
 
+
+
+ //BORRAR SERVICE
+
+ 
 /**
  * Genera datos NDVI realistas para demostración.
  *

@@ -14,7 +14,10 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.util.*;
 
+ //SERVICE INECESARIO, BORRAR
 
+
+ 
 /**
  * Procesa GeoTIFF de PlanetScope 4-band para calcular NDVI por parcela.
  *

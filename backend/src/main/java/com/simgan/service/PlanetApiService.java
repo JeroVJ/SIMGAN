@@ -84,10 +84,10 @@ public class PlanetApiService {
             return Collections.emptyList();
         }
 
-        JsonNode geoNode = mapper.readTree(geoJson);
+        JsonNode geoNode = mapper.readTree(geoJson); //convierte el string a JsonNode para manipularlo fácilmente
         JsonNode originalGeometry;
 
-        // 1. Extraemos la geometría
+        // 1. Extraemos la geometría del GeoJSON, soportando tanto FeatureCollection como Feature o geometría directa(geometria del terreno)
         if (geoNode.has("features") && geoNode.get("features").isArray() && geoNode.get("features").size() > 0) {
             originalGeometry = geoNode.get("features").get(0).get("geometry");
         } else if (geoNode.has("geometry")) {
@@ -96,7 +96,7 @@ public class PlanetApiService {
             originalGeometry = geoNode;
         }
 
-        // 2. Extraemos coordenadas para hacer un Punto Seguro
+        // 2. Extraemos coordenadas para hacer un Punto Seguro(se escoge un solo punto) para evitar problemas de geometrías complejas con la API de Planet. Esto es un workaround para evitar errores 400 por geometrías no válidas.)
         JsonNode coords = originalGeometry.get("coordinates");
         double lon = 0;
         double lat = 0;
@@ -116,7 +116,7 @@ public class PlanetApiService {
             log.error("Error extrayendo coordenadas para Planet: {}", e.getMessage());
             return Collections.emptyList();
         }
-
+        //construyendo json de geometría segura para Planet
         ObjectNode safeGeometry = mapper.createObjectNode();
         safeGeometry.put("type", "Point");
         ArrayNode pointCoords = mapper.createArrayNode();
@@ -160,8 +160,8 @@ public class PlanetApiService {
         requestBody.set("item_types", itemTypes);
         requestBody.set("filter", searchBody);
 
-        String jsonPayload = mapper.writeValueAsString(requestBody);
-        log.info("🚀 JSON ENVIADO A PLANET (Vía Cliente Nativo): {}", jsonPayload);
+        String jsonPayload = mapper.writeValueAsString(requestBody); //se pasa de json(objectnode) a string para enviar a Planet
+        log.info(" JSON ENVIADO A PLANET (Vía Cliente Nativo): {}", jsonPayload);
 
         // 4. FIX DEFINITIVO: Usar el cliente HTTP nativo de Java para evitar los bugs de OkHttp
         try {
@@ -191,7 +191,7 @@ public class PlanetApiService {
             if (features != null && features.isArray()) {
                 for (JsonNode feature : features) {
                     Map<String, Object> scene = new HashMap<>();
-                    scene.put("id", feature.get("id").asText());
+                    scene.put("id", feature.get("id").asText());  //escenas encontradas
                     scene.put("acquired", feature.get("properties").get("acquired").asText());
                     scene.put("cloud_cover", feature.get("properties").get("cloud_cover").asDouble());
                     scene.put("pixel_resolution", feature.get("properties").has("pixel_resolution")
