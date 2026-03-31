@@ -114,6 +114,14 @@ export const calibrationApi = {
     api.post(`/ndvi/calibration/${terrainId}`, null, { params: { calibrationDate, type } }).then(r => r.data),
 }
 
+// ===== CALIBRACIÓN BIOMASA =====
+export const biomassCalibrationApi = {
+  getStatus: (terrainId) =>
+    api.get(`/ndvi/biomass-calibration/status/${terrainId}`).then(r => r.data),
+  calibrateParcel: (terrainId, parcelId, points) =>
+    api.post(`/ndvi/biomass-calibration/${terrainId}/${parcelId}`, { terrainId, parcelId, points }).then(r => r.data),
+}
+
 // ===== LOTES (GANADO) =====
 export const loteApi = {
   // Lotes

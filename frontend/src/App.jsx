@@ -17,6 +17,7 @@ import RotationPage      from './pages/RotationPage'
 import NdviDashboardPage from './pages/NdviDashboardPage'
 import CalibrationNdviOptimPage from './pages/CalibrationNdviOptimPage'
 import CalibrationNdviAlertPage from './pages/CalibrationNdviAlertPage'
+import CalibrationBiomassPage from './pages/CalibrationBiomassPage'
 import LotesPage         from './pages/LotesPage'
 import LoteDetailPage    from './pages/LoteDetailPage'
 import AuthPage          from './pages/AuthPages'
@@ -178,6 +179,8 @@ export default function App() {
               <Route path="/terrains/:terrainId/ndvi/calibration-optim" element={<CalibrationNdviOptimPage />} />
 
               <Route path="/terrains/:terrainId/ndvi/calibration-alert" element={<CalibrationNdviAlertPage />} />
+
+              <Route path="/terrains/:terrainId/ndvi/calibration-biomass" element={<CalibrationBiomassPage />} />
 
               <Route path="/terrains/:terrainId/lotes" element={<LotesPage />} />
 

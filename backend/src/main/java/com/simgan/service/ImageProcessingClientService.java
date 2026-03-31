@@ -5,6 +5,7 @@ import com.simgan.dto.PlanetImageProcessingRequest;
 import com.simgan.dto.PlanetImageProcessingResponse;
 import com.simgan.dto.SentinelImageProcessingRequest;
 import com.simgan.dto.SentinelImageProcessingResponse;
+import com.simgan.dto.PointNdviDto;
 import com.simgan.entity.Parcel;
 import com.simgan.entity.Terrain;
 import lombok.RequiredArgsConstructor;
@@ -145,6 +146,42 @@ public class ImageProcessingClientService {
             return responseBody;
         } catch (Exception e) {
             throw new RuntimeException("No se pudo procesar Planet con procesamientoImagen: " + e.getMessage(), e);
+        }
+    }
+
+    public PointNdviDto.PointNdviResponse computePointNdvi(
+            String sceneId,
+            String downloadUrl,
+            List<PointNdviDto.PointNdviInput> points) {
+
+        try {
+            RestTemplate restTemplate = restTemplateBuilder
+                    .setConnectTimeout(Duration.ofSeconds(10))
+                    .setReadTimeout(Duration.ofMinutes(10))
+                    .build();
+
+            PointNdviDto.PointNdviRequest payload = PointNdviDto.PointNdviRequest.builder()
+                    .sceneId(sceneId)
+                    .downloadUrl(downloadUrl)
+                    .points(points)
+                    .build();
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            ResponseEntity<PointNdviDto.PointNdviResponse> response = restTemplate.postForEntity(
+                    imageProcessingBaseUrl + "/ndvi/sentinel/point-ndvi",
+                    new HttpEntity<>(payload, headers),
+                    PointNdviDto.PointNdviResponse.class
+            );
+
+            PointNdviDto.PointNdviResponse responseBody = response.getBody();
+            if (responseBody == null) {
+                throw new RuntimeException("procesamientoImagen respondió sin cuerpo para point-ndvi.");
+            }
+            return responseBody;
+        } catch (Exception e) {
+            throw new RuntimeException("No se pudo calcular NDVI en puntos: " + e.getMessage(), e);
         }
     }
 }

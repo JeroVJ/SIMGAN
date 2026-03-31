@@ -223,6 +223,42 @@ CREATE TABLE IF NOT EXISTS ndvi_calibrations (
 CREATE INDEX IF NOT EXISTS idx_ndvi_calibrations_terrain ON ndvi_calibrations(terrain_id);
 CREATE INDEX IF NOT EXISTS idx_ndvi_calibrations_parcel ON ndvi_calibrations(parcel_id);
 
+-- Biomass Calibration Points (field sampling measurements)
+CREATE TABLE IF NOT EXISTS biomass_calibration_points (
+    id BIGSERIAL PRIMARY KEY,
+    parcel_id BIGINT NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
+    terrain_id BIGINT NOT NULL REFERENCES terrains(id) ON DELETE CASCADE,
+    point_index INTEGER NOT NULL,
+    latitude DOUBLE PRECISION NOT NULL,
+    longitude DOUBLE PRECISION NOT NULL,
+    cut_area_m2 DOUBLE PRECISION NOT NULL,
+    green_weight_kg DOUBLE PRECISION NOT NULL,
+    biomass_kg_per_ha DOUBLE PRECISION,
+    ndvi_at_point DOUBLE PRECISION,
+    scene_id VARCHAR(255),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_biomass_points_parcel ON biomass_calibration_points(parcel_id);
+CREATE INDEX IF NOT EXISTS idx_biomass_points_terrain ON biomass_calibration_points(terrain_id);
+
+-- Biomass Calibration Models (regression per parcel)
+CREATE TABLE IF NOT EXISTS biomass_calibration_models (
+    id BIGSERIAL PRIMARY KEY,
+    parcel_id BIGINT NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
+    terrain_id BIGINT NOT NULL REFERENCES terrains(id) ON DELETE CASCADE,
+    coefficient_a DOUBLE PRECISION NOT NULL,
+    coefficient_b DOUBLE PRECISION NOT NULL,
+    r_squared DOUBLE PRECISION,
+    sample_count INTEGER NOT NULL,
+    scene_id VARCHAR(255),
+    calibration_date DATE,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_biomass_models_parcel ON biomass_calibration_models(parcel_id);
+CREATE INDEX IF NOT EXISTS idx_biomass_models_terrain ON biomass_calibration_models(terrain_id);
+
 CREATE INDEX IF NOT EXISTS idx_lotes_terrain ON lotes(terrain_id);
 CREATE INDEX IF NOT EXISTS idx_ganados_lote ON ganados(lote_id);
 CREATE INDEX IF NOT EXISTS idx_lote_parcel_hist ON lote_parcel_history(lote_id, fecha_ingreso);

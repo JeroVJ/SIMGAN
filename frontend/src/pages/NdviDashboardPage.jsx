@@ -13,7 +13,7 @@ import { getHealthColor } from '../utils/ndvi'
 const PARCEL_COLORS = ['#4ade80', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#ec4899', '#14b8a6', '#f97316']
 
 const HEALTH_COLORS = {
-  EXCELENTE: '#4ade80', BUENO: '#84cc16', REGULAR: '#f59e0b', CRÍTICO: '#ef4444',
+  EXCELENTE: '#4ade80', BUENO: '#84cc16', CRÍTICO: '#ef4444',
 }
 
 const STATUS_LABELS = {

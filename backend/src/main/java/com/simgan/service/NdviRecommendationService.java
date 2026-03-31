@@ -38,6 +38,7 @@ public class NdviRecommendationService {
     private final ParcelRepository parcelRepository;
     private final TerrainRepository terrainRepository;
     private final RotationHistoryRepository rotationHistoryRepository;
+    private final NdviCalibrationRepository calibrationRepository;
 
     @Value("${ndvi.alert.threshold:0.3}")
     private double alertThreshold;
@@ -140,9 +141,10 @@ public class NdviRecommendationService {
                     .trendSlope(calculateTrend(history));
         }
 
-        // Health classification
+        // Health classification using calibrated thresholds
         double ndvi = latestOpt.map(NdviRecord::getMeanNdvi).orElse(0.0);
-        String[] health = classifyHealth(ndvi);
+        double[] thresholds = getThresholds(parcel.getId(), parcel.getTerrain().getId());
+        String[] health = classifyHealth(ndvi, thresholds[0], thresholds[1]);
         builder.healthStatus(health[0]).healthColor(health[1]);
 
         // Recommendation
@@ -304,10 +306,31 @@ public class NdviRecommendationService {
         return String.format("💚 Excelente. Biomasa: %.0f kg/ha. Pastoreo recomendado.", biomass);
     }
 
-    private String[] classifyHealth(double ndvi) {
-        if (ndvi >= 0.60) return new String[]{"EXCELENTE", "#4ade80"};
-        if (ndvi >= 0.40) return new String[]{"BUENO", "#84cc16"};
-        if (ndvi >= 0.25) return new String[]{"REGULAR", "#f59e0b"};
+    /**
+     * Obtiene los umbrales [optim, alert] para una parcela, con fallback a terreno y luego a defaults.
+     */
+    private double[] getThresholds(Long parcelId, Long terrainId) {
+        // 1. Try parcel-level calibrations
+        var optimParcel = calibrationRepository.findByParcelIdAndCalibrationType(parcelId, "OPTIM");
+        var alertParcel = calibrationRepository.findByParcelIdAndCalibrationType(parcelId, "ALERT");
+        double optim = optimParcel.map(NdviCalibration::getReferenceNdvi).orElse(-1.0);
+        double alert = alertParcel.map(NdviCalibration::getReferenceNdvi).orElse(-1.0);
+
+        // 2. Fallback to terrain-level calibrations
+        if (optim < 0) {
+            optim = calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "OPTIM")
+                    .map(NdviCalibration::getReferenceNdvi).orElse(optimalThreshold);
+        }
+        if (alert < 0) {
+            alert = calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "ALERT")
+                    .map(NdviCalibration::getReferenceNdvi).orElse(alertThreshold);
+        }
+        return new double[]{optim, alert};
+    }
+
+    private String[] classifyHealth(double ndvi, double optim, double alert) {
+        if (ndvi >= optim) return new String[]{"EXCELENTE", "#4ade80"};
+        if (ndvi > alert)  return new String[]{"OPTIMO", "#84cc16"};
         return new String[]{"CRÍTICO", "#ef4444"};
     }
 

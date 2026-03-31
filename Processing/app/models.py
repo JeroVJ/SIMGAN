@@ -85,3 +85,33 @@ class PlanetProcessResponse(BaseModel):
     processingDurationMs: int
     warnings: list[str]
     parcelResults: list[ProcessedParcelNdviResponse]
+
+
+# ===== BIOMASS CALIBRATION POINT NDVI =====
+
+class PointNdviInput(BaseModel):
+    pointIndex: int
+    latitude: float
+    longitude: float
+    areaM2: float
+
+
+class PointNdviResult(BaseModel):
+    pointIndex: int
+    latitude: float
+    longitude: float
+    ndvi: float | None = None
+    pixelCount: int = 0
+    warning: str | None = None
+
+
+class PointNdviRequest(BaseModel):
+    sceneId: str
+    downloadUrl: str | None = None
+    points: list[PointNdviInput]
+
+
+class PointNdviResponse(BaseModel):
+    sceneId: str
+    processingDurationMs: int
+    results: list[PointNdviResult]

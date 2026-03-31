@@ -172,7 +172,7 @@ public class AnalysisOrchestrator {
     String sentinelLastError = null;
     try {
         List<Map<String, Object>> scenes =
-                sentinelApi.searchScenes(geoJson, startDate, endDate, 0.6);
+                sentinelApi.searchScenes(geoJson, startDate, endDate, 0.3);
 
         if (!scenes.isEmpty()) {
 

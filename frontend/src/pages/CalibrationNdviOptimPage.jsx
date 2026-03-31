@@ -128,6 +128,13 @@ export default function CalibrationNdviOptimPage() {
               Continuar → Calibrar Umbral de Alerta
             </button>
             <button
+              className="action-btn action-btn--primary"
+              onClick={() => navigate(`/terrains/${terrainId}/ndvi/calibration-biomass`)}
+              style={{ background: '#16a34a' }}
+            >
+              Continuar → Calibrar Biomasa
+            </button>
+            <button
               className="action-btn"
               onClick={() => navigate(`/terrains/${terrainId}/parcels`)}
             >

@@ -14,7 +14,7 @@ from shapely.geometry import Point
 from shapely.ops import transform as shapely_transform
 
 from app.config import settings
-from app.models import ProcessedParcelNdviResponse, SentinelProcessRequest, SentinelProcessResponse
+from app.models import ProcessedParcelNdviResponse, SentinelProcessRequest, SentinelProcessResponse, PointNdviRequest, PointNdviResponse, PointNdviResult
 from app.services.common import (
     build_empty_result,
     build_result,
@@ -386,6 +386,126 @@ async def analyze_sentinel_request(payload: SentinelProcessRequest) -> SentinelP
         raise HTTPException(status_code=500, detail=f"procesamientoImagen no pudo calcular NDVI: {exc}") from exc
     finally:
         import shutil
+        try:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        except Exception:
+            logger.warning("No se pudo eliminar directorio temporal workDir=%s", work_dir)
+
+
+async def compute_point_ndvi(payload: PointNdviRequest) -> PointNdviResponse:
+    """Calculate NDVI at specific geographic points using a Sentinel scene.
+
+    For each point, a circular area matching the given areaM2 is sampled.
+    """
+    import math
+    import shutil
+
+    work_dir = Path(tempfile.mkdtemp(prefix="sentinel-points-", dir=str(settings.gdal_temp_dir)))
+    started = time.perf_counter()
+    logger.info("Inicio cálculo NDVI en puntos sceneId=%s numPoints=%s workDir=%s", payload.sceneId, len(payload.points), work_dir)
+
+    try:
+        dummy = SentinelProcessRequest(
+            terrainId=0,
+            sceneId=payload.sceneId,
+            captureDate="1970-01-01",
+            downloadUrl=payload.downloadUrl,
+            parcels=[],
+        )
+        red_path, nir_path, epsg, ulx, uly = _download_and_extract_bands(dummy, work_dir)
+
+        red_tiff = red_path if red_path.suffix.lower() in {".tif", ".tiff"} else red_path.with_suffix(".tif")
+        nir_tiff = nir_path if nir_path.suffix.lower() in {".tif", ".tiff"} else nir_path.with_suffix(".tif")
+        if red_tiff != red_path:
+            convert_jp2_to_tiff(red_path, red_tiff)
+        if nir_tiff != nir_path:
+            convert_jp2_to_tiff(nir_path, nir_tiff)
+
+        transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
+        pixel_size = 10.0
+
+        results: list[PointNdviResult] = []
+
+        def _read_ndvi(red_ds, nir_ds, row, col):
+            """Read a single pixel and return its NDVI or None."""
+            if not (0 <= col < red_ds.width and 0 <= row < red_ds.height):
+                return None
+            red = float(red_ds.read(1, window=((row, row + 1), (col, col + 1)))[0, 0])
+            nir = float(nir_ds.read(1, window=((row, row + 1), (col, col + 1)))[0, 0])
+            if not (0 < red < 65535 and 0 < nir < 65535):
+                return None
+            red_r = red / 10000.0
+            nir_r = nir / 10000.0
+            denom = nir_r + red_r
+            if denom == 0:
+                return None
+            ndvi = (nir_r - red_r) / denom
+            return ndvi if -1.0 <= ndvi <= 1.0 else None
+
+        with rasterio.open(red_tiff) as red_ds, rasterio.open(nir_tiff) as nir_ds:
+            for pt in payload.points:
+                try:
+                    px_utm, py_utm = transformer.transform(pt.longitude, pt.latitude)
+                    radius = math.sqrt(max(pt.areaM2, 1.0) / math.pi)
+
+                    sampled: set[tuple[int, int]] = set()
+                    ndvi_values: list[float] = []
+
+                    # Always sample the center pixel (handles sub-pixel areas)
+                    center_col = int((px_utm - ulx) / pixel_size)
+                    center_row = int((uly - py_utm) / pixel_size)
+                    sampled.add((center_row, center_col))
+
+                    # For areas larger than one pixel, sample surrounding pixels
+                    if radius > pixel_size / 2:
+                        col_min = int((px_utm - radius - ulx) / pixel_size)
+                        col_max = int((px_utm + radius - ulx) / pixel_size)
+                        row_min = int((uly - py_utm - radius) / pixel_size)
+                        row_max = int((uly - py_utm + radius) / pixel_size)
+                        for r in range(max(0, row_min), min(red_ds.height, row_max + 1)):
+                            for c in range(max(0, col_min), min(red_ds.width, col_max + 1)):
+                                px_x = ulx + c * pixel_size + pixel_size / 2
+                                px_y = uly - r * pixel_size - pixel_size / 2
+                                if (px_x - px_utm) ** 2 + (px_y - py_utm) ** 2 <= radius ** 2:
+                                    sampled.add((r, c))
+
+                    for r, c in sampled:
+                        ndvi = _read_ndvi(red_ds, nir_ds, r, c)
+                        if ndvi is not None:
+                            ndvi_values.append(ndvi)
+
+                    if ndvi_values:
+                        mean_ndvi = sum(ndvi_values) / len(ndvi_values)
+                        results.append(PointNdviResult(
+                            pointIndex=pt.pointIndex,
+                            latitude=pt.latitude,
+                            longitude=pt.longitude,
+                            ndvi=round(mean_ndvi, 4),
+                            pixelCount=len(ndvi_values),
+                        ))
+                    else:
+                        results.append(PointNdviResult(
+                            pointIndex=pt.pointIndex,
+                            latitude=pt.latitude,
+                            longitude=pt.longitude,
+                            warning="No se encontraron píxeles NDVI válidos en el área del punto.",
+                        ))
+                except Exception as e:
+                    logger.warning("Error calculando NDVI en punto %s: %s", pt.pointIndex, e)
+                    results.append(PointNdviResult(
+                        pointIndex=pt.pointIndex,
+                        latitude=pt.latitude,
+                        longitude=pt.longitude,
+                        warning=f"Error: {e}",
+                    ))
+
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        return PointNdviResponse(sceneId=payload.sceneId, processingDurationMs=elapsed_ms, results=results)
+
+    except Exception as exc:
+        logger.exception("Error calculando NDVI en puntos sceneId=%s", payload.sceneId)
+        raise HTTPException(status_code=500, detail=f"Error calculando NDVI en puntos: {exc}") from exc
+    finally:
         try:
             shutil.rmtree(work_dir, ignore_errors=True)
         except Exception:

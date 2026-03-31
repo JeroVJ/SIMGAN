@@ -7,10 +7,12 @@ from app.models import (
     # PlanetProcessResponse,
     SentinelProcessRequest,
     SentinelProcessResponse,
+    PointNdviRequest,
+    PointNdviResponse,
 )
 # Planet Lab deshabilitado temporalmente (cuota agotada)
 # from app.services.planet import analyze_planet_request, process_planet_request
-from app.services.sentinel import analyze_sentinel_request, process_sentinel_request
+from app.services.sentinel import analyze_sentinel_request, process_sentinel_request, compute_point_ndvi
 
 
 router = APIRouter(tags=["ndvi"])
@@ -41,6 +43,16 @@ async def analyze_sentinel(request: SentinelProcessRequest) -> SentinelProcessRe
         len(request.parcels),
     )
     return await analyze_sentinel_request(request)
+
+
+@router.post("/ndvi/sentinel/point-ndvi", response_model=PointNdviResponse)
+async def point_ndvi(request: PointNdviRequest) -> PointNdviResponse:
+    logger.info(
+        "Request point NDVI recibido sceneId=%s numPoints=%s",
+        request.sceneId,
+        len(request.points),
+    )
+    return await compute_point_ndvi(request)
 
 
 # --- Planet Lab deshabilitado temporalmente (cuota agotada) ---
