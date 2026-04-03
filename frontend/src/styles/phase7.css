@@ -1,0 +1,768 @@
+/* ============================================================
+   PHASE 7 — Modern SaaS Visual Quality
+   Inspired by: Vercel, Linear, Stripe, Raycast
+
+   Strategy:
+   - Typography: DM Sans 700 for all UI headings (remove serif from UI)
+   - Depth:      Inset highlight + base shadow on every card
+   - Scale:      Stat values 32px → 44px
+   - Clarity:    Border-bottom anchors on page headers and card headers
+   - Precision:  Tighter spacing, consistent proportions
+   ============================================================ */
+
+/* ── 1. Extended design tokens ────────────────────────────── */
+:root {
+  /* Shadow elevation scale */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3),
+               inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4),
+               inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.5),
+               inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  /* Subtle highlight used on top edge of elevated elements */
+  --inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+
+  /* Refined border colors */
+  --color-border-subtle: rgba(255, 255, 255, 0.06);
+  --color-border-strong: rgba(255, 255, 255, 0.12);
+
+  /* Semantic surface (used for inset/nested areas) */
+  --color-inset: rgba(0, 0, 0, 0.2);
+
+  /* Primary focus ring */
+  --ring-primary: 0 0 0 3px rgba(74, 222, 128, 0.18);
+
+  /* Type scale */
+  --text-2xs: 10px;
+  --text-xs:  11px;
+  --text-sm:  13px;
+  --text-md:  15px;
+  --text-lg:  17px;
+  --text-xl:  20px;
+  --text-2xl: 24px;
+  --text-3xl: 30px;
+
+  /* Letter spacing */
+  --tracking-tight:  -0.4px;
+  --tracking-normal:  0;
+  --tracking-wide:    0.06em;
+  --tracking-widest:  0.08em;
+
+  /* Border radius refinements */
+  --radius:      10px;
+  --radius-sm:    6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-full: 9999px;
+}
+
+/* ── 2. Typography: DM Sans for ALL UI headings ─────────── */
+
+/* Strip serif from every heading in the app */
+h1, h2, h3, h4, h5, h6,
+.page-header h2,
+.dashboard-title,
+.comp-stat-card__value,
+.card-header h3,
+.panel-header h3,
+.farm-card h3,
+.farm-card__header h3,
+.terrain-card__header h3,
+.comp-page-header__title,
+.comp-dialog__title {
+  font-family: var(--font-body) !important;
+}
+
+/* Page-level title: bold, tight tracking */
+.page-header h2 {
+  font-size: var(--text-2xl) !important;
+  font-weight: 700 !important;
+  letter-spacing: var(--tracking-tight) !important;
+  line-height: 1.15 !important;
+}
+.page-header p {
+  font-size: var(--text-sm) !important;
+  color: var(--color-text-muted) !important;
+  margin-top: 5px !important;
+}
+
+/* Dashboard-specific title (FarmDashboardPage) */
+.dashboard-title {
+  font-size: var(--text-2xl) !important;
+  font-weight: 700 !important;
+  letter-spacing: var(--tracking-tight) !important;
+}
+
+/* Card section headings */
+.card h3,
+.card-header h3,
+.panel-header h3 {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.1px !important;
+  color: var(--color-text) !important;
+}
+
+/* ── 3. Page header: anchor line + spacing ─────────────── */
+.page-header {
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 28px;
+}
+
+/* Dashboard header row */
+.dashboard-header {
+  margin-bottom: 28px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--color-border);
+  gap: 16px;
+}
+.dashboard-meta span {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.7;
+}
+
+/* ── 4. Card elevation: inset highlight + base shadow ───── */
+.card,
+.farm-card,
+.terrain-card,
+.lotes-map-panel,
+.lotes-list-panel,
+.ndvi-summary-card,
+.ndvi-parcel-card,
+.ndvi-rec-card,
+.ndvi-alert-card,
+.summary-card,
+.lote-card-v2,
+.rotation-card,
+.empty-card {
+  border-color: var(--color-border-subtle) !important;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Hover elevation: stronger shadow instead of just translate */
+.farm-card:hover,
+.terrain-card:hover,
+.lote-card-v2:hover,
+.ndvi-parcel-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+/* Card header: anchor divider inside cards */
+.card-header {
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* ── 5. StatCard: larger metrics + gradient accent border ── */
+.comp-stat-card {
+  box-shadow: var(--shadow-sm);
+  padding: 20px 22px 18px !important;
+}
+
+/* Gradient accent border on colored variants */
+.comp-stat-card--green {
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+    linear-gradient(160deg, rgba(74, 222, 128, 0.35) 0%, rgba(74, 222, 128, 0.05) 100%) border-box;
+  border: 1px solid transparent !important;
+}
+.comp-stat-card--amber {
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+    linear-gradient(160deg, rgba(245, 158, 11, 0.35) 0%, rgba(245, 158, 11, 0.05) 100%) border-box;
+  border: 1px solid transparent !important;
+}
+.comp-stat-card--blue {
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+    linear-gradient(160deg, rgba(59, 130, 246, 0.35) 0%, rgba(59, 130, 246, 0.05) 100%) border-box;
+  border: 1px solid transparent !important;
+}
+.comp-stat-card--red {
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+    linear-gradient(160deg, rgba(239, 68, 68, 0.35) 0%, rgba(239, 68, 68, 0.05) 100%) border-box;
+  border: 1px solid transparent !important;
+}
+
+/* Large metric values */
+.comp-stat-card__value {
+  font-size: 40px !important;
+  font-weight: 700 !important;
+  letter-spacing: var(--tracking-tight) !important;
+  line-height: 1 !important;
+  margin-bottom: 3px !important;
+}
+
+/* Keep accent colors on values */
+.comp-stat-card__value--green { color: var(--color-primary) !important; }
+.comp-stat-card__value--amber { color: var(--color-warning) !important; }
+.comp-stat-card__value--blue  { color: var(--color-info)    !important; }
+.comp-stat-card__value--red   { color: var(--color-danger)  !important; }
+
+/* Label: tighter uppercase */
+.comp-stat-card__label {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: var(--tracking-widest) !important;
+  margin-bottom: 10px !important;
+  color: var(--color-text-muted) !important;
+}
+
+/* Icon badge: slightly smaller, rounder */
+.comp-stat-card__icon {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 6px !important;
+  margin-bottom: 14px !important;
+}
+
+/* Sub-text */
+.comp-stat-card__sub {
+  font-size: 11px !important;
+  color: var(--color-text-muted) !important;
+  margin-top: 1px !important;
+}
+
+/* Hover: gradient border brightens */
+.comp-stat-card--green:hover { box-shadow: 0 4px 20px rgba(74, 222, 128, 0.12), var(--shadow-sm); }
+.comp-stat-card--amber:hover { box-shadow: 0 4px 20px rgba(245, 158, 11, 0.12), var(--shadow-sm); }
+.comp-stat-card--blue:hover  { box-shadow: 0 4px 20px rgba(59, 130, 246, 0.12), var(--shadow-sm); }
+.comp-stat-card--red:hover   { box-shadow: 0 4px 20px rgba(239, 68, 68, 0.12), var(--shadow-sm); }
+
+/* ── NDVI analyze date controls ───────────────────────────── */
+.ndvi-analysis-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  box-shadow: var(--shadow-xs);
+}
+
+.ndvi-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ndvi-date-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.ndvi-date-input {
+  min-width: 190px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 13px;
+  font-family: var(--font-body);
+}
+
+.ndvi-date-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: var(--ring-primary);
+}
+
+.ndvi-date-hint {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.ndvi-analysis-steps {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.ndvi-analysis-steps strong {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+
+/* ── 6. Sidebar: DM Sans brand, tighter active state ──── */
+
+/* Brand: switch from serif to bold sans */
+.sidebar-brand__name {
+  font-family: var(--font-body) !important;
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.5px !important;
+  color: var(--color-text) !important;
+}
+
+/* Icon wrap: subtle gradient */
+.sidebar-brand__icon-wrap {
+  background: linear-gradient(135deg,
+    rgba(74, 222, 128, 0.2) 0%,
+    rgba(74, 222, 128, 0.06) 100%) !important;
+  border: 1px solid rgba(74, 222, 128, 0.2) !important;
+  box-shadow: var(--inset-highlight);
+}
+
+/* Tagline: tighter */
+.sidebar-brand__tagline {
+  font-size: 9px !important;
+  letter-spacing: 0.1em !important;
+  color: var(--color-text-muted) !important;
+}
+
+/* Nav items: slightly tighter, consistent padding */
+.sidebar-nav__item {
+  padding: 8px 12px !important;
+  border-radius: 7px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.1px;
+}
+
+/* Active state: stronger fill, no left border needed with background */
+.sidebar-nav__item--active {
+  background: rgba(74, 222, 128, 0.1) !important;
+  border-left: 2px solid var(--color-primary) !important;
+  color: var(--color-text) !important;
+}
+.sidebar-nav__item--active .sidebar-nav__label {
+  font-weight: 600 !important;
+  color: var(--color-text) !important;
+}
+.sidebar-nav__item--active .sidebar-nav__icon {
+  color: var(--color-primary) !important;
+}
+
+/* Section label: tighter */
+.sidebar-nav__section-label {
+  font-size: 10px !important;
+  letter-spacing: 0.1em !important;
+  color: var(--color-text-muted) !important;
+  padding: 0 10px !important;
+  margin-bottom: 4px !important;
+}
+
+/* Footer: cleaner */
+.sidebar-footer__version {
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.05em !important;
+  color: var(--color-text-muted) !important;
+  opacity: 0.7;
+}
+
+/* ── 7. Action buttons: standardized height + proportions */
+.action-btn {
+  height: 34px;
+  padding: 0 14px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  border-radius: var(--radius-sm) !important;
+  letter-spacing: -0.1px;
+}
+.action-btn--primary {
+  font-weight: 600 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+.action-btn--primary:hover:not(:disabled) {
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.25) !important;
+}
+.action-btn--nav {
+  height: 38px !important;
+  font-size: 13px !important;
+}
+.action-btn--small {
+  height: 28px !important;
+  padding: 0 10px !important;
+  font-size: 12px !important;
+}
+.action-btn:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+/* ── 8. Input fields: taller, cleaner ──────────────────── */
+.input-field,
+.form-group input,
+.form-group select {
+  height: 38px !important;
+  padding: 0 12px !important;
+  font-size: 13px !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--radius-sm) !important;
+  background: var(--color-inset) !important;
+  color: var(--color-text) !important;
+  box-shadow: var(--shadow-xs) inset;
+}
+.input-field:focus,
+.form-group input:focus,
+.form-group select:focus {
+  border-color: var(--color-primary) !important;
+  box-shadow: var(--ring-primary) !important;
+  outline: none !important;
+  background: var(--color-surface-2) !important;
+}
+.input-field::placeholder,
+.form-group input::placeholder {
+  color: var(--color-text-muted) !important;
+  font-size: 13px;
+}
+
+/* ── 9. Terrain cards: cleaner heading + footer nav ──── */
+.terrain-card__header h3 {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.2px !important;
+}
+.terrain-card__area {
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  padding: 2px 8px;
+  background: rgba(74, 222, 128, 0.08);
+  border: 1px solid rgba(74, 222, 128, 0.15);
+  border-radius: var(--radius-full);
+}
+
+/* Stats inside terrain card: cleaner */
+.tcs__val {
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  letter-spacing: var(--tracking-tight) !important;
+  color: var(--color-text) !important;
+}
+.tcs__lbl {
+  font-size: 9px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.07em !important;
+  color: var(--color-text-muted) !important;
+  text-transform: uppercase;
+}
+
+/* Parcel status bar: slightly taller */
+.parcel-status-bar {
+  height: 5px !important;
+  border-radius: 3px !important;
+  margin-bottom: 16px !important;
+}
+
+/* Terrain card footer nav — replaces button row */
+.terrain-card__footer-nav {
+  display: flex;
+  border-top: 1px solid var(--color-border);
+  margin-top: 14px;
+  padding-top: 2px;
+  gap: 0;
+}
+.terrain-card__footer-nav-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 9px 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: none;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  transition: color var(--transition-fast), background var(--transition-fast);
+  letter-spacing: 0.02em;
+  font-family: var(--font-body);
+}
+.terrain-card__footer-nav-item:first-child { border-radius: 0 0 0 var(--radius-sm); }
+.terrain-card__footer-nav-item:last-child  { border-radius: 0 0 var(--radius-sm) 0; }
+.terrain-card__footer-nav-item:hover {
+  color: var(--color-text);
+  background: var(--color-surface-2);
+}
+.terrain-card__footer-nav-item + .terrain-card__footer-nav-item {
+  border-left: 1px solid var(--color-border);
+}
+
+/* ── 10. Farm card: cleaner hierarchy ─────────────────── */
+.farm-card__header h3 {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.2px !important;
+}
+.farm-card__initial {
+  font-family: var(--font-body) !important;
+  font-weight: 800 !important;
+  font-size: 14px !important;
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 7px !important;       /* square avatar, not circle */
+  background: linear-gradient(135deg, var(--color-primary-dim), var(--color-primary)) !important;
+  letter-spacing: 0 !important;
+}
+.farm-card__meta {
+  font-size: 12px !important;
+  color: var(--color-text-muted) !important;
+}
+.fcs-val {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  letter-spacing: var(--tracking-tight) !important;
+}
+.farm-terrain-row {
+  font-size: 12px !important;
+  padding: 5px 8px !important;
+}
+.ftr-area {
+  font-size: 11px !important;
+}
+
+/* ── 11. Breadcrumb: cleaner ──────────────────────────── */
+.breadcrumb {
+  font-size: 12px !important;
+  gap: 5px !important;
+  margin-bottom: 20px !important;
+  color: var(--color-text-muted) !important;
+}
+.breadcrumb a {
+  color: var(--color-text-secondary) !important;
+  font-weight: 500;
+}
+.breadcrumb a:hover {
+  color: var(--color-text) !important;
+  text-decoration: none !important;
+}
+.breadcrumb span:last-child {
+  color: var(--color-text) !important;
+  font-weight: 500;
+}
+
+/* ── 12. Section heading utility ─────────────────────── */
+.section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.section-heading__label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-widest);
+  color: var(--color-text-muted);
+}
+.section-heading__count {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-full);
+  padding: 1px 8px;
+  line-height: 1.8;
+}
+
+/* ── 13. Status badges: cleaner pills ────────────────── */
+.status-badge {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  padding: 3px 9px !important;
+  letter-spacing: 0.01em !important;
+  border-radius: var(--radius-full) !important;
+}
+.status-badge::before {
+  width: 5px !important;
+  height: 5px !important;
+}
+
+/* ── 14. NDVI summary cards ──────────────────────────── */
+.ndvi-summary-card {
+  box-shadow: var(--shadow-sm);
+  padding: 18px 20px !important;
+}
+.ndvi-summary-label {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.08em !important;
+}
+.ndvi-summary-value {
+  font-family: var(--font-body) !important;
+  font-size: 32px !important;
+  font-weight: 700 !important;
+  letter-spacing: var(--tracking-tight) !important;
+  line-height: 1 !important;
+}
+.ndvi-summary-sub {
+  font-size: 11px !important;
+}
+
+/* ── 15. Lote detail summary cards ──────────────────── */
+.summary-card {
+  padding: 16px !important;
+  box-shadow: var(--shadow-sm);
+}
+.summary-value {
+  font-family: var(--font-body) !important;
+  font-size: 26px !important;
+  font-weight: 700 !important;
+  letter-spacing: var(--tracking-tight) !important;
+  color: var(--color-text) !important;
+}
+.summary-label {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.07em !important;
+  color: var(--color-text-muted) !important;
+}
+
+/* ── 16. Lote cards ──────────────────────────────────── */
+.lote-card-v2__name {
+  font-family: var(--font-body) !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.2px !important;
+}
+.lote-stat__value {
+  font-family: var(--font-body) !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  letter-spacing: var(--tracking-tight) !important;
+}
+.lote-stat__label {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.07em !important;
+  text-transform: uppercase;
+}
+
+/* ── 17. Grazing alerts ───────────────────────────────── */
+.grazing-alert {
+  border-radius: var(--radius-sm) !important;
+  font-size: 13px !important;
+}
+.grazing-alert__icon {
+  font-size: 14px !important;
+}
+
+/* ── 18. Empty state: cleaner  ───────────────────────── */
+.comp-empty {
+  padding: 48px 32px !important;
+}
+.comp-empty__icon {
+  font-size: 36px !important;
+  margin-bottom: 12px !important;
+  opacity: 0.7;
+}
+.comp-empty__title {
+  font-family: var(--font-body) !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  letter-spacing: -0.2px !important;
+  margin-bottom: 6px !important;
+}
+.comp-empty__description {
+  font-size: 13px !important;
+  color: var(--color-text-muted) !important;
+  line-height: 1.5 !important;
+  max-width: 320px;
+  margin: 0 auto 20px !important;
+}
+
+/* ── 19. Table improvements ─────────────────────────── */
+.ganado-table th {
+  font-size: 10px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.07em !important;
+  color: var(--color-text-muted) !important;
+  background: var(--color-surface) !important;
+  padding: 10px 14px !important;
+}
+.ganado-table td {
+  font-size: 13px !important;
+}
+
+/* ── 20. Form labels: consistent weight ─────────────── */
+.form-group label,
+.field-label {
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.06em !important;
+  text-transform: uppercase !important;
+  color: var(--color-text-muted) !important;
+}
+
+/* ── 21. Parcel item in side panel ──────────────────── */
+.parcel-item {
+  border-radius: var(--radius-sm) !important;
+  padding: 10px 12px !important;
+}
+.parcel-item .info .name {
+  font-size: 13px !important;
+  font-weight: 600 !important;
+}
+.parcel-item .info .area {
+  font-size: 11px !important;
+}
+
+/* ── 22. Spinner page: vertical centering ─────────── */
+.comp-spinner-page {
+  gap: 12px !important;
+}
+.comp-spinner-label {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  letter-spacing: -0.1px !important;
+  color: var(--color-text-muted) !important;
+}
+
+/* ── 23. Dialog improvements ─────────────────────── */
+.comp-dialog {
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-xl) !important;
+}
+.comp-dialog__title {
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.3px !important;
+}
+.comp-dialog__body {
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  color: var(--color-text-secondary) !important;
+}
+
+/* ── 24. Lotes layout panel headers ─────────────── */
+.panel-header h3 {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.1px !important;
+  text-transform: none !important;
+}
+
+/* ── 25. Page container padding refinement ──────── */
+@media (min-width: 901px) {
+  .main-content {
+    padding: 32px 36px;
+  }
+}
+
+/* ── 26. Remove phase4 top-border line on stat cards
+         (replaced by gradient border-box technique)  */
+.comp-stat-card::before {
+  display: none !important;
+}

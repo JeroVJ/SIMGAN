@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: simgan-postgres
+    environment:
+      POSTGRES_DB: simgan_db
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "5432:5432"
+    volumes:
+      - simgan_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+
+  processing-simgan:
+    build:
+      context: ./Processing
+      dockerfile: Dockerfile
+    container_name: processing-simgan
+    environment:
+      SERVER_PORT: 8082
+      SERVER_CONTEXT_PATH: /api
+      PROCESSING_LOG_LEVEL: INFO
+      PROCESSING_GDAL_TRANSLATE_COMMAND: gdal_translate
+      PROCESSING_GDAL_TEMP_DIR: /tmp/simgan-procesamiento
+    ports:
+      - "8082:8082"
+    volumes:
+      - procesamiento_imagen_tmp:/tmp/simgan-procesamiento
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: simgan-mailhog
+    ports:
+      - "1025:1025"   # SMTP (backend sends here)
+      - "8025:8025"   # Web inbox  →  http://localhost:8025
+    restart: unless-stopped
+
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   container_name: simgan-rabbitmq
+  #   ports:
+  #     - "5672:5672"   # AMQP
+  #     - "15672:15672" # UI
+  #   restart: unless-stopped
+
+volumes:
+  simgan_data:
+  procesamiento_imagen_tmp:
