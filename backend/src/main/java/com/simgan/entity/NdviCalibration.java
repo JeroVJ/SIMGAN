@@ -41,9 +41,6 @@ public class NdviCalibration {
     @Column(name = "reference_ndvi", nullable = false)
     private Double referenceNdvi;
 
-    @Column(name = "reference_biomass")
-    private Double referenceBiomass;
-
     @Column(name = "pasture_type")
     private String pastureType;
 

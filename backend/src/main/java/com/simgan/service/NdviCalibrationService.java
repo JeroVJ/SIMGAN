@@ -26,7 +26,63 @@ public class NdviCalibrationService {
     // private final PlanetApiService planetApi;
     private final ImageProcessingClientService imageProcessingClientService;
 
-    private static final double MAX_CLOUD_COVER_CALIBRATION = 0.20;
+    private static final double MAX_CLOUD_COVER_CALIBRATION = 0.30;
+
+    /**
+     * Busca escenas Sentinel disponibles para la fecha de calibración (±2 días)
+     * sin procesarlas. Devuelve lista de escenas con id, fecha y nubosidad.
+     */
+    public List<Map<String, Object>> searchAvailableScenes(Long terrainId, LocalDate calibrationDate) {
+        Terrain terrain = terrainRepository.findById(terrainId)
+                .orElseThrow(() -> new RuntimeException("Terreno no encontrado: " + terrainId));
+
+        String geoJson = terrain.getGeoJson();
+        LocalDate searchStart = calibrationDate.minusDays(2);
+        LocalDate searchEnd = calibrationDate.plusDays(2);
+
+        List<Map<String, Object>> availableScenes = new ArrayList<>();
+
+        try {
+            List<Map<String, Object>> scenes =
+                    sentinelApi.searchScenes(geoJson, searchStart, searchEnd, MAX_CLOUD_COVER_CALIBRATION);
+
+            for (Map<String, Object> scene : scenes) {
+                Map<String, Object> info = new LinkedHashMap<>();
+                info.put("sceneId", scene.get("id"));
+
+                String dt = (String) scene.get("datetime");
+                if (dt != null && dt.length() >= 10) {
+                    info.put("date", dt.substring(0, 10));
+                }
+
+                Object cc = scene.get("cloud_cover");
+                if (cc instanceof Number n) {
+                    info.put("cloudCoverPercent", Math.round(n.doubleValue() * 100.0) / 100.0);
+                }
+                info.put("source", "SENTINEL");
+                availableScenes.add(info);
+            }
+
+            // Ordenar por cercanía a la fecha solicitada, luego menor nubosidad
+            availableScenes.sort(Comparator
+                    .<Map<String, Object>>comparingLong(s -> {
+                        String d = (String) s.get("date");
+                        if (d != null) {
+                            return Math.abs(LocalDate.parse(d).toEpochDay() - calibrationDate.toEpochDay());
+                        }
+                        return Long.MAX_VALUE;
+                    })
+                    .thenComparingDouble(s -> {
+                        Object cc = s.get("cloudCoverPercent");
+                        return cc instanceof Number n ? n.doubleValue() : Double.MAX_VALUE;
+                    }));
+
+        } catch (Exception e) {
+            log.warn("Error buscando escenas disponibles: {}", e.getMessage());
+        }
+
+        return availableScenes;
+    }
 
     /**
      * Verifica si el terreno ya tiene calibración completa para el tipo dado.
@@ -37,7 +93,6 @@ public class NdviCalibrationService {
                 .orElseThrow(() -> new RuntimeException("Terreno no encontrado: " + terrainId));
 
         Farm farm = terrain.getFarm();
-        boolean homogeneous = Boolean.TRUE.equals(farm.getIsHomogeneous());
         List<Parcel> parcels = parcelRepository.findByTerrainId(terrainId);
         List<NdviCalibration> calibrations = calibrationRepository.findByTerrainIdAndCalibrationType(terrainId, calibrationType);
 
@@ -45,36 +100,15 @@ public class NdviCalibrationService {
                 .map(this::toResponse)
                 .collect(Collectors.toList());
 
-        boolean calibrated;
-        int calibratedParcels;
-
-        if (homogeneous) {
-            // Finca homogénea: basta con 1 calibración a nivel terreno
-            calibrated = calibrations.stream().anyMatch(c -> c.getParcel() == null);
-            calibratedParcels = calibrated ? parcels.size() : 0;
-        } else {
-            // Finca no homogénea: cada tipo de pasto necesita calibración
-            Set<String> calibratedPastureTypes = calibrations.stream()
-                    .filter(c -> c.getPastureType() != null)
-                    .map(NdviCalibration::getPastureType)
-                    .collect(Collectors.toSet());
-
-            calibratedParcels = 0;
-            for (Parcel p : parcels) {
-                if (calibrations.stream().anyMatch(c -> c.getParcel() != null && c.getParcel().getId().equals(p.getId()))) {
-                    calibratedParcels++;
-                } else if (p.getPastureType() != null && calibratedPastureTypes.contains(p.getPastureType())) {
-                    calibratedParcels++;
-                }
-            }
-            calibrated = calibratedParcels >= parcels.size();
-        }
+        // Siempre una sola calibración a nivel terreno (promedio de todos los potreros)
+        boolean calibrated = calibrations.stream().anyMatch(c -> c.getParcel() == null);
+        int calibratedParcels = calibrated ? parcels.size() : 0;
 
         return CalibrationDto.CalibrationStatus.builder()
                 .terrainId(terrainId)
                 .calibrationType(calibrationType)
                 .calibrated(calibrated)
-                .homogeneous(homogeneous)
+                .homogeneous(true)
                 .totalParcels(parcels.size())
                 .calibratedParcels(calibratedParcels)
                 .calibrations(responses)
@@ -84,18 +118,21 @@ public class NdviCalibrationService {
     /**
      * Ejecuta la calibración NDVI para un terreno.
      * @param calibrationType "OPTIM" (referencia óptima) o "ALERT" (umbral de alerta)
+     * @param selectedSceneId ID de escena específica seleccionada por el usuario (puede ser null)
      *
-     * Para fincas homogéneas: una sola calibración a nivel terreno.
-     * Para fincas no homogéneas: calibración por parcela, reutilizando si comparten tipo de pasto.
+     * Se promedian los NDVI de todos los potreros para obtener una única referencia a nivel terreno.
      */
     public Map<String, Object> runCalibration(Long terrainId, LocalDate calibrationDate, String calibrationType) {
+        return runCalibration(terrainId, calibrationDate, calibrationType, null);
+    }
+
+    public Map<String, Object> runCalibration(Long terrainId, LocalDate calibrationDate, String calibrationType, String selectedSceneId) {
         Map<String, Object> result = new LinkedHashMap<>();
 
         Terrain terrain = terrainRepository.findById(terrainId)
                 .orElseThrow(() -> new RuntimeException("Terreno no encontrado: " + terrainId));
 
         Farm farm = terrain.getFarm();
-        boolean homogeneous = Boolean.TRUE.equals(farm.getIsHomogeneous());
         List<Parcel> parcels = parcelRepository.findByTerrainId(terrainId);
 
         if (parcels.isEmpty()) {
@@ -106,7 +143,6 @@ public class NdviCalibrationService {
         String geoJson = terrain.getGeoJson();
         result.put("terrainId", terrainId);
         result.put("terrainName", terrain.getName());
-        result.put("homogeneous", homogeneous);
         result.put("calibrationType", calibrationType);
         result.put("calibrationDate", calibrationDate.toString());
 
@@ -124,6 +160,17 @@ public class NdviCalibrationService {
         try {
             List<Map<String, Object>> scenes =
                     sentinelApi.searchScenes(geoJson, searchStart, searchEnd, MAX_CLOUD_COVER_CALIBRATION);
+
+            // Si el usuario seleccionó una escena específica, filtrar solo esa
+            if (selectedSceneId != null && !selectedSceneId.isBlank()) {
+                scenes = scenes.stream()
+                        .filter(s -> selectedSceneId.equals(s.get("id")))
+                        .collect(Collectors.toList());
+                if (scenes.isEmpty()) {
+                    result.put("error", "La escena seleccionada " + selectedSceneId + " no se encontró.");
+                    return result;
+                }
+            }
 
             if (!scenes.isEmpty()) {
                 // Ordenar por cercanía a la fecha de calibración, luego menor nubosidad
@@ -208,117 +255,47 @@ public class NdviCalibrationService {
             return result;
         }
 
-        // Guardar calibraciones
+        // Guardar calibraciones — siempre promedio de todos los potreros a nivel terreno
         List<NdviCalibration> savedCalibrations = new ArrayList<>();
 
-        if (homogeneous) {
-            // Finca homogénea: promedio de todas las parcelas como referencia del terreno
-            double avgNdvi = parcelResults.stream()
-                    .filter(pr -> pr.getMeanNdvi() != null && pr.getPixelCount() != null && pr.getPixelCount() > 0)
-                    .mapToDouble(ProcessedParcelNdviDto::getMeanNdvi)
-                    .average()
-                    .orElse(0.0);
+        double avgNdvi = parcelResults.stream()
+                .filter(pr -> pr.getMeanNdvi() != null && pr.getPixelCount() != null && pr.getPixelCount() > 0)
+                .mapToDouble(ProcessedParcelNdviDto::getMeanNdvi)
+                .average()
+                .orElse(0.0);
 
-            double avgBiomass = parcelResults.stream()
-                    .filter(pr -> pr.getBiomassKgPerHa() != null)
-                    .mapToDouble(ProcessedParcelNdviDto::getBiomassKgPerHa)
-                    .average()
-                    .orElse(0.0);
+        int totalPixels = parcelResults.stream()
+                .filter(pr -> pr.getPixelCount() != null)
+                .mapToInt(ProcessedParcelNdviDto::getPixelCount)
+                .sum();
 
-            // Eliminar calibración previa del terreno (mismo tipo)
-            calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, calibrationType)
-                    .ifPresent(calibrationRepository::delete);
-
-            NdviCalibration cal = NdviCalibration.builder()
-                    .terrain(terrain)
-                    .parcel(null)
-                    .calibrationDate(calibrationDate)
-                    .calibrationType(calibrationType)
-                    .referenceNdvi(Math.round(avgNdvi * 10000.0) / 10000.0)
-                    .referenceBiomass(Math.round(avgBiomass * 100.0) / 100.0)
-                    .pastureType(farm.getPastureType())
-                    .source(usedSource)
-                    .sceneId(usedSceneId)
-                    .cloudCoverPercent(usedCloudCover)
-                    .build();
-
-            savedCalibrations.add(calibrationRepository.save(cal));
-            log.info("Calibración homogénea guardada: terreno={} ndvi={} biomasa={}", terrainId, avgNdvi, avgBiomass);
-
-        } else {
-            // Finca no homogénea: calibración por parcela, reutilizando por tipo de pasto
-            Map<Long, ProcessedParcelNdviDto> resultsByParcelId = parcelResults.stream()
-                    .filter(pr -> pr.getParcelId() != null)
-                    .collect(Collectors.toMap(ProcessedParcelNdviDto::getParcelId, pr -> pr, (a, b) -> b));
-
-            // Agrupar parcelas por tipo de pasto
-            Map<String, List<Parcel>> parcelsByPasture = new LinkedHashMap<>();
-            List<Parcel> noPastureType = new ArrayList<>();
-            for (Parcel p : parcels) {
-                if (p.getPastureType() != null && !p.getPastureType().isBlank()) {
-                    parcelsByPasture.computeIfAbsent(p.getPastureType(), k -> new ArrayList<>()).add(p);
-                } else {
-                    noPastureType.add(p);
-                }
-            }
-
-            // Para cada grupo de pasto, tomar el NDVI de la primera parcela con resultado como referencia
-            Map<String, Double> referenceNdviByPasture = new LinkedHashMap<>();
-            Map<String, Double> referenceBiomassByPasture = new LinkedHashMap<>();
-
-            for (Map.Entry<String, List<Parcel>> entry : parcelsByPasture.entrySet()) {
-                String pastureType = entry.getKey();
-                for (Parcel p : entry.getValue()) {
-                    ProcessedParcelNdviDto pr = resultsByParcelId.get(p.getId());
-                    if (pr != null && pr.getMeanNdvi() != null && pr.getPixelCount() != null && pr.getPixelCount() > 0) {
-                        referenceNdviByPasture.put(pastureType, pr.getMeanNdvi());
-                        referenceBiomassByPasture.put(pastureType, pr.getBiomassKgPerHa());
-                        break;
-                    }
-                }
-            }
-
-            // Guardar calibración para cada parcela
-            for (Parcel p : parcels) {
-                // Eliminar calibración previa de esta parcela (mismo tipo)
-                calibrationRepository.findByParcelIdAndCalibrationType(p.getId(), calibrationType)
-                        .ifPresent(calibrationRepository::delete);
-
-                ProcessedParcelNdviDto pr = resultsByParcelId.get(p.getId());
-                Double refNdvi = null;
-                Double refBiomass = null;
-                Integer pixelCount = null;
-
-                if (pr != null && pr.getMeanNdvi() != null && pr.getPixelCount() != null && pr.getPixelCount() > 0) {
-                    refNdvi = pr.getMeanNdvi();
-                    refBiomass = pr.getBiomassKgPerHa();
-                    pixelCount = pr.getPixelCount();
-                } else if (p.getPastureType() != null && referenceNdviByPasture.containsKey(p.getPastureType())) {
-                    // Reutilizar referencia del mismo tipo de pasto
-                    refNdvi = referenceNdviByPasture.get(p.getPastureType());
-                    refBiomass = referenceBiomassByPasture.get(p.getPastureType());
-                }
-
-                if (refNdvi != null) {
-                    NdviCalibration cal = NdviCalibration.builder()
-                            .terrain(terrain)
-                            .parcel(p)
-                            .calibrationDate(calibrationDate)
-                            .calibrationType(calibrationType)
-                            .referenceNdvi(Math.round(refNdvi * 10000.0) / 10000.0)
-                            .referenceBiomass(refBiomass != null ? Math.round(refBiomass * 100.0) / 100.0 : null)
-                            .pastureType(p.getPastureType())
-                            .source(usedSource)
-                            .sceneId(usedSceneId)
-                            .cloudCoverPercent(usedCloudCover)
-                            .pixelCount(pixelCount)
-                            .build();
-
-                    savedCalibrations.add(calibrationRepository.save(cal));
-                    log.info("Calibración parcela guardada: parcel={} pastureType={} ndvi={}", p.getId(), p.getPastureType(), refNdvi);
-                }
+        // Eliminar calibración previa del terreno (mismo tipo)
+        calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, calibrationType)
+                .ifPresent(calibrationRepository::delete);
+        // También eliminar calibraciones por parcela del mismo tipo (limpieza de datos viejos)
+        List<NdviCalibration> oldParcelCals = calibrationRepository.findByTerrainIdAndCalibrationType(terrainId, calibrationType);
+        for (NdviCalibration old : oldParcelCals) {
+            if (old.getParcel() != null) {
+                calibrationRepository.delete(old);
             }
         }
+
+        NdviCalibration cal = NdviCalibration.builder()
+                .terrain(terrain)
+                .parcel(null)
+                .calibrationDate(calibrationDate)
+                .calibrationType(calibrationType)
+                .referenceNdvi(Math.round(avgNdvi * 10000.0) / 10000.0)
+                .pastureType(farm.getPastureType())
+                .source(usedSource)
+                .sceneId(usedSceneId)
+                .cloudCoverPercent(usedCloudCover)
+                .pixelCount(totalPixels)
+                .build();
+
+        savedCalibrations.add(calibrationRepository.save(cal));
+        log.info("Calibración guardada: terreno={} tipo={} ndvi={} parcelas_promediadas={}",
+            terrainId, calibrationType, avgNdvi, parcelResults.size());
 
         result.put("calibrationsCreated", savedCalibrations.size());
         result.put("source", usedSource);
@@ -342,7 +319,6 @@ public class NdviCalibrationService {
                 .calibrationDate(cal.getCalibrationDate())
                 .calibrationType(cal.getCalibrationType())
                 .referenceNdvi(cal.getReferenceNdvi())
-                .referenceBiomass(cal.getReferenceBiomass())
                 .pastureType(cal.getPastureType())
                 .source(cal.getSource())
                 .sceneId(cal.getSceneId())

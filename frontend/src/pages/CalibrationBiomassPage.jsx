@@ -1,8 +1,11 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { MapContainer, TileLayer, GeoJSON, Marker, Popup, useMap, useMapEvents } from 'react-leaflet'
 import L from 'leaflet'
 import toast from 'react-hot-toast'
+import {
+  ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from 'recharts'
 import Spinner from '../components/Spinner'
 import { useBiomassCalibration, useCalibration } from '../hooks'
 
@@ -14,6 +17,16 @@ L.Icon.Default.mergeOptions({
 })
 
 const MIN_POINTS = 7
+
+function extractRSquared(model) {
+  if (!model) return null
+  const candidates = [model.rSquared, model.r_squared, model.rsquared, model.r2, model.R2]
+  for (const value of candidates) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
 
 function numberIcon(num) {
   return L.divIcon({
@@ -50,102 +63,94 @@ function MapClickHandler({ onMapClick, enabled }) {
   return null
 }
 
-/** Mini scatter chart drawn on a canvas */
-function RegressionChart({ points, model }) {
-  const canvasRef = useRef(null)
+/** Recharts scatter + regression line chart */
+function BiomassChart({ points, model }) {
+  const valid = useMemo(
+    () => points.filter(p => p.ndviAtPoint != null && p.biomassKgPerHa != null),
+    [points]
+  )
 
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || !points.length) return
-    const ctx = canvas.getContext('2d')
-    const W = canvas.width
-    const H = canvas.height
-    const pad = 40
+  const chartData = useMemo(() => {
+    if (!valid.length || !model) return []
+    const sorted = [...valid].sort((a, b) => a.ndviAtPoint - b.ndviAtPoint)
+    const xMin = sorted[0].ndviAtPoint - 0.02
+    const xMax = sorted[sorted.length - 1].ndviAtPoint + 0.02
+    const a = model.coefficientA
+    const b = model.coefficientB
+    // Endpoints for regression line
+    const lineStart = { ndvi: +xMin.toFixed(4), regrLine: +(a * xMin + b).toFixed(1) }
+    const lineEnd   = { ndvi: +xMax.toFixed(4), regrLine: +(a * xMax + b).toFixed(1) }
+    // Actual sample points: include regrLine so line passes through them smoothly
+    const sampleRows = sorted.map(p => ({
+      ndvi: +p.ndviAtPoint.toFixed(4),
+      biomasa: +p.biomassKgPerHa.toFixed(1),
+      regrLine: +(a * p.ndviAtPoint + b).toFixed(1),
+    }))
+    // Merge: all unique ndvi values in order
+    const all = [lineStart, ...sampleRows, lineEnd]
+    all.sort((a, b) => a.ndvi - b.ndvi)
+    return all
+  }, [valid, model])
 
-    ctx.clearRect(0, 0, W, H)
-    ctx.fillStyle = '#1e293b'
-    ctx.fillRect(0, 0, W, H)
+  if (!chartData.length) return null
 
-    const valid = points.filter(p => p.ndviAtPoint != null && p.biomassKgPerHa != null)
-    if (!valid.length) return
-
-    const xs = valid.map(p => p.ndviAtPoint)
-    const ys = valid.map(p => p.biomassKgPerHa)
-    const xMin = Math.min(...xs) - 0.05
-    const xMax = Math.max(...xs) + 0.05
-    const yMin = Math.min(...ys) * 0.9
-    const yMax = Math.max(...ys) * 1.1
-
-    const toX = v => pad + (v - xMin) / (xMax - xMin) * (W - 2 * pad)
-    const toY = v => H - pad - (v - yMin) / (yMax - yMin) * (H - 2 * pad)
-
-    // Axes
-    ctx.strokeStyle = '#475569'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(pad, pad)
-    ctx.lineTo(pad, H - pad)
-    ctx.lineTo(W - pad, H - pad)
-    ctx.stroke()
-
-    // Labels
-    ctx.fillStyle = '#94a3b8'
-    ctx.font = '11px sans-serif'
-    ctx.textAlign = 'center'
-    ctx.fillText('NDVI', W / 2, H - 5)
-    ctx.save()
-    ctx.translate(12, H / 2)
-    ctx.rotate(-Math.PI / 2)
-    ctx.fillText('Biomasa (kg/ha)', 0, 0)
-    ctx.restore()
-
-    // Tick labels
-    for (let i = 0; i <= 4; i++) {
-      const v = xMin + (xMax - xMin) * i / 4
-      ctx.fillStyle = '#94a3b8'
-      ctx.fillText(v.toFixed(2), toX(v), H - pad + 14)
-    }
-    ctx.textAlign = 'right'
-    for (let i = 0; i <= 4; i++) {
-      const v = yMin + (yMax - yMin) * i / 4
-      ctx.fillStyle = '#94a3b8'
-      ctx.fillText(Math.round(v).toString(), pad - 5, toY(v) + 4)
-    }
-
-    // Points
-    valid.forEach(p => {
-      ctx.beginPath()
-      ctx.arc(toX(p.ndviAtPoint), toY(p.biomassKgPerHa), 5, 0, Math.PI * 2)
-      ctx.fillStyle = '#4ade80'
-      ctx.fill()
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = 1.5
-      ctx.stroke()
-    })
-
-    // Regression line
-    if (model) {
-      const y1 = model.coefficientA * xMin + model.coefficientB
-      const y2 = model.coefficientA * xMax + model.coefficientB
-      ctx.strokeStyle = '#f59e0b'
-      ctx.lineWidth = 2
-      ctx.setLineDash([6, 3])
-      ctx.beginPath()
-      ctx.moveTo(toX(xMin), toY(y1))
-      ctx.lineTo(toX(xMax), toY(y2))
-      ctx.stroke()
-      ctx.setLineDash([])
-
-      // R² label
-      ctx.fillStyle = '#f59e0b'
-      ctx.font = 'bold 12px sans-serif'
-      ctx.textAlign = 'left'
-      ctx.fillText(`R² = ${model.rSquared?.toFixed(4)}`, pad + 8, pad + 16)
-      ctx.fillText(`y = ${model.coefficientA?.toFixed(2)}·x + ${model.coefficientB?.toFixed(2)}`, pad + 8, pad + 32)
-    }
-  }, [points, model])
-
-  return <canvas ref={canvasRef} width={420} height={280} style={{ borderRadius: 8, width: '100%', maxWidth: 420 }} />
+  return (
+    <ResponsiveContainer width="100%" height={240}>
+      <ComposedChart data={chartData} margin={{ top: 12, right: 16, bottom: 28, left: 16 }}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#2a3d2a" />
+        <XAxis
+          dataKey="ndvi"
+          type="number"
+          domain={['auto', 'auto']}
+          tickFormatter={v => v.toFixed(2)}
+          stroke="#5c7a5c"
+          tick={{ fontSize: 10 }}
+          label={{ value: 'NDVI', position: 'insideBottom', offset: -12, fill: '#94a3b8', fontSize: 11 }}
+        />
+        <YAxis
+          stroke="#5c7a5c"
+          tick={{ fontSize: 10 }}
+          tickFormatter={v => Math.round(v)}
+          width={52}
+          label={{ value: 'kg/ha', angle: -90, position: 'insideLeft', fill: '#94a3b8', fontSize: 11, offset: 8 }}
+        />
+        <Tooltip
+          contentStyle={{ background: '#172117', border: '1px solid #2a3d2a', borderRadius: 8, fontSize: 12 }}
+          labelFormatter={v => `NDVI: ${(+v).toFixed(4)}`}
+          formatter={(value, name) => [
+            name === 'biomasa' ? `${value} kg/ha` : `${value} kg/ha`,
+            name === 'biomasa' ? 'Muestra' : 'Regresión',
+          ]}
+        />
+        <Legend
+          wrapperStyle={{ fontSize: 11, paddingTop: 4 }}
+          formatter={name => name === 'biomasa' ? 'Muestras de campo' : 'Regresión lineal'}
+        />
+        {/* Regression line — rendered first so dots appear on top */}
+        <Line
+          type="monotone"
+          dataKey="regrLine"
+          stroke="#f59e0b"
+          strokeWidth={2}
+          strokeDasharray="6 3"
+          dot={false}
+          name="regrLine"
+          connectNulls
+        />
+        {/* Scatter dots — stroke 0 so no connecting line, only dots */}
+        <Line
+          type="monotone"
+          dataKey="biomasa"
+          stroke="transparent"
+          strokeWidth={0}
+          dot={{ fill: '#4ade80', r: 5, strokeWidth: 1.5, stroke: '#fff' }}
+          activeDot={{ r: 7, fill: '#4ade80' }}
+          name="biomasa"
+          connectNulls={false}
+        />
+      </ComposedChart>
+    </ResponsiveContainer>
+  )
 }
 
 export default function CalibrationBiomassPage() {
@@ -192,6 +197,11 @@ export default function CalibrationBiomassPage() {
     }
     return activeParcelRaw
   }, [activeParcelRaw, activeParcelId, recalibratingIds])
+
+  const activeRSquared = useMemo(
+    () => extractRSquared(activeParcel?.model),
+    [activeParcel?.model]
+  )
 
   if (loading || optimLoading) return <Spinner page label="Cargando calibración de biomasa..." />
 
@@ -348,14 +358,20 @@ export default function CalibrationBiomassPage() {
                 }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <strong>{p.parcelName}</strong>
+                  <strong style={{ color: 'white' }}>{p.parcelName}</strong>
                   {p.calibrated
                     ? <span style={{ color: '#4ade80', fontSize: 11 }}>✓ Calibrado</span>
                     : <span style={{ color: '#f59e0b', fontSize: 11 }}>Pendiente</span>}
                 </div>
                 {p.model && (
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
-                    R² = {p.model.rSquared?.toFixed(4)} · {p.model.sampleCount} muestras
+                    {p.model.formula
+                      ? <span style={{ color: '#fcd34d' }}>{p.model.formula}</span>
+                      : `a=${p.model.coefficientA?.toFixed(2)} b=${p.model.coefficientB?.toFixed(2)}`}
+                    {(() => {
+                      const pRSquared = extractRSquared(p.model)
+                      return pRSquared != null ? <> · R²={pRSquared.toFixed(4)}</> : null
+                    })()}
                   </div>
                 )}
               </button>
@@ -403,6 +419,7 @@ export default function CalibrationBiomassPage() {
                 </div>
                 <div style={{ height: 350 }}>
                   <ParcelMap
+                    key={activeParcelId}
                     parcel={activeParcel}
                     points={currentPoints}
                     onMapClick={handleMapClick}
@@ -415,7 +432,7 @@ export default function CalibrationBiomassPage() {
               {currentPoints.length > 0 && (
                 <div className="card mb-24">
                   <div className="card-header">
-                    <h3>Datos de Campo</h3>
+                    <h3>Datos de Campo{activeParcel?.calibrated && <span style={{ fontSize: 12, color: '#f59e0b', marginLeft: 10, fontWeight: 400 }}>Edita los valores y recalcula para ajustar la función</span>}</h3>
                   </div>
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
@@ -427,6 +444,9 @@ export default function CalibrationBiomassPage() {
                           <th style={thStyle}>Área de corte (m²)</th>
                           <th style={thStyle}>Peso forraje verde (kg)</th>
                           <th style={thStyle}>Biomasa (kg/ha)</th>
+                          {activeParcel?.calibrated && activeParcel?.points?.length > 0 && (
+                            <th style={{ ...thStyle, color: '#4ade80' }}>NDVI</th>
+                          )}
                           <th style={thStyle}></th>
                         </tr>
                       </thead>
@@ -435,6 +455,7 @@ export default function CalibrationBiomassPage() {
                           const biomass = pt.cutAreaM2 && pt.greenWeightKg && Number(pt.cutAreaM2) > 0
                             ? ((Number(pt.greenWeightKg) / Number(pt.cutAreaM2)) * 10000).toFixed(1)
                             : '—'
+                          const ndvi = activeParcel?.points?.[idx]?.ndviAtPoint
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid var(--color-border)' }}>
                               <td style={tdStyle}><strong>{idx + 1}</strong></td>
@@ -449,7 +470,6 @@ export default function CalibrationBiomassPage() {
                                   onChange={e => updatePoint(idx, 'cutAreaM2', e.target.value)}
                                   placeholder="ej: 0.25"
                                   style={inputStyle}
-                                  disabled={activeParcel?.calibrated && !placingPoints}
                                 />
                               </td>
                               <td style={tdStyle}>
@@ -461,18 +481,20 @@ export default function CalibrationBiomassPage() {
                                   onChange={e => updatePoint(idx, 'greenWeightKg', e.target.value)}
                                   placeholder="ej: 0.5"
                                   style={inputStyle}
-                                  disabled={activeParcel?.calibrated && !placingPoints}
                                 />
                               </td>
                               <td style={{ ...tdStyle, fontWeight: 600, color: '#4ade80' }}>{biomass}</td>
+                              {activeParcel?.calibrated && activeParcel?.points?.length > 0 && (
+                                <td style={{ ...tdStyle, fontWeight: 600, color: '#4ade80' }}>
+                                  {ndvi != null ? ndvi.toFixed(4) : '—'}
+                                </td>
+                              )}
                               <td style={tdStyle}>
-                                {!(activeParcel?.calibrated && !placingPoints) && (
-                                  <button
-                                    onClick={() => removePoint(idx)}
-                                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16 }}
-                                    title="Eliminar punto"
-                                  >✕</button>
-                                )}
+                                <button
+                                  onClick={() => removePoint(idx)}
+                                  style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16 }}
+                                  title="Eliminar punto"
+                                >✕</button>
                               </td>
                             </tr>
                           )
@@ -481,25 +503,24 @@ export default function CalibrationBiomassPage() {
                     </table>
                   </div>
 
-                  {/* Calibrate button */}
-                  {!activeParcel?.calibrated && (
-                    <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
-                      <button
-                        className="action-btn action-btn--primary"
-                        onClick={handleCalibrate}
-                        disabled={calibrating || currentPoints.length < MIN_POINTS}
-                      >
-                        {calibrating
-                          ? <><span className="spinner" /> Calibrando...</>
+                  <div style={{ marginTop: 16, display: 'flex', gap: 12, alignItems: 'center' }}>
+                    <button
+                      className="action-btn action-btn--primary"
+                      onClick={handleCalibrate}
+                      disabled={calibrating || currentPoints.length < MIN_POINTS}
+                    >
+                      {calibrating
+                        ? <><span className="spinner" /> Calibrando...</>
+                        : activeParcel?.calibrated
+                          ? `Recalcular Función (${currentPoints.length} puntos)`
                           : `Calibrar Biomasa (${currentPoints.length} puntos)`}
-                      </button>
-                      {currentPoints.length < MIN_POINTS && (
-                        <span style={{ fontSize: 12, color: '#f59e0b' }}>
-                          Faltan {MIN_POINTS - currentPoints.length} puntos
-                        </span>
-                      )}
-                    </div>
-                  )}
+                    </button>
+                    {currentPoints.length < MIN_POINTS && (
+                      <span style={{ fontSize: 12, color: '#f59e0b' }}>
+                        Faltan {MIN_POINTS - currentPoints.length} puntos
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -509,22 +530,41 @@ export default function CalibrationBiomassPage() {
                   <div className="card-header">
                     <h3>Modelo de Regresión — {activeParcel.parcelName}</h3>
                   </div>
+
+                  {/* Formula display */}
+                  <div style={{
+                    background: 'rgba(245, 158, 11, 0.08)',
+                    border: '1.5px solid rgba(245, 158, 11, 0.35)',
+                    borderRadius: 10,
+                    padding: '14px 20px',
+                    textAlign: 'center',
+                    marginBottom: 20,
+                  }}>
+                    <div style={{ fontSize: 10, letterSpacing: 1.5, color: '#f59e0b', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>
+                      Ecuación del Modelo
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 700, color: '#fcd34d', letterSpacing: 0.5 }}>
+                      {activeParcel.model.formula
+                        ? activeParcel.model.formula
+                        : `Biomasa = ${activeParcel.model.coefficientA?.toFixed(2)} × NDVI + ${activeParcel.model.coefficientB?.toFixed(2)}`}
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 10 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+                        R² = {activeRSquared != null ? activeRSquared.toFixed(4) : '—'}
+                      </span>
+                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                        {activeParcel.model.sampleCount} muestras · Biomasa en kg/ha
+                      </span>
+                    </div>
+                  </div>
+
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, alignItems: 'start' }}>
                     <div>
                       <div className="ndvi-parcel-stats" style={{ marginBottom: 16 }}>
                         <div>
-                          <span className="label">Ecuación</span>
-                          <span className="value" style={{ fontSize: 15 }}>
-                            biomasa = {activeParcel.model.coefficientA?.toFixed(2)} × NDVI + {activeParcel.model.coefficientB?.toFixed(2)}
-                          </span>
-                        </div>
-                        <div>
                           <span className="label">R² (ajuste)</span>
-                          <span className="value" style={{
-                            color: activeParcel.model.rSquared >= 0.7 ? '#4ade80'
-                              : activeParcel.model.rSquared >= 0.5 ? '#f59e0b' : '#ef4444'
-                          }}>
-                            {activeParcel.model.rSquared?.toFixed(4)}
+                          <span className="value">
+                            {activeRSquared != null ? activeRSquared.toFixed(4) : '—'}
                           </span>
                         </div>
                         <div>
@@ -536,68 +576,11 @@ export default function CalibrationBiomassPage() {
                           <span className="value" style={{ fontSize: 11 }}>{activeParcel.model.sceneId || '—'}</span>
                         </div>
                       </div>
-                      {activeParcel.model.rSquared >= 0.7 ? (
-                        <p style={{ color: '#4ade80', fontSize: 13 }}>
-                          ✓ Buen ajuste. El modelo representa bien la relación NDVI↔biomasa para este potrero.
-                        </p>
-                      ) : activeParcel.model.rSquared >= 0.5 ? (
-                        <p style={{ color: '#f59e0b', fontSize: 13 }}>
-                          Ajuste moderado. Considera agregar más puntos de muestreo para mejorar la calibración.
-                        </p>
-                      ) : (
-                        <p style={{ color: '#ef4444', fontSize: 13 }}>
-                          Ajuste bajo. Revisa los datos de campo o agrega más puntos para obtener una calibración confiable.
-                        </p>
-                      )}
-
-                      {/* Allow recalibration */}
-                      <button
-                        className="action-btn"
-                        onClick={() => {
-                          setRecalibratingIds(prev => new Set([...prev, activeParcelId]))
-                          setParcelPoints(prev => ({ ...prev, [activeParcelId]: [] }))
-                          setPlacingPoints(true)
-                        }}
-                        style={{ marginTop: 12, fontSize: 12 }}
-                      >
-                        Recalibrar este potrero
-                      </button>
                     </div>
-                    <RegressionChart points={activeParcel.points || []} model={activeParcel.model} />
+                    <BiomassChart points={activeParcel.points || []} model={activeParcel.model} />
                   </div>
 
-                  {/* Points with NDVI */}
-                  {activeParcel.points && activeParcel.points.length > 0 && (
-                    <div style={{ marginTop: 16 }}>
-                      <h4 style={{ fontSize: 13, marginBottom: 8 }}>Puntos con NDVI calculado</h4>
-                      <div style={{ overflowX: 'auto' }}>
-                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                          <thead>
-                            <tr style={{ borderBottom: '2px solid var(--color-border)' }}>
-                              <th style={thStyle}>#</th>
-                              <th style={thStyle}>Área (m²)</th>
-                              <th style={thStyle}>Peso (kg)</th>
-                              <th style={thStyle}>Biomasa (kg/ha)</th>
-                              <th style={thStyle}>NDVI</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {activeParcel.points.map(pt => (
-                              <tr key={pt.pointIndex} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                                <td style={tdStyle}>{pt.pointIndex}</td>
-                                <td style={tdStyle}>{pt.cutAreaM2}</td>
-                                <td style={tdStyle}>{pt.greenWeightKg}</td>
-                                <td style={tdStyle}>{pt.biomassKgPerHa?.toFixed(1)}</td>
-                                <td style={{ ...tdStyle, color: '#4ade80', fontWeight: 600 }}>
-                                  {pt.ndviAtPoint?.toFixed(4) ?? '—'}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
+
                 </div>
               )}
             </div>
@@ -609,15 +592,9 @@ export default function CalibrationBiomassPage() {
       <div className="flex gap-12" style={{ marginTop: 24 }}>
         <button
           className="action-btn"
-          onClick={() => navigate(`/terrains/${terrainId}/ndvi/calibration-optim`)}
+          onClick={() => navigate(`/terrains/${terrainId}/ndvi/calibration-alert`)}
         >
-          ← Calibración NDVI Óptimo
-        </button>
-        <button
-          className="action-btn"
-          onClick={() => navigate(`/terrains/${terrainId}/parcels`)}
-        >
-          Potreros
+          ← Calibrar Umbral de Alerta
         </button>
         {status?.allCalibrated && (
           <button
@@ -643,9 +620,12 @@ function ParcelMap({ parcel, points, onMapClick, placingPoints }) {
       style={{ height: '100%', width: '100%', cursor: placingPoints ? 'crosshair' : '' }}
     >
       <TileLayer
-        attribution='&copy; Google'
-        url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
-        maxZoom={20}
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+        attribution="Tiles &copy; Esri" maxZoom={19}
+      />
+      <TileLayer
+        url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+        maxZoom={19}
       />
       <MapClickHandler onMapClick={onMapClick} enabled={placingPoints} />
       <ParcelGeoJsonLayer parcelId={parcel.parcelId} />
@@ -669,6 +649,8 @@ function ParcelGeoJsonLayer({ parcelId }) {
 
   useEffect(() => {
     if (!parcelId) return
+    // Clear previous parcel immediately so the new one does not depend on a full page reload.
+    setGeoJson(null)
     const token = localStorage.getItem('token')
     fetch(`/api/parcels/${encodeURIComponent(parcelId)}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},

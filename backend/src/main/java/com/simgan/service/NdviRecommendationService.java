@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import java.util.concurrent.ConcurrentHashMap;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -39,6 +40,7 @@ public class NdviRecommendationService {
     private final TerrainRepository terrainRepository;
     private final RotationHistoryRepository rotationHistoryRepository;
     private final NdviCalibrationRepository calibrationRepository;
+    private final BiomassCalibrationModelRepository biomassModelRepository;
 
     @Value("${ndvi.alert.threshold:0.3}")
     private double alertThreshold;
@@ -116,6 +118,9 @@ public class NdviRecommendationService {
         Optional<NdviRecord> latestOpt = ndviRecordRepository.findFirstByParcelIdOrderByCaptureDateDesc(parcel.getId());
         List<NdviRecord> history = ndviRecordRepository.findByParcelIdOrderByCaptureDate(parcel.getId());
 
+        // Use calibration model to compute biomass from NDVI if available
+        Optional<BiomassCalibrationModel> calibModel = biomassModelRepository.findByParcelId(parcel.getId());
+
         NdviDto.ParcelSummary.ParcelSummaryBuilder builder = NdviDto.ParcelSummary.builder()
                 .parcelId(parcel.getId())
                 .parcelName(parcel.getName())
@@ -123,11 +128,21 @@ public class NdviRecommendationService {
                 .status(parcel.getStatus())
                 .recordCount(history.size());
 
+        double latestBiomass = 0.0;
+
         if (latestOpt.isPresent()) {
             NdviRecord latest = latestOpt.get();
+            double biomass;
+            if (calibModel.isPresent() && calibModel.get().getCoefficientA() != null && calibModel.get().getCoefficientB() != null) {
+                biomass = Math.max(0.0, calibModel.get().getCoefficientA() * latest.getMeanNdvi() + calibModel.get().getCoefficientB());
+                biomass = Math.round(biomass * 100.0) / 100.0;
+            } else {
+                biomass = latest.getBiomassKgPerHa() != null ? latest.getBiomassKgPerHa() : Math.max(0, (latest.getMeanNdvi() - 0.1) * 12000);
+            }
+            latestBiomass = biomass;
             builder.latestNdvi(latest.getMeanNdvi())
                     .latestDate(latest.getCaptureDate().format(FMT))
-                    .latestBiomass(latest.getBiomassKgPerHa());
+                    .latestBiomass(biomass);
         }
 
         if (!history.isEmpty()) {
@@ -144,7 +159,7 @@ public class NdviRecommendationService {
         // Health classification using calibrated thresholds
         double ndvi = latestOpt.map(NdviRecord::getMeanNdvi).orElse(0.0);
         double[] thresholds = getThresholds(parcel.getId(), parcel.getTerrain().getId());
-        String[] health = classifyHealth(ndvi, thresholds[0], thresholds[1]);
+        String[] health = classifyHealth(ndvi, thresholds[0], thresholds[1], latestBiomass);
         builder.healthStatus(health[0]).healthColor(health[1]);
 
         // Recommendation
@@ -201,7 +216,13 @@ public class NdviRecommendationService {
             if (latest.isEmpty()) continue;
 
             double ndvi = latest.get().getMeanNdvi();
-            double biomass = latest.get().getBiomassKgPerHa() != null ? latest.get().getBiomassKgPerHa() : 0;
+            double biomass;
+            Optional<BiomassCalibrationModel> cm = biomassModelRepository.findByParcelId(parcel.getId());
+            if (cm.isPresent() && cm.get().getCoefficientA() != null && cm.get().getCoefficientB() != null) {
+                biomass = Math.max(0.0, cm.get().getCoefficientA() * ndvi + cm.get().getCoefficientB());
+            } else {
+                biomass = latest.get().getBiomassKgPerHa() != null ? latest.get().getBiomassKgPerHa() : 0;
+            }
 
             Parcel.ParcelStatus recommended = recommendStatus(ndvi, parcel.getStatus());
 
@@ -298,12 +319,32 @@ public class NdviRecommendationService {
         double ndvi = latest.getMeanNdvi();
         double biomass = latest.getBiomassKgPerHa() != null ? latest.getBiomassKgPerHa() : 0;
 
-        if (ndvi < 0.15) return "🔴 Sobrepastoreo. Descanso urgente (mínimo 30 días).";
-        if (ndvi < 0.25) return "🟠 Pasto degradado. Descanso 21 días recomendado.";
-        if (ndvi < alertThreshold) return "🟡 Pasto en estrés. Considerar rotación pronto.";
-        if (ndvi < 0.50) return "🟢 Pasto recuperándose. Apto para pastoreo ligero.";
-        if (ndvi < optimalThreshold) return String.format("🟢 Buen estado. Biomasa: %.0f kg/ha.", biomass);
-        return String.format("💚 Excelente. Biomasa: %.0f kg/ha. Pastoreo recomendado.", biomass);
+        double[] thresholds = getThresholds(parcel.getId(), parcel.getTerrain().getId());
+        double optim = thresholds[0];
+        double alert = thresholds[1];
+
+        // Keep interval robust even if thresholds are misconfigured/inverted.
+        double upper = Math.max(optim, alert);
+        double lower = Math.min(optim, alert);
+
+        if (ndvi > upper) {
+            return String.format(
+                    " Pasto por encima del óptimo (%.2f > %.2f). El pasto puede estar subpastoreado. Biomasa: %.0f kg/ha.",
+                    ndvi, upper, biomass);
+        }
+        if (ndvi > lower && ndvi <= upper) {
+            if (biomass == 0) {
+                return String.format(
+                        " El pasto está sobrepastoreado y degradado. Biomasa: %.0f kg/ha.",
+                        ndvi, lower, biomass);
+            }
+            return String.format(
+                    "Pasto dentro del rango óptimo-alerta (%.2f entre %.2f y %.2f). El pasto está en buen estado. Biomasa: %.0f kg/ha.",
+                    ndvi, lower, upper, biomass);
+        }
+        return String.format(
+                " Pasto por debajo del umbral de alerta (%.2f < %.2f). El pasto está sobrepastoreado y degradado. Biomasa: %.0f kg/ha.",
+                ndvi, lower, biomass);
     }
 
     /**
@@ -328,9 +369,12 @@ public class NdviRecommendationService {
         return new double[]{optim, alert};
     }
 
-    private String[] classifyHealth(double ndvi, double optim, double alert) {
+    private String[] classifyHealth(double ndvi, double optim, double alert, double biomass) {
         if (ndvi >= optim) return new String[]{"EXCELENTE", "#4ade80"};
-        if (ndvi > alert)  return new String[]{"OPTIMO", "#84cc16"};
+        if (ndvi > alert) {
+            if (biomass == 0.0) return new String[]{"CRÍTICO", "#ef4444"};
+            return new String[]{"OPTIMO", "#84cc16"};
+        }
         return new String[]{"CRÍTICO", "#ef4444"};
     }
 

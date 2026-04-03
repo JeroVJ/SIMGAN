@@ -30,7 +30,7 @@ public class SensorService {
      */
     public void procesarLectura(Sensor sensor, String payload) {
         try {
-            log.info("📊 Procesando lectura del sensor {}: {}", sensor.getId(), payload);
+            log.info(" Procesando lectura del sensor {}: {}", sensor.getId(), payload);
 
             // Parsear JSON
             LecturaSensor lectura = objectMapper.readValue(payload, LecturaSensor.class);
@@ -44,7 +44,7 @@ public class SensorService {
                     : "Franco";
 
             // Crear clasificación
-            ClasificacionSensor clasificacion = ClasificacionSensor.fromLectura(lectura, tipoSuelo);
+                ClasificacionSensor clasificacion = clasificarLectura(lectura, tipoSuelo);
             clasificacion.setSensor(sensor);
             clasificacion.setMqttTopic(sensor.getMqttTopic());
             clasificacion.setMqttBrokerUrl(sensor.getMqttBrokerUrl());
@@ -63,7 +63,7 @@ public class SensorService {
             log.info("✓ Lectura guardada para sensor {} en topic {}", sensor.getId(), sensor.getMqttTopic());
 
         } catch (Exception e) {
-            log.error("❌ Error procesando lectura para sensor {} con payload {}", sensor.getId(), payload, e);
+            log.error(" Error procesando lectura para sensor {} con payload {}", sensor.getId(), payload, e);
         }
     }
 
@@ -78,7 +78,36 @@ public class SensorService {
 
             procesarLectura(sensor, objectMapper.writeValueAsString(lectura));
         } catch (Exception e) {
-            log.error("❌ Error en procesarLectura legacy: {}", e.getMessage());
+            log.error(" Error en procesarLectura legacy: {}", e.getMessage());
         }
+    }
+
+    private ClasificacionSensor clasificarLectura(LecturaSensor lectura, String tipoSuelo) {
+        ClasificacionSensor clasificacion = ClasificacionSensor.builder()
+                .valorHumedad(lectura.getValorHumedad())
+                .timestamp(lectura.getTimestamp())
+                .build();
+
+        double humedad = lectura.getValorHumedad();
+
+        // Única regla de clasificación: suelo Franco-arcilloso
+        if ("FrancoArcillosa".equals(tipoSuelo) || "Franco-arcilloso".equalsIgnoreCase(tipoSuelo)) {
+            if(humedad <0 ){ 
+                 clasificacion.setEstado("SENSOR FUERA DE TIERRA");
+                clasificacion.setConsecuencia("EL SENSOR ESTA FUERA DE TIERRA. POR FAVOR COLOCARLO EN EL SUELO");
+  
+            }else if(humedad < 30) {
+                clasificacion.setEstado("SECO");
+                clasificacion.setConsecuencia("REQUIERE REPOSO EL POTRERO. RECUPERACION BAJA. ESTRES HIDRICO");
+            } else if (humedad >= 30 && humedad <= 40) {
+                clasificacion.setEstado("BUEN_ESTADO");
+                clasificacion.setConsecuencia("CAPACIDAD DE CAMPO");
+            } else if (humedad > 40) {
+                clasificacion.setEstado("ENCHARCADO");
+                clasificacion.setConsecuencia("EXCESO DE AGUA");
+            }
+        }
+
+        return clasificacion;
     }
 }

@@ -253,7 +253,7 @@ function SignupForm({ onLogin }) {
       >
         {loading
           ? <><div className="spinner" style={{ width: 16, height: 16, borderTopColor: 'var(--color-bg)' }} /> Creando cuenta...</>
-          : '🌱 Crear Cuenta'}
+          : ' Crear Cuenta'}
       </button>
     </>
   )

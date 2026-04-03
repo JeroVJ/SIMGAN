@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 public class NdviController {
 
     private final NdviRecommendationService recommendationService;
-    private final NdviSeedService seedService;
+  
     private final PlanetApiService planetApiService;
     private final SentinelApiService sentinelApiService;
     private final AnalysisOrchestrator analysisOrchestrator;

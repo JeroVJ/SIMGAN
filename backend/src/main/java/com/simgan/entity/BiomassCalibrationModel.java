@@ -20,8 +20,8 @@ public class BiomassCalibrationModel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "parcel_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parcel_id", nullable = false, unique = true)
     @OnDelete(action = OnDeleteAction.CASCADE)
     private Parcel parcel;
 
@@ -51,6 +51,9 @@ public class BiomassCalibrationModel {
 
     @Column(name = "calibration_date")
     private LocalDate calibrationDate;
+
+    @Column(name = "formula")
+    private String formula;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

@@ -67,8 +67,8 @@ export function useNdvi(terrainId) {
     try {
       const result = await ndviApi.analyze(terrainId, startDate, endDate, biomassMethod)
       if (result.message)      toast.success(result.message, { duration: 6000 })
-      if (result.planetNote)   toast(result.planetNote,   { icon: '🛰️', duration: 4000 })
-      if (result.sentinelNote) toast(result.sentinelNote, { icon: '🌍', duration: 4000 })
+      if (result.planetNote)   toast(result.planetNote,   {  duration: 4000 })
+      if (result.sentinelNote) toast(result.sentinelNote, {  duration: 4000 })
       if (result.error)        toast.error(result.error)
       await reload()
     } catch (err) {

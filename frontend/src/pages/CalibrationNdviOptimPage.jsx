@@ -7,10 +7,20 @@ import { getHealthColor } from '../utils/ndvi'
 export default function CalibrationNdviOptimPage() {
   const { terrainId } = useParams()
   const navigate = useNavigate()
-  const { status, loading, calibrating, calibrate } = useCalibration(terrainId, 'OPTIM')
+  const { status, loading, calibrating, calibrate, scenes, searchingScenes, searchScenes } = useCalibration(terrainId, 'OPTIM')
 
   const today = new Date().toISOString().slice(0, 10)
   const [calibrationDate, setCalibrationDate] = useState('')
+  const [selectedScene, setSelectedScene] = useState(null)
+
+  const handleSearchScenes = async () => {
+    setSelectedScene(null)
+    await searchScenes(calibrationDate)
+  }
+
+  const handleCalibrate = () => {
+    calibrate(calibrationDate, selectedScene)
+  }
 
   if (loading) return <Spinner page label="Verificando calibración NDVI óptima..." />
 
@@ -31,9 +41,7 @@ export default function CalibrationNdviOptimPage() {
           <div>
             <h2> Calibración NDVI — Valor Óptimo</h2>
             <p>
-              {status?.homogeneous
-                ? 'Finca homogénea — se calibra todo el terreno con una sola referencia.'
-                : `Finca no homogénea — calibración por potrero (${status?.calibratedParcels || 0}/${status?.totalParcels || 0} calibrados).`}
+              Se promedia el NDVI de todos los potreros del terreno para obtener una sola referencia óptima.
             </p>
           </div>
         </div>
@@ -89,7 +97,7 @@ export default function CalibrationNdviOptimPage() {
               <h3>Recalibrar con otra fecha</h3>
             </div>
             <p style={{ color: 'var(--color-text-secondary)', marginBottom: 16 }}>
-              Si deseas ajustar el valor óptimo, selecciona una nueva fecha y vuelve a ejecutar la calibración.
+              Si deseas ajustar el valor óptimo, selecciona una nueva fecha y busca las imágenes disponibles.
             </p>
             <div className="ndvi-analysis-controls" style={{ justifyContent: 'flex-start' }}>
               <div className="ndvi-date-field">
@@ -102,22 +110,69 @@ export default function CalibrationNdviOptimPage() {
                   type="date"
                   value={calibrationDate}
                   max={today}
-                  onChange={(e) => setCalibrationDate(e.target.value)}
-                  disabled={calibrating}
+                  onChange={(e) => { setCalibrationDate(e.target.value); setSelectedScene(null) }}
+                  disabled={calibrating || searchingScenes}
                 />
                 <p className="ndvi-date-hint">Se buscarán imágenes en un rango de ±2 días.</p>
               </div>
               <button
                 className="action-btn action-btn--primary"
-                onClick={() => calibrate(calibrationDate)}
-                disabled={calibrating || !calibrationDate}
+                onClick={handleSearchScenes}
+                disabled={searchingScenes || !calibrationDate || calibrating}
                 style={{ alignSelf: 'flex-end', marginBottom: 24 }}
               >
-                {calibrating
-                  ? <><span className="spinner" /> Recalibrando...</>
-                  : 'Recalibrar Óptimo'}
+                {searchingScenes
+                  ? <><span className="spinner" /> Buscando...</>
+                  : ' Buscar Imágenes'}
               </button>
             </div>
+
+            {/* Scene picker */}
+            {scenes.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <h4 style={{ marginBottom: 12, fontFamily: 'var(--font-display)' }}>
+                  Imágenes disponibles ({scenes.length})
+                </h4>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {scenes.map(scene => (
+                    <label
+                      key={scene.sceneId}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '12px 16px', borderRadius: 8,
+                        border: selectedScene === scene.sceneId ? '2px solid #4ade80' : '1px solid var(--color-border)',
+                        background: selectedScene === scene.sceneId ? 'rgba(74,222,128,0.08)' : 'var(--color-bg-card)',
+                        cursor: 'pointer', transition: 'all 0.15s'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="scene"
+                        value={scene.sceneId}
+                        checked={selectedScene === scene.sceneId}
+                        onChange={() => setSelectedScene(scene.sceneId)}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{scene.sceneId}</div>
+                        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                           {scene.date} &nbsp;·&nbsp;  Nubosidad: <strong style={{ color: scene.cloudCoverPercent > 20 ? '#f59e0b' : '#4ade80' }}>{scene.cloudCoverPercent?.toFixed(1)}%</strong> &nbsp;·&nbsp; {scene.source}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <button
+                  className="action-btn action-btn--primary"
+                  onClick={handleCalibrate}
+                  disabled={calibrating || !selectedScene}
+                  style={{ marginTop: 16 }}
+                >
+                  {calibrating
+                    ? <><span className="spinner" /> Recalibrando...</>
+                    : 'Recalibrar con imagen seleccionada'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-12">
@@ -126,13 +181,6 @@ export default function CalibrationNdviOptimPage() {
               onClick={() => navigate(`/terrains/${terrainId}/ndvi/calibration-alert`)}
             >
               Continuar → Calibrar Umbral de Alerta
-            </button>
-            <button
-              className="action-btn action-btn--primary"
-              onClick={() => navigate(`/terrains/${terrainId}/ndvi/calibration-biomass`)}
-              style={{ background: '#16a34a' }}
-            >
-              Continuar → Calibrar Biomasa
             </button>
             <button
               className="action-btn"
@@ -151,8 +199,8 @@ export default function CalibrationNdviOptimPage() {
             </div>
             <p style={{ color: 'var(--color-text-secondary)', marginBottom: 20 }}>
               Ingresa una fecha en la que el terreno y sus potreros estaban en <strong>buenas condiciones</strong>.
-              El sistema buscará imágenes satelitales disponibles (máx 20% nubosidad) cerca de esa fecha
-              y calculará el NDVI de referencia óptimo.
+              El sistema buscará imágenes satelitales disponibles (máx 30% nubosidad) cerca de esa fecha
+              para que puedas elegir cuál utilizar.
             </p>
 
             <div className="ndvi-analysis-controls" style={{ justifyContent: 'flex-start' }}>
@@ -166,23 +214,73 @@ export default function CalibrationNdviOptimPage() {
                   type="date"
                   value={calibrationDate}
                   max={today}
-                  onChange={(e) => setCalibrationDate(e.target.value)}
-                  disabled={calibrating}
+                  onChange={(e) => { setCalibrationDate(e.target.value); setSelectedScene(null) }}
+                  disabled={calibrating || searchingScenes}
                 />
                 <p className="ndvi-date-hint">Se buscarán imágenes en un rango de ±2 días.</p>
               </div>
 
               <button
                 className="action-btn action-btn--primary"
-                onClick={() => calibrate(calibrationDate)}
-                disabled={calibrating || !calibrationDate}
+                onClick={handleSearchScenes}
+                disabled={searchingScenes || !calibrationDate || calibrating}
                 style={{ alignSelf: 'flex-end', marginBottom: 24 }}
               >
-                {calibrating
-                  ? <><span className="spinner" /> Calibrando...</>
-                  : ' Ejecutar Calibración Óptima'}
+                {searchingScenes
+                  ? <><span className="spinner" /> Buscando...</>
+                  : ' Buscar Imágenes Disponibles'}
               </button>
             </div>
+
+            {/* Scene picker */}
+            {scenes.length > 0 && (
+              <div style={{ marginTop: 16 }}>
+                <h4 style={{ marginBottom: 12, fontFamily: 'var(--font-display)' }}>
+                  Imágenes disponibles ({scenes.length})
+                </h4>
+                <p style={{ color: 'var(--color-text-secondary)', fontSize: 13, marginBottom: 12 }}>
+                  Selecciona la imagen que deseas usar para la calibración:
+                </p>
+                <div style={{ display: 'grid', gap: 8 }}>
+                  {scenes.map(scene => (
+                    <label
+                      key={scene.sceneId}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        padding: '12px 16px', borderRadius: 8,
+                        border: selectedScene === scene.sceneId ? '2px solid #4ade80' : '1px solid var(--color-border)',
+                        background: selectedScene === scene.sceneId ? 'rgba(74,222,128,0.08)' : 'var(--color-bg-card)',
+                        cursor: 'pointer', transition: 'all 0.15s'
+                      }}
+                    >
+                      <input
+                        type="radio"
+                        name="scene"
+                        value={scene.sceneId}
+                        checked={selectedScene === scene.sceneId}
+                        onChange={() => setSelectedScene(scene.sceneId)}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: 13 }}>{scene.sceneId}</div>
+                        <div style={{ fontSize: 12, color: 'var(--color-text-secondary)', marginTop: 2 }}>
+                           {scene.date} &nbsp;·&nbsp;  Nubosidad: <strong style={{ color: scene.cloudCoverPercent > 20 ? '#f59e0b' : '#4ade80' }}>{scene.cloudCoverPercent?.toFixed(1)}%</strong> &nbsp;·&nbsp; {scene.source}
+                        </div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <button
+                  className="action-btn action-btn--primary"
+                  onClick={handleCalibrate}
+                  disabled={calibrating || !selectedScene}
+                  style={{ marginTop: 16 }}
+                >
+                  {calibrating
+                    ? <><span className="spinner" /> Calibrando...</>
+                    : ' Ejecutar Calibración Óptima'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="card mb-24" style={{ borderLeft: '4px solid #3b82f6' }}>
@@ -191,15 +289,9 @@ export default function CalibrationNdviOptimPage() {
             </h3>
             <div style={{ color: 'var(--color-text-secondary)', fontSize: 13, lineHeight: 1.7 }}>
               <p><strong>1.</strong> Seleccionas una fecha donde el pasto estaba en su <strong>mejor estado</strong>.</p>
-              <p><strong>2.</strong> El sistema busca imágenes Sentinel-2 con poca nubosidad (≤20%).</p>
-              <p><strong>3.</strong> Calcula el NDVI promedio para cada potrero.</p>
-              <p><strong>4.</strong> Ese valor se guarda como <strong>referencia óptima</strong> (línea verde en la gráfica).</p>
-              {!status?.homogeneous && (
-                <p style={{ marginTop: 8, color: '#f59e0b' }}>
-                   Como tu finca no es homogénea, se calibrará cada potrero individualmente.
-                  Los potreros con el mismo tipo de pasto compartirán la calibración.
-                </p>
-              )}
+              <p><strong>2.</strong> El sistema busca imágenes Sentinel-2 disponibles (≤30% nubosidad).</p>
+              <p><strong>3.</strong> Eliges la imagen que deseas utilizar según fecha y nubosidad.</p>
+              <p><strong>4.</strong> Se calcula el NDVI promedio de todos los potreros y se guarda como <strong>referencia óptima</strong> (línea verde en la gráfica).</p>
             </div>
           </div>
 

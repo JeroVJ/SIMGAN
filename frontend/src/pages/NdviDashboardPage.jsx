@@ -140,7 +140,7 @@ export default function NdviDashboardPage() {
                 disabled={analyzing}
               >
                 <option value="DEFAULT">Por defecto (fórmula)</option>
-                <option value="SAMPLING" disabled>Por muestreo (próximamente)</option>
+                <option value="SAMPLING">Por muestreo (calibración biomasa)</option>
               </select>
               <p className="ndvi-date-hint">Método para estimar biomasa.</p>
             </div>

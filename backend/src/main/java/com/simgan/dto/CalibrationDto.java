@@ -30,7 +30,6 @@ public class CalibrationDto {
         private LocalDate calibrationDate;
         private String calibrationType;
         private Double referenceNdvi;
-        private Double referenceBiomass;
         private String pastureType;
         private String source;
         private String sceneId;

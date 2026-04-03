@@ -51,6 +51,7 @@ public class BiomassCalibrationDto {
         private Integer sampleCount;
         private String sceneId;
         private LocalDate calibrationDate;
+        private String formula;
     }
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder

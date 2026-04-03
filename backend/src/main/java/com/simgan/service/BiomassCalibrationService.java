@@ -46,6 +46,45 @@ public class BiomassCalibrationService {
             BiomassCalibrationModel model = modelByParcel.get(parcel.getId());
             List<BiomassCalibrationPoint> points = pointRepository.findByParcelIdOrderByPointIndex(parcel.getId());
 
+            // Auto-heal: always try to provide rSquared/formula in status response
+            if (model != null && (model.getRSquared() == null || model.getFormula() == null)) {
+                List<double[]> pairs = new ArrayList<>();
+                for (BiomassCalibrationPoint pt : points) {
+                    if (pt.getNdviAtPoint() != null && pt.getBiomassKgPerHa() != null) {
+                        pairs.add(new double[]{pt.getNdviAtPoint(), pt.getBiomassKgPerHa()});
+                    }
+                }
+
+                boolean changed = false;
+                if (model.getRSquared() == null) {
+                    if (pairs.size() >= 2) {
+                        double[] reg = linearRegression(pairs);
+                        model.setRSquared(Math.round(reg[2] * 10000.0) / 10000.0);
+                    } else {
+                        // Fallback for legacy records without enough valid NDVI pairs
+                        model.setRSquared(0.0);
+                    }
+                    changed = true;
+                }
+
+                if (model.getFormula() == null
+                        && model.getCoefficientA() != null
+                        && model.getCoefficientB() != null) {
+                    String sign = model.getCoefficientB() >= 0 ? "+" : "-";
+                    model.setFormula(String.format(
+                            "Biomasa = %.2f × NDVI %s %.2f",
+                            model.getCoefficientA(),
+                            sign,
+                            Math.abs(model.getCoefficientB())));
+                    changed = true;
+                }
+
+                if (changed) {
+                    modelRepository.save(model);
+                    log.info("Auto-healed rSquared/formula for parcelId={}", parcel.getId());
+                }
+            }
+
             boolean calibrated = model != null;
             if (calibrated) calibratedCount++;
 
@@ -121,16 +160,25 @@ public class BiomassCalibrationService {
             throw new RuntimeException("No se encontró una calibración NDVI óptima con escena válida. Ejecuta primero la calibración NDVI óptima.");
         }
 
-        // Delete previous calibration data for this parcel
-        pointRepository.deleteByParcelId(parcelId);
-        modelRepository.deleteByParcelId(parcelId);
+        // ─── Reuse existing NDVI values by coordinate ─────────────────────────────
+        Map<String, Double> cachedNdvi = new HashMap<>();
+        for (BiomassCalibrationPoint existing : pointRepository.findByParcelIdOrderByPointIndex(parcelId)) {
+            if (existing.getNdviAtPoint() != null) {
+                String key = String.format("%.6f,%.6f", existing.getLatitude(), existing.getLongitude());
+                cachedNdvi.put(key, existing.getNdviAtPoint());
+            }
+        }
 
-        // Calculate biomass (kg/ha) for each point and save
+        // Delete previous points
+        pointRepository.deleteByParcelId(parcelId);
+
         List<BiomassCalibrationPoint> savedPoints = new ArrayList<>();
         List<PointNdviDto.PointNdviInput> ndviInputs = new ArrayList<>();
 
         for (BiomassCalibrationDto.SamplePointInput input : inputPoints) {
             double biomassKgPerHa = (input.getGreenWeightKg() / input.getCutAreaM2()) * 10000.0;
+            String coordKey = String.format("%.6f,%.6f", input.getLatitude(), input.getLongitude());
+            Double reusedNdvi = cachedNdvi.get(coordKey);
 
             BiomassCalibrationPoint point = BiomassCalibrationPoint.builder()
                     .parcel(parcel)
@@ -142,37 +190,43 @@ public class BiomassCalibrationService {
                     .greenWeightKg(input.getGreenWeightKg())
                     .biomassKgPerHa(Math.round(biomassKgPerHa * 100.0) / 100.0)
                     .sceneId(sceneId)
+                    .ndviAtPoint(reusedNdvi)
                     .build();
             savedPoints.add(pointRepository.save(point));
 
-            ndviInputs.add(PointNdviDto.PointNdviInput.builder()
-                    .pointIndex(input.getPointIndex())
-                    .latitude(input.getLatitude())
-                    .longitude(input.getLongitude())
-                    .areaM2(input.getCutAreaM2())
-                    .build());
+            if (reusedNdvi == null) {
+                ndviInputs.add(PointNdviDto.PointNdviInput.builder()
+                        .pointIndex(input.getPointIndex())
+                        .latitude(input.getLatitude())
+                        .longitude(input.getLongitude())
+                        .areaM2(input.getCutAreaM2())
+                        .build());
+            }
         }
 
-        // Call Processing service to compute NDVI at each point
-        log.info("Enviando {} puntos a Processing para NDVI sceneId={}", ndviInputs.size(), sceneId);
-        PointNdviDto.PointNdviResponse ndviResponse = imageProcessingClient.computePointNdvi(sceneId, downloadUrl, ndviInputs);
-
-        // Update points with NDVI values
-        Map<Integer, Double> ndviByIndex = new HashMap<>();
-        if (ndviResponse.getResults() != null) {
-            for (PointNdviDto.PointNdviResult r : ndviResponse.getResults()) {
-                if (r.getNdvi() != null) {
-                    ndviByIndex.put(r.getPointIndex(), r.getNdvi());
+        // Call Processing only for new coordinates without cached NDVI
+        if (!ndviInputs.isEmpty()) {
+            log.info("Consultando NDVI en Processing para {} puntos nuevos (sceneId={})", ndviInputs.size(), sceneId);
+            PointNdviDto.PointNdviResponse ndviResponse = imageProcessingClient.computePointNdvi(sceneId, downloadUrl, ndviInputs);
+            Map<Integer, Double> ndviByIndex = new HashMap<>();
+            if (ndviResponse.getResults() != null) {
+                for (PointNdviDto.PointNdviResult r : ndviResponse.getResults()) {
+                    if (r.getNdvi() != null) {
+                        ndviByIndex.put(r.getPointIndex(), r.getNdvi());
+                    }
                 }
             }
-        }
-
-        for (BiomassCalibrationPoint point : savedPoints) {
-            Double ndvi = ndviByIndex.get(point.getPointIndex());
-            if (ndvi != null) {
-                point.setNdviAtPoint(ndvi);
-                pointRepository.save(point);
+            for (BiomassCalibrationPoint point : savedPoints) {
+                if (point.getNdviAtPoint() == null) {
+                    Double ndvi = ndviByIndex.get(point.getPointIndex());
+                    if (ndvi != null) {
+                        point.setNdviAtPoint(ndvi);
+                        pointRepository.save(point);
+                    }
+                }
             }
+        } else {
+            log.info("Todos los puntos tienen NDVI cacheado, omitiendo llamada a Processing.");
         }
 
         // Build (NDVI, biomass) pairs for regression
@@ -193,17 +247,20 @@ public class BiomassCalibrationService {
         double b = regression[1];
         double rSquared = regression[2];
 
-        BiomassCalibrationModel model = BiomassCalibrationModel.builder()
-                .parcel(parcel)
-                .terrain(terrain)
-                .coefficientA(Math.round(a * 10000.0) / 10000.0)
-                .coefficientB(Math.round(b * 10000.0) / 10000.0)
-                .rSquared(Math.round(rSquared * 10000.0) / 10000.0)
-                .sampleCount(pairs.size())
-                .sceneId(sceneId)
-                .calibrationDate(calibrationDate)
-                .build();
+        BiomassCalibrationModel model = modelRepository.findByParcelId(parcelId)
+                .orElse(BiomassCalibrationModel.builder()
+                        .parcel(parcel)
+                        .terrain(terrain)
+                        .build());
 
+        model.setCoefficientA(Math.round(a * 10000.0) / 10000.0);
+        model.setCoefficientB(Math.round(b * 10000.0) / 10000.0);
+        model.setRSquared(Math.round(rSquared * 10000.0) / 10000.0);
+        model.setSampleCount(pairs.size());
+        model.setSceneId(sceneId);
+        model.setCalibrationDate(calibrationDate);
+        String sign = b >= 0 ? "+" : "-";
+        model.setFormula(String.format("Biomasa = %.2f \u00d7 NDVI %s %.2f", a, sign, Math.abs(b)));
         model = modelRepository.save(model);
 
         log.info("Calibración biomasa completada parcelId={} a={} b={} R²={} muestras={}",
@@ -291,6 +348,7 @@ public class BiomassCalibrationService {
                 .sampleCount(model.getSampleCount())
                 .sceneId(model.getSceneId())
                 .calibrationDate(model.getCalibrationDate())
+                .formula(model.getFormula())
                 .build();
     }
 }

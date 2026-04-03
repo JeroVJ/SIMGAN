@@ -110,8 +110,10 @@ export const ndviApi = {
 export const calibrationApi = {
   getStatus: (terrainId, type = 'OPTIM') =>
     api.get(`/ndvi/calibration/status/${terrainId}`, { params: { type } }).then(r => r.data),
-  runCalibration: (terrainId, calibrationDate, type = 'OPTIM') =>
-    api.post(`/ndvi/calibration/${terrainId}`, null, { params: { calibrationDate, type } }).then(r => r.data),
+  searchScenes: (terrainId, calibrationDate) =>
+    api.get(`/ndvi/calibration/scenes/${terrainId}`, { params: { calibrationDate } }).then(r => r.data),
+  runCalibration: (terrainId, calibrationDate, type = 'OPTIM', sceneId = null) =>
+    api.post(`/ndvi/calibration/${terrainId}`, null, { params: { calibrationDate, type, ...(sceneId ? { sceneId } : {}) } }).then(r => r.data),
 }
 
 // ===== CALIBRACIÓN BIOMASA =====

@@ -211,7 +211,6 @@ CREATE TABLE IF NOT EXISTS ndvi_calibrations (
     calibration_date DATE NOT NULL,
     calibration_type VARCHAR(10) NOT NULL DEFAULT 'OPTIM',
     reference_ndvi DOUBLE PRECISION NOT NULL,
-    reference_biomass DOUBLE PRECISION,
     pasture_type VARCHAR(255),
     source VARCHAR(20) DEFAULT 'SENTINEL',
     scene_id VARCHAR(255),
@@ -219,6 +218,9 @@ CREATE TABLE IF NOT EXISTS ndvi_calibrations (
     pixel_count INTEGER,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+ALTER TABLE ndvi_calibrations
+    DROP COLUMN IF EXISTS reference_biomass;
 
 CREATE INDEX IF NOT EXISTS idx_ndvi_calibrations_terrain ON ndvi_calibrations(terrain_id);
 CREATE INDEX IF NOT EXISTS idx_ndvi_calibrations_parcel ON ndvi_calibrations(parcel_id);
@@ -253,10 +255,11 @@ CREATE TABLE IF NOT EXISTS biomass_calibration_models (
     sample_count INTEGER NOT NULL,
     scene_id VARCHAR(255),
     calibration_date DATE,
+    formula VARCHAR(255),
     created_at TIMESTAMP DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS idx_biomass_models_parcel ON biomass_calibration_models(parcel_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_biomass_models_parcel ON biomass_calibration_models(parcel_id);
 CREATE INDEX IF NOT EXISTS idx_biomass_models_terrain ON biomass_calibration_models(terrain_id);
 
 CREATE INDEX IF NOT EXISTS idx_lotes_terrain ON lotes(terrain_id);
