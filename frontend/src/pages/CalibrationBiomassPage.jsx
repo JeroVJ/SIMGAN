@@ -76,15 +76,14 @@ function BiomassChart({ points, model }) {
     const xMin = sorted[0].ndviAtPoint - 0.02
     const xMax = sorted[sorted.length - 1].ndviAtPoint + 0.02
     const a = model.coefficientA
-    const b = model.coefficientB
     // Endpoints for regression line
-    const lineStart = { ndvi: +xMin.toFixed(4), regrLine: +(a * xMin + b).toFixed(1) }
-    const lineEnd   = { ndvi: +xMax.toFixed(4), regrLine: +(a * xMax + b).toFixed(1) }
+    const lineStart = { ndvi: +xMin.toFixed(4), regrLine: +(a * xMin).toFixed(1) }
+    const lineEnd   = { ndvi: +xMax.toFixed(4), regrLine: +(a * xMax).toFixed(1) }
     // Actual sample points: include regrLine so line passes through them smoothly
     const sampleRows = sorted.map(p => ({
       ndvi: +p.ndviAtPoint.toFixed(4),
       biomasa: +p.biomassKgPerHa.toFixed(1),
-      regrLine: +(a * p.ndviAtPoint + b).toFixed(1),
+      regrLine: +(a * p.ndviAtPoint).toFixed(1),
     }))
     // Merge: all unique ndvi values in order
     const all = [lineStart, ...sampleRows, lineEnd]
@@ -329,7 +328,7 @@ export default function CalibrationBiomassPage() {
           <p><strong>2.</strong> Haz clic en el mapa para marcar al menos <strong>{MIN_POINTS} puntos</strong> donde realizaste cortes de pasto.</p>
           <p><strong>3.</strong> Para cada punto ingresa el <strong>área de corte (m²)</strong> y el <strong>peso obtenido (kg de forraje verde)</strong>.</p>
           <p><strong>4.</strong> El sistema calcula el NDVI en cada punto usando la imagen satelital de la calibración óptima.</p>
-          <p><strong>5.</strong> Con los pares (NDVI, biomasa) se ajusta una regresión lineal: <strong>biomasa = a × NDVI + b</strong>.</p>
+          <p><strong>5.</strong> Con los pares (NDVI, biomasa) se ajusta una regresión lineal: <strong>biomasa = a × NDVI</strong>.</p>
           <p><strong>6.</strong> El modelo calibrado se usa para estimar biomasa real en cada potrero.</p>
         </div>
       </div>
@@ -367,7 +366,7 @@ export default function CalibrationBiomassPage() {
                   <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>
                     {p.model.formula
                       ? <span style={{ color: '#fcd34d' }}>{p.model.formula}</span>
-                      : `a=${p.model.coefficientA?.toFixed(2)} b=${p.model.coefficientB?.toFixed(2)}`}
+                      : `a=${p.model.coefficientA?.toFixed(2)}`}
                     {(() => {
                       const pRSquared = extractRSquared(p.model)
                       return pRSquared != null ? <> · R²={pRSquared.toFixed(4)}</> : null
@@ -546,7 +545,7 @@ export default function CalibrationBiomassPage() {
                     <div style={{ fontSize: 22, fontWeight: 700, color: '#fcd34d', letterSpacing: 0.5 }}>
                       {activeParcel.model.formula
                         ? activeParcel.model.formula
-                        : `Biomasa = ${activeParcel.model.coefficientA?.toFixed(2)} × NDVI + ${activeParcel.model.coefficientB?.toFixed(2)}`}
+                        : `Biomasa = ${activeParcel.model.coefficientA?.toFixed(2)} × NDVI`}
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 24, marginTop: 10 }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--color-text-secondary)' }}>

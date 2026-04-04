@@ -57,11 +57,21 @@
     align-self: flex-start;
   }
 
+  .ndvi-controls-stack {
+    align-items: stretch;
+    width: 100%;
+    max-width: 420px;
+  }
+
   .ndvi-analysis-controls {
     flex-wrap: wrap;
     align-items: center;
     width: 100%;
-    max-width: 420px;
+  }
+
+  .ndvi-schedule-controls {
+    width: 100%;
+    flex-wrap: wrap;
   }
 
   .ndvi-date-input {

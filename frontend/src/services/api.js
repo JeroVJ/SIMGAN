@@ -86,10 +86,6 @@ export const ndviApi = {
   // Historial de rotación
   getRotationHistory: (terrainId) => api.get(`/ndvi/history/${terrainId}`).then(r => r.data),
 
-  // Alertas
-  getAlerts: (terrainId) => api.get(`/ndvi/alerts/${terrainId}`).then(r => r.data),
-  acknowledgeAlert: (alertId) => api.patch(`/ndvi/alerts/${alertId}/acknowledge`),
-
   // Ejecutar análisis
   analyze: (terrainId, startDate, endDate, biomassMethod) => {
     const params = {}
@@ -101,6 +97,10 @@ export const ndviApi = {
 
   // Estado Planet Labs
   getPlanetStatus: () => api.get('/ndvi/planet/status').then(r => r.data),
+
+  // Programación automática de análisis NDVI
+  getSchedule: (terrainId) => api.get(`/ndvi/schedule/${terrainId}`).then(r => r.data),
+  configureSchedule: (terrainId, days) => api.post(`/ndvi/schedule/${terrainId}`, null, { params: { days } }).then(r => r.data),
 
   // Estimación de pastoreo
   getGrazingEstimate: (terrainId) => api.get(`/ndvi/grazing-estimate/${terrainId}`).then(r => r.data)

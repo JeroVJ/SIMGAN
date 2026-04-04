@@ -7,7 +7,7 @@ import { groupTimelineByDate } from '../utils/ndvi'
  * useNdvi(terrainId)
  *
  * Loads all NDVI analytics data for a single terrain and exposes actions
- * for running analysis and managing alerts.
+ * for running analysis.
  *
  * Used by: NdviDashboardPage
  *
@@ -24,8 +24,8 @@ import { groupTimelineByDate } from '../utils/ndvi'
  *   parcelNames      {Array}        — parcel name strings for chart lines
  *   reload           {Function}
  *   analyze          {Function}     — trigger NDVI satellite analysis
+ *   configureSchedule {Function}    — configure automatic analysis every N days
  *   selectParcel     {Function(id)} — load per-parcel timeline
- *   acknowledgeAlert {Function(id)} — mark an alert as acknowledged
  */
 export function useNdvi(terrainId) {
   const [dashboard, setDashboard]           = useState(null)
@@ -34,6 +34,7 @@ export function useNdvi(terrainId) {
   const [history, setHistory]               = useState([])
   const [loading, setLoading]               = useState(true)
   const [analyzing, setAnalyzing]           = useState(false)
+  const [scheduling, setScheduling]         = useState(false)
   const [selectedParcel, setSelectedParcel] = useState(null)
   const [parcelTimeline, setParcelTimeline] = useState([])
 
@@ -88,15 +89,22 @@ export function useNdvi(terrainId) {
     }
   }, [])
 
-  const acknowledgeAlert = useCallback(async (alertId) => {
+  const configureSchedule = useCallback(async (days) => {
+    setScheduling(true)
     try {
-      await ndviApi.acknowledgeAlert(alertId)
-      toast.success('Alerta reconocida')
+      const result = await ndviApi.configureSchedule(terrainId, days)
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        toast.success(`Programación guardada: cada ${days} día(s).`)
+      }
       await reload()
-    } catch {
-      toast.error('Error')
+    } catch (err) {
+      toast.error('Error guardando programación: ' + (err.response?.data?.error || err.message))
+    } finally {
+      setScheduling(false)
     }
-  }, [reload])
+  }, [terrainId, reload])
 
   const timelineByDate = useMemo(
     () => groupTimelineByDate(dashboard?.timeline),
@@ -110,9 +118,9 @@ export function useNdvi(terrainId) {
 
   return {
     dashboard, comparison, recommendations, history,
-    loading, analyzing,
+    loading, analyzing, scheduling,
     selectedParcel, parcelTimeline,
     timelineByDate, parcelNames,
-    reload, analyze, selectParcel, acknowledgeAlert,
+    reload, analyze, configureSchedule, selectParcel,
   }
 }

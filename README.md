@@ -283,12 +283,10 @@ simgan-demo/
 ### NDVI / Análisis
 | Method | URL | Descripción |
 |--------|-----|-------------|
-| `GET` | `/api/ndvi/dashboard/{terrainId}` | Dashboard completo con NDVI, biomasa y alertas |
+| `GET` | `/api/ndvi/dashboard/{terrainId}` | Dashboard completo con NDVI y biomasa |
 | `GET` | `/api/ndvi/timeline/{terrainId}` | Serie temporal de NDVI |
 | `GET` | `/api/ndvi/comparison/{terrainId}` | Comparación entre parcelas |
 | `GET` | `/api/ndvi/recommendations/{terrainId}` | Recomendaciones de rotación |
-| `GET` | `/api/ndvi/alerts/{terrainId}` | Alertas activas |
-| `PATCH` | `/api/ndvi/alerts/{alertId}/acknowledge` | Confirmar alerta |
 | `POST` | `/api/ndvi/analyze/{terrainId}` | Ejecutar análisis |
 | `GET` | `/api/ndvi/grazing-estimate/{terrainId}` | Estimación de capacidad de pastoreo |
 
@@ -357,7 +355,7 @@ simgan-demo/
 │       │   ├── LoteParcelHistory.java
 │       │   ├── RotationHistory.java
 │       │   ├── NdviRecord.java
-│       │   └── NdviAlert.java
+│       │   └── NdviCalibration.java
 │       ├── service/
 │       │   ├── FarmService.java
 │       │   ├── TerrainService.java

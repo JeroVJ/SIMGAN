@@ -140,7 +140,6 @@ h1, h2, h3, h4, h5, h6,
 .ndvi-summary-card,
 .ndvi-parcel-card,
 .ndvi-rec-card,
-.ndvi-alert-card,
 .summary-card,
 .lote-card-v2,
 .rotation-card,
@@ -242,6 +241,13 @@ h1, h2, h3, h4, h5, h6,
 .comp-stat-card--red:hover   { box-shadow: 0 4px 20px rgba(239, 68, 68, 0.12), var(--shadow-sm); }
 
 /* ── NDVI analyze date controls ───────────────────────────── */
+.ndvi-controls-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-end;
+}
+
 .ndvi-analysis-controls {
   display: flex;
   align-items: flex-end;
@@ -251,6 +257,40 @@ h1, h2, h3, h4, h5, h6,
   border-radius: var(--radius-md);
   padding: 10px 12px;
   box-shadow: var(--shadow-xs);
+}
+
+/* ── Schedule sub-box ─────────────────────────────────────── */
+.ndvi-schedule-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  box-shadow: var(--shadow-xs);
+  width: fit-content;
+  align-self: flex-end;
+}
+
+.ndvi-schedule-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.ndvi-schedule-input {
+  min-width: 0 !important;
+  width: 80px !important;
+}
+
+.ndvi-schedule-next {
+  font-size: 11px;
+  color: var(--color-primary);
+  white-space: nowrap;
 }
 
 .ndvi-date-field {

@@ -1,6 +1,5 @@
 package com.simgan.dto;
 
-import com.simgan.entity.NdviAlert;
 import com.simgan.entity.Parcel;
 import lombok.*;
 
@@ -74,15 +73,18 @@ public class NdviDto {
         // Parcel summaries
         private List<ParcelSummary> parcels;
 
-        // Alerts
-        private int activeAlerts;
-        private List<AlertResponse> alerts;
-
         // Timeline data
         private List<TimelinePoint> timeline;
 
         // Last analysis date
         private String lastAnalysisDate;
+
+        // Dynamic alert threshold derived from biomass calibration (B=0 -> NDVI0)
+        private Double alertThresholdNdvi;
+
+        // Automatic analysis scheduling
+        private Integer analysisScheduleDays;
+        private String nextAnalysisDueDate;
     }
 
     /** Point on timeline chart */
@@ -123,21 +125,6 @@ public class NdviDto {
         private Double currentNdvi;
         private Double biomass;
         private String urgency; // BAJA, MEDIA, ALTA, URGENTE
-    }
-
-    /** Alert response */
-    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-    public static class AlertResponse {
-        private Long id;
-        private Long parcelId;
-        private String parcelName;
-        private NdviAlert.AlertType alertType;
-        private NdviAlert.AlertSeverity severity;
-        private Double threshold;
-        private Double currentValue;
-        private String message;
-        private Boolean acknowledged;
-        private String createdAt;
     }
 
     /** Rotation history entry */

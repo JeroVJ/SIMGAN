@@ -25,8 +25,8 @@ public class NdviController {
     private final PlanetApiService planetApiService;
     private final SentinelApiService sentinelApiService;
     private final AnalysisOrchestrator analysisOrchestrator;
+    private final NdviAnalysisScheduleService ndviAnalysisScheduleService;
     private final NdviRecordRepository ndviRecordRepository;
-    private final NdviAlertRepository alertRepository;
     private final LoteRepository loteRepository;
     private final ParcelRepository parcelRepository;
     private final GanadoRepository ganadoRepository;
@@ -98,19 +98,6 @@ public class NdviController {
         return ResponseEntity.ok(recommendationService.getRotationHistory(terrainId));
     }
 
-    /**
-     * GET /api/ndvi/alerts/{terrainId}
-     * Alertas activas
-     */
-    @GetMapping("/alerts/{terrainId}")
-    public ResponseEntity<List<NdviDto.AlertResponse>> getAlerts(@PathVariable Long terrainId) {
-        return ResponseEntity.ok(
-                alertRepository.findByParcelTerrainIdOrderByCreatedAtDesc(terrainId).stream()
-                        .map(this::toAlertResponse)
-                        .collect(Collectors.toList()));
-    }
-
-    
     @PostMapping("/analyze/{terrainId}")
     public ResponseEntity<Map<String, Object>> analyzeTerrain(
         @PathVariable Long terrainId,
@@ -146,6 +133,22 @@ public class NdviController {
     
   }
 
+    @GetMapping("/schedule/{terrainId}")
+    public ResponseEntity<Map<String, Object>> getAnalysisSchedule(@PathVariable Long terrainId) {
+        return ResponseEntity.ok(ndviAnalysisScheduleService.getSchedule(terrainId));
+    }
+
+    @PostMapping("/schedule/{terrainId}")
+    public ResponseEntity<Map<String, Object>> configureAnalysisSchedule(
+            @PathVariable Long terrainId,
+            @RequestParam int days) {
+        try {
+            return ResponseEntity.ok(ndviAnalysisScheduleService.configureSchedule(terrainId, days));
+        } catch (IllegalArgumentException | IllegalStateException ex) {
+            return ResponseEntity.badRequest().body(Map.of("error", ex.getMessage()));
+        }
+    }
+
     /**
      * GET /api/ndvi/planet/status
      * Estado de las conexiones satelitales
@@ -175,7 +178,7 @@ public class NdviController {
         status.put("sentinel", sentinel);
 
         status.put("ndviFormula", "(NIR - Red) / (NIR + Red)");
-        status.put("alertThreshold", 0.3);
+        status.put("alertThreshold", 0.1);
         status.put("optimalThreshold", 0.6);
 
         return ResponseEntity.ok(status);
@@ -271,18 +274,4 @@ public class NdviController {
                 .build();
     }
 
-    private NdviDto.AlertResponse toAlertResponse(NdviAlert alert) {
-        return NdviDto.AlertResponse.builder()
-                .id(alert.getId())
-                .parcelId(alert.getParcel().getId())
-                .parcelName(alert.getParcel().getName())
-                .alertType(alert.getAlertType())
-                .severity(alert.getSeverity())
-                .threshold(alert.getThreshold())
-                .currentValue(alert.getCurrentValue())
-                .message(alert.getMessage())
-                .acknowledged(alert.getAcknowledged())
-                .createdAt(alert.getCreatedAt() != null ? alert.getCreatedAt().toString() : null)
-                .build();
-    }
 }

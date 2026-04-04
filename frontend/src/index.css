@@ -685,25 +685,6 @@ select.status-select {
   color: var(--color-text-secondary);
 }
 
-/* Alerts */
-.ndvi-alerts-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.ndvi-alert-card {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-left: 3px solid;
-  border-radius: var(--radius);
-  padding: 16px 20px;
-}
-
-.ndvi-alert-card.acknowledged {
-  opacity: 0.5;
-}
-
 /* History timeline */
 .ndvi-history-list {
   display: flex;

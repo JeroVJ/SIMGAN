@@ -68,14 +68,8 @@ public class BiomassCalibrationService {
                 }
 
                 if (model.getFormula() == null
-                        && model.getCoefficientA() != null
-                        && model.getCoefficientB() != null) {
-                    String sign = model.getCoefficientB() >= 0 ? "+" : "-";
-                    model.setFormula(String.format(
-                            "Biomasa = %.2f × NDVI %s %.2f",
-                            model.getCoefficientA(),
-                            sign,
-                            Math.abs(model.getCoefficientB())));
+                        && model.getCoefficientA() != null) {
+                    model.setFormula(String.format("Biomasa = %.2f × NDVI", model.getCoefficientA()));
                     changed = true;
                 }
 
@@ -111,7 +105,7 @@ public class BiomassCalibrationService {
      * 1. Validates at least MIN_POINTS sample points
      * 2. Calculates biomass (kg/ha) from weight and area
      * 3. Sends points to Processing service to get NDVI at each point
-     * 4. Runs linear regression: biomass = a * NDVI + b
+    * 4. Runs linear regression through origin: biomass = a * NDVI
      * 5. Saves points and model
      */
     @Transactional
@@ -241,10 +235,9 @@ public class BiomassCalibrationService {
             throw new RuntimeException("No hay suficientes puntos con NDVI válido para construir el modelo de regresión (" + pairs.size() + " válidos).");
         }
 
-        // Linear regression: biomass = a * NDVI + b
+        // Linear regression through origin: biomass = a * NDVI
         double[] regression = linearRegression(pairs);
         double a = regression[0];
-        double b = regression[1];
         double rSquared = regression[2];
 
         BiomassCalibrationModel model = modelRepository.findByParcelId(parcelId)
@@ -254,17 +247,16 @@ public class BiomassCalibrationService {
                         .build());
 
         model.setCoefficientA(Math.round(a * 10000.0) / 10000.0);
-        model.setCoefficientB(Math.round(b * 10000.0) / 10000.0);
+        model.setCoefficientB(0.0);
         model.setRSquared(Math.round(rSquared * 10000.0) / 10000.0);
         model.setSampleCount(pairs.size());
         model.setSceneId(sceneId);
         model.setCalibrationDate(calibrationDate);
-        String sign = b >= 0 ? "+" : "-";
-        model.setFormula(String.format("Biomasa = %.2f \u00d7 NDVI %s %.2f", a, sign, Math.abs(b)));
+        model.setFormula(String.format("Biomasa = %.2f × NDVI", a));
         model = modelRepository.save(model);
 
-        log.info("Calibración biomasa completada parcelId={} a={} b={} R²={} muestras={}",
-                parcelId, a, b, rSquared, pairs.size());
+        log.info("Calibración biomasa completada parcelId={} a={} R²={} muestras={}",
+            parcelId, a, rSquared, pairs.size());
 
         return BiomassCalibrationDto.CalibrateBiomassResponse.builder()
                 .parcelId(parcelId)
@@ -272,40 +264,35 @@ public class BiomassCalibrationService {
                 .points(savedPoints.stream().map(this::toPointResponse).collect(Collectors.toList()))
                 .model(toModelResponse(model))
                 .message(String.format(
-                        "Calibración completada. Modelo: biomasa = %.2f × NDVI + %.2f (R² = %.4f, %d muestras)",
-                        a, b, rSquared, pairs.size()))
+                    "Calibración completada. Modelo: biomasa = %.2f × NDVI (R² = %.4f, %d muestras)",
+                    a, rSquared, pairs.size()))
                 .build();
     }
 
     /**
-     * Simple linear regression: y = a*x + b
-     * Returns [a, b, rSquared]
+     * Simple linear regression through origin: y = a*x
+     * Returns [a, b(=0), rSquared]
      */
     private double[] linearRegression(List<double[]> pairs) {
         int n = pairs.size();
-        double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+        double sumY = 0, sumXY = 0, sumX2 = 0;
 
         for (double[] pair : pairs) {
             double x = pair[0]; // NDVI
             double y = pair[1]; // biomass
-            sumX += x;
             sumY += y;
             sumXY += x * y;
             sumX2 += x * x;
-            sumY2 += y * y;
         }
 
-        double meanX = sumX / n;
         double meanY = sumY / n;
 
-        double denominator = n * sumX2 - sumX * sumX;
-        if (Math.abs(denominator) < 1e-10) {
+        if (Math.abs(sumX2) < 1e-10) {
             // All X values are the same — can't fit a line
-            return new double[]{0.0, meanY, 0.0};
+            return new double[]{0.0, 0.0, 0.0};
         }
 
-        double a = (n * sumXY - sumX * sumY) / denominator;
-        double b = meanY - a * meanX;
+        double a = sumXY / sumX2;
 
         // R²
         double ssRes = 0.0;
@@ -313,14 +300,14 @@ public class BiomassCalibrationService {
         for (double[] pair : pairs) {
             double x = pair[0];
             double y = pair[1];
-            double predicted = a * x + b;
+            double predicted = a * x;
             ssRes += (y - predicted) * (y - predicted);
             ssTot += (y - meanY) * (y - meanY);
         }
 
         double rSquared = ssTot > 0 ? 1.0 - (ssRes / ssTot) : 0.0;
 
-        return new double[]{a, b, rSquared};
+        return new double[]{a, 0.0, rSquared};
     }
 
     private BiomassCalibrationDto.SamplePointResponse toPointResponse(BiomassCalibrationPoint point) {
@@ -351,4 +338,5 @@ public class BiomassCalibrationService {
                 .formula(model.getFormula())
                 .build();
     }
+
 }

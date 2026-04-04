@@ -11,6 +11,7 @@ import { useCalibration } from '../hooks'
 import { getHealthColor } from '../utils/ndvi'
 
 const PARCEL_COLORS = ['#4ade80', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#ec4899', '#14b8a6', '#f97316']
+const DEFAULT_ALERT_NDVI_THRESHOLD = 0.3
 
 const HEALTH_COLORS = {
   EXCELENTE: '#4ade80', BUENO: '#84cc16', CRÍTICO: '#ef4444',
@@ -22,18 +23,14 @@ const STATUS_LABELS = {
   EN_DESCANSO: { label: 'En descanso', color: '#3b82f6' },
 }
 
-const SEVERITY_COLORS = {
-  CRITICAL: '#ef4444', HIGH: '#f97316', MEDIUM: '#f59e0b', LOW: '#3b82f6',
-}
-
 export default function NdviDashboardPage() {
   const { terrainId } = useParams()
   const navigate = useNavigate()
   const {
     dashboard, comparison, recommendations, history,
-    loading, analyzing,
+    loading, analyzing, scheduling,
     timelineByDate, parcelNames,
-    analyze, selectParcel, acknowledgeAlert,
+    analyze, configureSchedule, selectParcel,
   } = useNdvi(terrainId)
 
   const { status: calOptim, loading: calOptimLoading } = useCalibration(terrainId, 'OPTIM')
@@ -46,6 +43,7 @@ export default function NdviDashboardPage() {
   )
   const [analysisEndDate, setAnalysisEndDate] = useState(today)
   const [biomassMethod, setBiomassMethod] = useState('DEFAULT')
+  const [scheduleDays, setScheduleDays] = useState('')
 
   // Redirect to optim calibration if not yet calibrated
   useEffect(() => {
@@ -69,14 +67,20 @@ export default function NdviDashboardPage() {
   }, [calOptim])
 
   const alertNdvi = useMemo(() => {
-    if (!calAlert?.calibrations?.length) return 0.3
+    if (!calAlert?.calibrations?.length) return DEFAULT_ALERT_NDVI_THRESHOLD
     const vals = calAlert.calibrations.map(c => c.referenceNdvi).filter(Boolean)
-    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0.3
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : DEFAULT_ALERT_NDVI_THRESHOLD
   }, [calAlert])
 
-  if (loading || calOptimLoading || calAlertLoading) return <Spinner page label="Cargando analíticas NDVI..." />
+  useEffect(() => {
+    if (dashboard?.analysisScheduleDays) {
+      setScheduleDays(String(dashboard.analysisScheduleDays))
+    }
+  }, [dashboard?.analysisScheduleDays])
 
   const hasData = dashboard?.timeline?.length > 0
+
+  if (loading || calOptimLoading || calAlertLoading) return <Spinner page label="Cargando analíticas NDVI..." />
 
   return (
     <div className="page-container">
@@ -96,60 +100,82 @@ export default function NdviDashboardPage() {
             <h2> Analíticas NDVI</h2>
             <p>{dashboard?.terrainName} — {dashboard?.terrainAreaHa?.toFixed(2)} ha · {dashboard?.parcels?.length} potreros</p>
           </div>
-          <div className="ndvi-analysis-controls">
-            <div className="ndvi-date-field">
-              <label htmlFor="analysisStartDate" className="ndvi-date-label">
-                Fecha inicial
-              </label>
-              <input
-                className="ndvi-date-input"
-                id="analysisStartDate"
-                type="date"
-                value={analysisStartDate}
-                max={analysisEndDate || today}
-                onChange={(e) => setAnalysisStartDate(e.target.value)}
-                disabled={analyzing}
-              />
-              <p className="ndvi-date-hint">Inicio del rango a consultar.</p>
-            </div>
-            <div className="ndvi-date-field">
-              <label htmlFor="analysisEndDate" className="ndvi-date-label">
-                Fecha final
-              </label>
-              <input
-                className="ndvi-date-input"
-                id="analysisEndDate"
-                type="date"
-                value={analysisEndDate}
-                min={analysisStartDate}
-                max={today}
-                onChange={(e) => setAnalysisEndDate(e.target.value)}
-                disabled={analyzing}
-              />
-              <p className="ndvi-date-hint">Fin del rango a consultar.</p>
-            </div>
-            <div className="ndvi-date-field">
-              <label htmlFor="biomassMethod" className="ndvi-date-label">
-                Cálculo de Biomasa
-              </label>
-              <select
-                className="ndvi-date-input"
-                id="biomassMethod"
-                value={biomassMethod}
-                onChange={(e) => setBiomassMethod(e.target.value)}
-                disabled={analyzing}
+          <div className="ndvi-controls-stack">
+            <div className="ndvi-analysis-controls">
+              <div className="ndvi-date-field">
+                <label htmlFor="analysisStartDate" className="ndvi-date-label">Fecha inicial</label>
+                <input
+                  className="ndvi-date-input"
+                  id="analysisStartDate"
+                  type="date"
+                  value={analysisStartDate}
+                  max={analysisEndDate || today}
+                  onChange={(e) => setAnalysisStartDate(e.target.value)}
+                  disabled={analyzing}
+                />
+              </div>
+              <div className="ndvi-date-field">
+                <label htmlFor="analysisEndDate" className="ndvi-date-label">Fecha final</label>
+                <input
+                  className="ndvi-date-input"
+                  id="analysisEndDate"
+                  type="date"
+                  value={analysisEndDate}
+                  min={analysisStartDate}
+                  max={today}
+                  onChange={(e) => setAnalysisEndDate(e.target.value)}
+                  disabled={analyzing}
+                />
+              </div>
+              <div className="ndvi-date-field">
+                <label htmlFor="biomassMethod" className="ndvi-date-label">Biomasa</label>
+                <select
+                  className="ndvi-date-input"
+                  id="biomassMethod"
+                  value={biomassMethod}
+                  onChange={(e) => setBiomassMethod(e.target.value)}
+                  disabled={analyzing}
+                >
+                  <option value="DEFAULT">Por defecto (fórmula)</option>
+                  <option value="SAMPLING">Por muestreo (calibración biomasa)</option>
+                </select>
+              </div>
+              <button
+                className="action-btn action-btn--primary"
+                onClick={() => analyze(analysisStartDate, analysisEndDate, biomassMethod)}
+                disabled={analyzing || !analysisStartDate || !analysisEndDate || analysisStartDate > analysisEndDate}
               >
-                <option value="DEFAULT">Por defecto (fórmula)</option>
-                <option value="SAMPLING">Por muestreo (calibración biomasa)</option>
-              </select>
-              <p className="ndvi-date-hint">Método para estimar biomasa.</p>
+                {analyzing ? <><span className="spinner" /> Analizando...</> : 'Ejecutar Análisis'}
+              </button>
             </div>
-            <button className="action-btn action-btn--primary" onClick={() => analyze(analysisStartDate, analysisEndDate, biomassMethod)} disabled={analyzing || !analysisStartDate || !analysisEndDate || analysisStartDate > analysisEndDate}>
-              {analyzing ? <><span className="spinner" /> Analizando...</> : 'Ejecutar Análisis'}
-            </button>
+
+            <div className="ndvi-schedule-controls">
+              <span className="ndvi-schedule-label">Programación análisis</span>
+              <input
+                className="ndvi-date-input ndvi-schedule-input"
+                id="analysisScheduleDays"
+                type="number"
+                min={1}
+                max={365}
+                value={scheduleDays}
+                onChange={(e) => setScheduleDays(e.target.value)}
+                disabled={scheduling || !hasData}
+                placeholder="Días"
+              />
+              {dashboard?.nextAnalysisDueDate && (
+                <span className="ndvi-schedule-next">Próximo: {dashboard.nextAnalysisDueDate}</span>
+              )}
+              <button
+                className="action-btn action-btn--small"
+                onClick={() => configureSchedule(Number(scheduleDays))}
+                disabled={scheduling || !hasData || !scheduleDays || Number(scheduleDays) < 1}
+              >
+                {scheduling ? <><span className="spinner" /> Guardando...</> : 'Guardar'}
+              </button>
+            </div>
           </div>
         </div>
-        <p className="ndvi-analysis-steps">1) Elige la fecha inicial · 2) Elige la fecha final · 3) Selecciona el método de biomasa · 4) Haz clic en <strong> Ejecutar Análisis</strong></p>
+        <p className="ndvi-analysis-steps">1) Fecha inicial &amp; final · 2) Método biomasa · 3) <strong>Ejecutar Análisis</strong></p>
       </div>
 
       {!hasData ? (
@@ -183,13 +209,6 @@ export default function NdviDashboardPage() {
               </div>
               <div className="ndvi-summary-sub">kg Biomasa/ha promedio</div>
             </div>
-            <div className="ndvi-summary-card">
-              <div className="ndvi-summary-label">Alertas Activas</div>
-              <div className="ndvi-summary-value" style={{ color: dashboard?.activeAlerts > 0 ? '#ef4444' : '#4ade80' }}>
-                {dashboard?.activeAlerts || 0}
-              </div>
-              <div className="ndvi-summary-sub">{dashboard?.activeAlerts > 0 ? 'Requieren atención' : 'Todo en orden'}</div>
-            </div>
           </div>
 
           {/* Tabs */}
@@ -198,7 +217,6 @@ export default function NdviDashboardPage() {
               { key: 'overview',        label: ' Evolución NDVI' },
               { key: 'comparison',      label: ' Comparación' },
               { key: 'recommendations', label: ' Recomendaciones' },
-              { key: 'alerts',          label: ` Alertas (${dashboard?.activeAlerts || 0})` },
               { key: 'history',         label: ' Historial' },
               { key: 'biomass',         label: ' Biomasa' },
             ].map(tab => (
@@ -354,46 +372,6 @@ export default function NdviDashboardPage() {
                         <div className="ndvi-rec-metrics">
                           <span>NDVI: <strong style={{ color: getHealthColor(rec.currentNdvi) }}>{rec.currentNdvi?.toFixed(3)}</strong></span>
                           <span>Biomasa: <strong>{rec.biomass?.toFixed(0)} kg/ha</strong></span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeTab === 'alerts' && (
-              <div>
-                {(!dashboard?.alerts || dashboard.alerts.length === 0) ? (
-                  <div className="card" style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)' }}>
-                    Sin alertas. Todos los potreros están dentro de los umbrales normales.
-                  </div>
-                ) : (
-                  <div className="ndvi-alerts-list">
-                    {dashboard.alerts.map(alert => (
-                      <div
-                        key={alert.id}
-                        className={`ndvi-alert-card ${alert.acknowledged ? 'acknowledged' : ''}`}
-                        style={{ borderLeftColor: SEVERITY_COLORS[alert.severity] }}
-                      >
-                        <div className="flex justify-between items-center">
-                          <div>
-                            <span style={{ fontSize: 12, color: SEVERITY_COLORS[alert.severity], fontWeight: 700, textTransform: 'uppercase' }}>
-                              {alert.severity}
-                            </span>
-                            <span style={{ fontSize: 12, color: 'var(--color-text-muted)', marginLeft: 8 }}>
-                              {alert.parcelName}
-                            </span>
-                          </div>
-                          {!alert.acknowledged && (
-                            <button className="action-btn action-btn--small" onClick={() => acknowledgeAlert(alert.id)}>
-                              ✓ Reconocer
-                            </button>
-                          )}
-                        </div>
-                        <p style={{ margin: '8px 0', fontSize: 14 }}>{alert.message}</p>
-                        <div style={{ fontSize: 11, color: 'var(--color-text-muted)' }}>
-                          NDVI: {alert.currentValue?.toFixed(3)} · Umbral: {alert.threshold} · {alert.createdAt?.substring(0, 16)}
                         </div>
                       </div>
                     ))}

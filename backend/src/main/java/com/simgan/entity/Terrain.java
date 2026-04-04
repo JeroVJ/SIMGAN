@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -27,6 +28,12 @@ public class Terrain {
     private Double areaSqMeters;
 
     private Double areaHectares;
+
+    @Column(name = "analysis_schedule_days")
+    private Integer analysisScheduleDays;
+
+    @Column(name = "next_analysis_due_date")
+    private LocalDate nextAnalysisDueDate;
 
     @CreationTimestamp
     private LocalDateTime createdAt;

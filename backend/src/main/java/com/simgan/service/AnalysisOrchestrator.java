@@ -29,7 +29,6 @@ public class AnalysisOrchestrator {
     private final PlanetApiService planetApi;
     private final SentinelApiService sentinelApi;
     private final ImageProcessingClientService imageProcessingClientService;
-    private final NdviProcessingService processingService;
     private final TerrainRepository terrainRepository;
     private final ParcelRepository parcelRepository;
     private final BiomassCalibrationModelRepository biomassModelRepository;
@@ -127,7 +126,7 @@ public class AnalysisOrchestrator {
 
                         calculateBiomassIfNeeded(processingResponse.getParcelResults(), biomassMethod, samplingModels);
 
-                        List<NdviRecord> records = processingService.persistProcessedResults(
+                        List<NdviRecord> records = imageProcessingClientService.persistProcessedResults(
                                 terrain,
                                 captureDate,
                                 sceneId,
@@ -248,7 +247,7 @@ public class AnalysisOrchestrator {
                             }
                         }
 
-                        List<NdviRecord> records = processingService.persistSentinelResults(
+                        List<NdviRecord> records = imageProcessingClientService.persistSentinelResults(
                                 terrain,
                                 date,
                                 sceneId,
@@ -368,7 +367,7 @@ public class AnalysisOrchestrator {
     /**
      * Calcula biomasa en los resultados de parcela según el método seleccionado.
      * DEFAULT:  biomass_kg_ha = max(0, (meanNDVI - 0.1) * 12000)
-     * SAMPLING: biomass_kg_ha = max(0, a * meanNDVI + b)  usando el modelo de regresión calibrado por potrero
+    * SAMPLING: biomass_kg_ha = max(0, a * meanNDVI)  usando el modelo de regresión calibrado por potrero
      *           Si la parcela no tiene modelo calibrado, aplica la fórmula DEFAULT como fallback.
      */
     private void calculateBiomassIfNeeded(
@@ -389,11 +388,11 @@ public class AnalysisOrchestrator {
             double biomass;
             if (isSampling) {
                 BiomassCalibrationModel model = samplingModels.get(dto.getParcelId());
-                if (model != null && model.getCoefficientA() != null && model.getCoefficientB() != null) {
-                    biomass = Math.max(0.0, model.getCoefficientA() * dto.getMeanNdvi() + model.getCoefficientB());
-                    log.debug("SAMPLING parcel={} ndvi={} => biomass={} (a={} b={})",
+                if (model != null && model.getCoefficientA() != null) {
+                    biomass = Math.max(0.0, model.getCoefficientA() * dto.getMeanNdvi());
+                    log.debug("SAMPLING parcel={} ndvi={} => biomass={} (a={})",
                             dto.getParcelId(), dto.getMeanNdvi(), biomass,
-                            model.getCoefficientA(), model.getCoefficientB());
+                            model.getCoefficientA());
                 } else {
                     // Fallback: parcel not yet calibrated — use DEFAULT formula
                     biomass = Math.max(0.0, (dto.getMeanNdvi() - 0.1) * 12000.0);

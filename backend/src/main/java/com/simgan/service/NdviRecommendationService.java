@@ -7,9 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import java.util.concurrent.ConcurrentHashMap;
 
-import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -35,14 +33,13 @@ public class NdviRecommendationService {
 
 
     private final NdviRecordRepository ndviRecordRepository;
-    private final NdviAlertRepository alertRepository;
     private final ParcelRepository parcelRepository;
     private final TerrainRepository terrainRepository;
     private final RotationHistoryRepository rotationHistoryRepository;
     private final NdviCalibrationRepository calibrationRepository;
     private final BiomassCalibrationModelRepository biomassModelRepository;
 
-    @Value("${ndvi.alert.threshold:0.3}")
+    @Value("${ndvi.alert.threshold:0.1}")
     private double alertThreshold;
 
     @Value("${ndvi.optimal.threshold:0.6}")
@@ -83,12 +80,6 @@ public class NdviRecommendationService {
         // Timeline data (all parcels combined)
         List<NdviDto.TimelinePoint> timeline = getTerrainTimeline(terrainId);
 
-        // Alerts
-        List<NdviAlert> activeAlerts = alertRepository.findByParcelTerrainIdAndAcknowledgedFalseOrderByCreatedAtDesc(terrainId);
-        List<NdviDto.AlertResponse> alertResponses = activeAlerts.stream()
-                .map(this::toAlertResponse)
-                .collect(Collectors.toList());
-
         String lastDate = summaries.stream()
                 .filter(s -> s.getLatestDate() != null)
                 .map(NdviDto.ParcelSummary::getLatestDate)
@@ -104,10 +95,10 @@ public class NdviRecommendationService {
                 .totalBiomassKg((double) Math.round(totalBiomass))
                 .avgBiomassPerHa(totalArea > 0 ? Math.round(totalBiomass / totalArea * 100.0) / 100.0 : 0.0)
                 .parcels(summaries)
-                .activeAlerts((int) alertRepository.countByParcelTerrainIdAndAcknowledgedFalse(terrainId))
-                .alerts(alertResponses)
                 .timeline(timeline)
                 .lastAnalysisDate(lastDate)
+                .analysisScheduleDays(terrain.getAnalysisScheduleDays())
+                .nextAnalysisDueDate(terrain.getNextAnalysisDueDate() != null ? terrain.getNextAnalysisDueDate().toString() : null)
                 .build();
     }
 
@@ -133,8 +124,8 @@ public class NdviRecommendationService {
         if (latestOpt.isPresent()) {
             NdviRecord latest = latestOpt.get();
             double biomass;
-            if (calibModel.isPresent() && calibModel.get().getCoefficientA() != null && calibModel.get().getCoefficientB() != null) {
-                biomass = Math.max(0.0, calibModel.get().getCoefficientA() * latest.getMeanNdvi() + calibModel.get().getCoefficientB());
+            if (calibModel.isPresent() && calibModel.get().getCoefficientA() != null) {
+                biomass = Math.max(0.0, calibModel.get().getCoefficientA() * latest.getMeanNdvi());
                 biomass = Math.round(biomass * 100.0) / 100.0;
             } else {
                 biomass = latest.getBiomassKgPerHa() != null ? latest.getBiomassKgPerHa() : Math.max(0, (latest.getMeanNdvi() - 0.1) * 12000);
@@ -218,13 +209,15 @@ public class NdviRecommendationService {
             double ndvi = latest.get().getMeanNdvi();
             double biomass;
             Optional<BiomassCalibrationModel> cm = biomassModelRepository.findByParcelId(parcel.getId());
-            if (cm.isPresent() && cm.get().getCoefficientA() != null && cm.get().getCoefficientB() != null) {
-                biomass = Math.max(0.0, cm.get().getCoefficientA() * ndvi + cm.get().getCoefficientB());
+            if (cm.isPresent() && cm.get().getCoefficientA() != null) {
+                biomass = Math.max(0.0, cm.get().getCoefficientA() * ndvi);
             } else {
                 biomass = latest.get().getBiomassKgPerHa() != null ? latest.get().getBiomassKgPerHa() : 0;
             }
 
-            Parcel.ParcelStatus recommended = recommendStatus(ndvi, parcel.getStatus());
+            double[] thresholds = getThresholds(parcel.getId(), terrainId);
+            double parcelAlertThreshold = thresholds[1];
+            Parcel.ParcelStatus recommended = recommendStatus(ndvi, parcelAlertThreshold, parcel.getStatus());
 
             if (recommended != parcel.getStatus()) {
                 String urgency;
@@ -234,7 +227,7 @@ public class NdviRecommendationService {
                     urgency = "URGENTE";
                     reason = String.format("NDVI crítico (%.2f). Sobrepastoreo probable. " +
                             "Biomasa: %.0f kg/ha. Descanso inmediato necesario.", ndvi, biomass);
-                } else if (ndvi < alertThreshold) {
+                } else if (ndvi < parcelAlertThreshold) {
                     urgency = "ALTA";
                     reason = String.format("NDVI bajo (%.2f). Pasto degradado. " +
                             "Biomasa insuficiente: %.0f kg/ha.", ndvi, biomass);
@@ -306,9 +299,9 @@ public class NdviRecommendationService {
 
     // ===== HELPERS =====
 
-    private Parcel.ParcelStatus recommendStatus(double ndvi, Parcel.ParcelStatus current) {
+    private Parcel.ParcelStatus recommendStatus(double ndvi, double parcelAlertThreshold, Parcel.ParcelStatus current) {
         if (ndvi < 0.20) return Parcel.ParcelStatus.EN_DESCANSO;
-        if (ndvi < alertThreshold && current == Parcel.ParcelStatus.EN_USO) return Parcel.ParcelStatus.EN_DESCANSO;
+        if (ndvi < parcelAlertThreshold && current == Parcel.ParcelStatus.EN_USO) return Parcel.ParcelStatus.EN_DESCANSO;
         if (ndvi >= optimalThreshold && current == Parcel.ParcelStatus.EN_DESCANSO) return Parcel.ParcelStatus.DISPONIBLE;
         return current;
     }
@@ -353,19 +346,16 @@ public class NdviRecommendationService {
     private double[] getThresholds(Long parcelId, Long terrainId) {
         // 1. Try parcel-level calibrations
         var optimParcel = calibrationRepository.findByParcelIdAndCalibrationType(parcelId, "OPTIM");
-        var alertParcel = calibrationRepository.findByParcelIdAndCalibrationType(parcelId, "ALERT");
         double optim = optimParcel.map(NdviCalibration::getReferenceNdvi).orElse(-1.0);
-        double alert = alertParcel.map(NdviCalibration::getReferenceNdvi).orElse(-1.0);
+        double alert = calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "ALERT")
+            .map(NdviCalibration::getReferenceNdvi).orElse(alertThreshold);
 
         // 2. Fallback to terrain-level calibrations
         if (optim < 0) {
             optim = calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "OPTIM")
                     .map(NdviCalibration::getReferenceNdvi).orElse(optimalThreshold);
         }
-        if (alert < 0) {
-            alert = calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "ALERT")
-                    .map(NdviCalibration::getReferenceNdvi).orElse(alertThreshold);
-        }
+        alert = Math.max(0.0, alert);
         return new double[]{optim, alert};
     }
 
@@ -395,18 +385,4 @@ public class NdviRecommendationService {
         return Math.round((n * sumXY - sumX * sumY) / denom * 10000.0) / 10000.0;
     }
 
-    private NdviDto.AlertResponse toAlertResponse(NdviAlert alert) {
-        return NdviDto.AlertResponse.builder()
-                .id(alert.getId())
-                .parcelId(alert.getParcel().getId())
-                .parcelName(alert.getParcel().getName())
-                .alertType(alert.getAlertType())
-                .severity(alert.getSeverity())
-                .threshold(alert.getThreshold())
-                .currentValue(alert.getCurrentValue())
-                .message(alert.getMessage())
-                .acknowledged(alert.getAcknowledged())
-                .createdAt(alert.getCreatedAt() != null ? alert.getCreatedAt().toString() : null)
-                .build();
-    }
 }

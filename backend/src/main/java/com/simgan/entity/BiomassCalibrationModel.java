@@ -30,11 +30,11 @@ public class BiomassCalibrationModel {
     @OnDelete(action = OnDeleteAction.CASCADE)
     private Terrain terrain;
 
-    /** Pendiente: biomasa = a * NDVI + b */
+    /** Pendiente: biomasa = a * NDVI */
     @Column(name = "coefficient_a", nullable = false)
     private Double coefficientA;
 
-    /** Intercepto: biomasa = a * NDVI + b */
+    /** Intercepto reservado (compatibilidad), se guarda en 0.0 */
     @Column(name = "coefficient_b", nullable = false)
     private Double coefficientB;
 

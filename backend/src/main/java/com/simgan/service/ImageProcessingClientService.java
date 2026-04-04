@@ -6,8 +6,11 @@ import com.simgan.dto.PlanetImageProcessingResponse;
 import com.simgan.dto.SentinelImageProcessingRequest;
 import com.simgan.dto.SentinelImageProcessingResponse;
 import com.simgan.dto.PointNdviDto;
+import com.simgan.dto.ProcessedParcelNdviDto;
+import com.simgan.entity.NdviRecord;
 import com.simgan.entity.Parcel;
 import com.simgan.entity.Terrain;
+import com.simgan.repository.NdviRecordRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.client.RestTemplateBuilder;
@@ -20,6 +23,9 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -31,6 +37,7 @@ import java.util.Map;
 public class ImageProcessingClientService {
 
     private final RestTemplateBuilder restTemplateBuilder;
+        private final NdviRecordRepository ndviRecordRepository;
 
     @Value("${image.processing.base-url}")
     private String imageProcessingBaseUrl;
@@ -184,4 +191,106 @@ public class ImageProcessingClientService {
             throw new RuntimeException("No se pudo calcular NDVI en puntos: " + e.getMessage(), e);
         }
     }
+
+        public NdviRecord buildNdviRecord(List<Double> ndviValues, Parcel parcel, Terrain terrain,
+                                                                          LocalDate captureDate, String sceneId, String source) {
+                ndviValues.sort(Double::compareTo);
+
+                double mean = ndviValues.stream().mapToDouble(d -> d).average().orElse(0);
+                double min = ndviValues.stream().mapToDouble(d -> d).min().orElse(0);
+                double max = ndviValues.stream().mapToDouble(d -> d).max().orElse(0);
+                double median = ndviValues.get(ndviValues.size() / 2);
+                double std = Math.sqrt(ndviValues.stream().mapToDouble(v -> Math.pow(v - mean, 2)).average().orElse(0));
+
+                long vegetatedPixels = ndviValues.stream().filter(v -> v > 0.2).count();
+                double vegetationCover = (double) vegetatedPixels / ndviValues.size() * 100;
+
+                double biomass = Math.max(0, (mean - 0.1) * 12000);
+
+                return NdviRecord.builder()
+                                .parcel(parcel)
+                                .terrain(terrain)
+                                .captureDate(captureDate)
+                                .meanNdvi(Math.round(mean * 10000.0) / 10000.0)
+                                .minNdvi(Math.round(min * 10000.0) / 10000.0)
+                                .maxNdvi(Math.round(max * 10000.0) / 10000.0)
+                                .stdNdvi(Math.round(std * 10000.0) / 10000.0)
+                                .medianNdvi(Math.round(median * 10000.0) / 10000.0)
+                                .pixelCount(ndviValues.size())
+                                .biomassKgPerHa(Math.round(biomass * 100.0) / 100.0)
+                                .vegetationCoverPercent(Math.round(vegetationCover * 100.0) / 100.0)
+                                .planetSceneId(sceneId)
+                                .cloudCoverPercent(0.0)
+                                .source(source)
+                                .build();
+        }
+
+        public List<NdviRecord> persistProcessedResults(
+                        Terrain terrain,
+                        LocalDate captureDate,
+                        String sceneId,
+                        Double cloudCoverPercent,
+                        String source,
+                        Collection<ProcessedParcelNdviDto> parcelResults,
+                        Map<Long, Parcel> parcelsById) {
+
+                if (parcelResults == null || parcelResults.isEmpty()) {
+                        return Collections.emptyList();
+                }
+
+                List<NdviRecord> records = new ArrayList<>();
+
+                for (ProcessedParcelNdviDto parcelResult : parcelResults) {
+                        if (parcelResult == null || parcelResult.getParcelId() == null) {
+                                continue;
+                        }
+
+                        Parcel parcel = parcelsById.get(parcelResult.getParcelId());
+                        if (parcel == null) {
+                                continue;
+                        }
+
+                        if (parcelResult.getPixelCount() == null || parcelResult.getPixelCount() <= 0) {
+                                continue;
+                        }
+
+                        NdviRecord record = ndviRecordRepository.findByParcelIdAndCaptureDate(parcel.getId(), captureDate)
+                                        .orElseGet(() -> NdviRecord.builder()
+                                                        .parcel(parcel)
+                                                        .terrain(terrain)
+                                                        .captureDate(captureDate)
+                                                        .build());
+
+                        record.setParcel(parcel);
+                        record.setTerrain(terrain);
+                        record.setCaptureDate(captureDate);
+                        record.setMeanNdvi(parcelResult.getMeanNdvi());
+                        record.setMinNdvi(parcelResult.getMinNdvi());
+                        record.setMaxNdvi(parcelResult.getMaxNdvi());
+                        record.setStdNdvi(parcelResult.getStdNdvi());
+                        record.setMedianNdvi(parcelResult.getMedianNdvi());
+                        record.setPixelCount(parcelResult.getPixelCount());
+                        record.setBiomassKgPerHa(parcelResult.getBiomassKgPerHa());
+                        record.setVegetationCoverPercent(parcelResult.getVegetationCoverPercent());
+                        record.setPlanetSceneId(sceneId);
+                        record.setCloudCoverPercent(cloudCoverPercent);
+                        record.setSource(source);
+
+                        NdviRecord savedRecord = ndviRecordRepository.save(record);
+                        records.add(savedRecord);
+                }
+
+                return records;
+        }
+
+        public List<NdviRecord> persistSentinelResults(
+                        Terrain terrain,
+                        LocalDate captureDate,
+                        String sceneId,
+                        Double cloudCoverPercent,
+                        Collection<ProcessedParcelNdviDto> parcelResults,
+                        Map<Long, Parcel> parcelsById) {
+                return persistProcessedResults(terrain, captureDate, sceneId, cloudCoverPercent, "SENTINEL", parcelResults, parcelsById);
+        }
+
 }
