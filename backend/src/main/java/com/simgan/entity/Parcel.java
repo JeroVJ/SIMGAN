@@ -34,6 +34,12 @@ public class Parcel {
     @Column(name = "pasture_type")
     private String pastureType;
 
+    @Column(name = "dias_ocupacion")
+    private Double diasOcupacion;
+
+    @Column(name = "dias_descanso")
+    private Double diasDescanso;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private ParcelStatus status = ParcelStatus.DISPONIBLE;

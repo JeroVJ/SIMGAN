@@ -188,7 +188,7 @@ public class NdviController {
      * GET /api/ndvi/grazing-estimate/{terrainId}
      * Estimacion de dias de pastoreo por parcela con lote activo.
      * Formula: diasOcupacion = (biomasa_disponible_kg) / (consumo_MS_diario_total)
-     * Consumo MS diario = 2.5% peso vivo * N cabezas
+        * Consumo diario por tipo: vaca=10%, novilla=12%, novillo=13%, toro=11% del peso vivo
      * Biomasa disponible = (biomasa_total - 30% residual)
      */
     @GetMapping("/grazing-estimate/{terrainId}")
@@ -231,7 +231,13 @@ public class NdviController {
                 double totalBiomass = biomassKgPerHa * parcel.getAreaHectares();
                 double residual = totalBiomass * 0.30;
                 double available = Math.max(0, totalBiomass - residual);
-                double consumoDiarioMS = pesoPromedio * 0.025 * cabezas;
+                double consumoDiarioMS = ganados.stream()
+                        .mapToDouble(g -> {
+                            Double peso = g.getPesoActual();
+                            if (peso == null || peso <= 0) return 0.0;
+                            return peso * getForageRateByType(g.getTipo());
+                        })
+                        .sum();
                 int estimatedDays = consumoDiarioMS > 0 ? (int) Math.floor(available / consumoDiarioMS) : 0;
 
                 entry.put("totalBiomassKg", Math.round(totalBiomass));
@@ -262,6 +268,16 @@ public class NdviController {
     }
 
     // ===== HELPERS =====
+
+    private double getForageRateByType(Ganado.TipoGanado tipo) {
+        if (tipo == null) return 0.10;
+        return switch (tipo) {
+            case VACA -> 0.10;
+            case NOVILLA -> 0.12;
+            case NOVILLO -> 0.13;
+            case TORO -> 0.11;
+        };
+    }
 
     private NdviDto.TimelinePoint toTimelinePoint(NdviRecord r) {
         return NdviDto.TimelinePoint.builder()

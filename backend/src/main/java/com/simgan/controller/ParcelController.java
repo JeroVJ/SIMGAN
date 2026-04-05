@@ -44,4 +44,17 @@ public class ParcelController {
         parcelService.delete(id);
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * GET /api/parcels/terrain/{terrainId}/rotation-plan?loteId={loteId}
+     * Returns per-parcel rotation metrics (DO, DD, carga animal) calculated in the backend.
+     */
+    @GetMapping("/terrain/{terrainId}/rotation-plan")
+    public ResponseEntity<List<ParcelDto.RotationPlanEntry>> getRotationPlan(
+            @PathVariable Long terrainId,
+            @RequestParam Long loteId,
+            @RequestParam String tipoAnimal,
+            @RequestParam int numeroAnimales) {
+        return ResponseEntity.ok(parcelService.getRotationPlan(terrainId, loteId, tipoAnimal, numeroAnimales));
+    }
 }

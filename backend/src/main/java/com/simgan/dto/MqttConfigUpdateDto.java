@@ -20,6 +20,8 @@ public class MqttConfigUpdateDto {
     private String password;        // simgan12
     private String topic;           // sensor/5/data
     private String clientId;        // sensor-client-xxx (opcional)
+    private Double pollingIntervalHours;
+    private Integer pollingIntervalMs;
     private String mqttTopic;
     private String mqttBrokerUrl;
     private Boolean connected;
@@ -36,6 +38,8 @@ public class MqttConfigUpdateDto {
         private String mqttTopic;
         private String mqttBrokerUrl;
         private String clientId;
+        private Double pollingIntervalHours;
+        private Integer pollingIntervalMs;
         private Boolean connected;
     }
 }

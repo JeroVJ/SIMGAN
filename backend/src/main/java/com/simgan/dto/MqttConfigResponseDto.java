@@ -21,5 +21,7 @@ public class MqttConfigResponseDto {
     private String username;
     private String topic;
     private String clientId;
+    private Double pollingIntervalHours;
+    private Integer pollingIntervalMs;
     private String state;
 }

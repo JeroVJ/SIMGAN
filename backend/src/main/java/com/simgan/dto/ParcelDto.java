@@ -49,4 +49,30 @@ public class ParcelDto {
         @NotNull
         private Parcel.ParcelStatus status;
     }
+
+    @Getter @Setter
+    @NoArgsConstructor @AllArgsConstructor
+    @Builder
+    public static class RotationPlanEntry {
+        private Long parcelId;
+        private String parcelName;
+        private Double areaHectares;
+        private String parcelStatus;
+        /** Latest biomass from NDVI (kg MS/ha), null if no NDVI data */
+        private Double biomassKgPerHa;
+        /** 80% of total parcel biomass (kg), null if no NDVI data */
+        private Long forrajeDisponible;
+        /** Soil-state label from last sensor classification, null if no readings */
+        private String estadoEdafico;
+        /** True when the parcel has at least one associated sensor */
+        private boolean hasSensor;
+        /** Total animal-load capacity (headcount fitting available forage) */
+        private Long cargaAnimal;
+        /** cargaAnimal / areaHectares */
+        private Double cargaPerHa;
+        /** Occupation days, adjusted for edaphic state */
+        private Double diasOcupacion;
+        /** Rest days = (totalParcels − 1) × diasOcupacion */
+        private Double diasDescanso;
+    }
 }

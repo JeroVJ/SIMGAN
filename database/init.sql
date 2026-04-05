@@ -57,9 +57,15 @@ CREATE TABLE IF NOT EXISTS terrains (
     geo_json TEXT NOT NULL,
     area_sq_meters DOUBLE PRECISION,
     area_hectares DOUBLE PRECISION,
+    analysis_schedule_days INTEGER,
+    next_analysis_due_date DATE,
     farm_id BIGINT NOT NULL REFERENCES farms(id) ON DELETE CASCADE,
     created_at TIMESTAMP DEFAULT NOW()
 );
+
+ALTER TABLE terrains
+    ADD COLUMN IF NOT EXISTS analysis_schedule_days INTEGER,
+    ADD COLUMN IF NOT EXISTS next_analysis_due_date DATE;
 
 -- Parcels
 CREATE TABLE IF NOT EXISTS parcels (
@@ -89,6 +95,8 @@ CREATE TABLE IF NOT EXISTS sensores (
     mqtt_broker_url VARCHAR(255),
 
     client_id VARCHAR(255),
+
+    polling_interval_ms INTEGER DEFAULT 3600000,
 
     connected BOOLEAN DEFAULT false,
 
@@ -211,7 +219,6 @@ CREATE TABLE IF NOT EXISTS ndvi_calibrations (
     calibration_date DATE NOT NULL,
     calibration_type VARCHAR(10) NOT NULL DEFAULT 'OPTIM',
     reference_ndvi DOUBLE PRECISION NOT NULL,
-    reference_biomass DOUBLE PRECISION,
     pasture_type VARCHAR(255),
     source VARCHAR(20) DEFAULT 'SENTINEL',
     scene_id VARCHAR(255),

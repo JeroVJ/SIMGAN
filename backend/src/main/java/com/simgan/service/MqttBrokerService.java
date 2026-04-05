@@ -14,6 +14,10 @@ import java.util.Map;
 @Slf4j
 public class MqttBrokerService {
 
+    private static final int DEFAULT_POLLING_INTERVAL_MS = 3_600_000;
+    private static final int MIN_POLLING_INTERVAL_MS = 60_000;
+    private static final double MIN_POLLING_INTERVAL_HOURS = 1.0 / 60.0;
+
     @Autowired
     private SensorRepository sensorRepository;
 
@@ -25,6 +29,9 @@ public class MqttBrokerService {
      */
     public MqttConfigResponseDto saveSensorMqttConfig(Long sensorId, MqttConfigUpdateDto request) {
         try {
+            // Invalidar caché antes de guardar
+            configCache.remove(sensorId);
+
             // Validar datos
             if (request.getBrokerUrl() == null || request.getBrokerUrl().isEmpty()) {
                 throw new IllegalArgumentException("URL del broker requerida");
@@ -41,6 +48,19 @@ public class MqttBrokerService {
             sensor.setMqttTopic(request.getTopic());
             sensor.setMqttBrokerUrl(request.getBrokerUrl());
             sensor.setClientId(request.getClientId() != null ? request.getClientId() : "sensor-" + sensorId);
+            Double requestedHours = request.getPollingIntervalHours();
+            Integer requestedMs = request.getPollingIntervalMs();
+            int pollingMs;
+            if (requestedHours != null) {
+                pollingMs = Math.max(MIN_POLLING_INTERVAL_MS,
+                        (int) Math.round(Math.max(MIN_POLLING_INTERVAL_HOURS, requestedHours) * 3_600_000d));
+            } else if (requestedMs != null) {
+                pollingMs = Math.max(MIN_POLLING_INTERVAL_MS, requestedMs);
+            } else {
+                pollingMs = DEFAULT_POLLING_INTERVAL_MS;
+            }
+
+            sensor.setPollingIntervalMs(pollingMs);
             sensor.setConnected(false); // Aún no conectado
             sensorRepository.save(sensor);
 
@@ -53,6 +73,8 @@ public class MqttBrokerService {
                     .username(request.getUsername())
                     .topic(request.getTopic())
                     .clientId(sensor.getClientId())
+                    .pollingIntervalHours(Math.max(MIN_POLLING_INTERVAL_HOURS, sensor.getPollingIntervalMs() / 3_600_000.0))
+                    .pollingIntervalMs(Math.max(MIN_POLLING_INTERVAL_MS, sensor.getPollingIntervalMs()))
                     .state("Configuración guardada - listo para conectar")
                     .build();
 
@@ -82,12 +104,23 @@ public class MqttBrokerService {
             throw new RuntimeException("Sensor no tiene configuración MQTT");
         }
 
+        int persistedPollingMs = sensor.getPollingIntervalMs() != null ? sensor.getPollingIntervalMs() : DEFAULT_POLLING_INTERVAL_MS;
+        int pollingMs = Math.max(MIN_POLLING_INTERVAL_MS, persistedPollingMs);
+
+        // Auto-corrige valores históricos demasiado bajos (p. ej. 3000 ms)
+        if (persistedPollingMs != pollingMs) {
+            sensor.setPollingIntervalMs(pollingMs);
+            sensorRepository.save(sensor);
+        }
+
         MqttConfigResponseDto config = MqttConfigResponseDto.builder()
                 .sensorId(sensorId)
                 .brokerUrl(sensor.getMqttBrokerUrl())
                 .username("SIMGAN") // Mostrar usuario actual
                 .topic(sensor.getMqttTopic() != null ? sensor.getMqttTopic() : "sensor/" + sensorId + "/data")
                 .clientId(sensor.getClientId() != null ? sensor.getClientId() : "sensor-" + sensorId)
+                .pollingIntervalHours(Math.max(MIN_POLLING_INTERVAL_HOURS, pollingMs / 3_600_000.0))
+                .pollingIntervalMs(pollingMs)
                 .state(sensor.getConnected() ? "Conectado a MQTT" : "Esperando conexión")
                 .build();
 

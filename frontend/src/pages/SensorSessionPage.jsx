@@ -14,8 +14,30 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-// Polling interval in milliseconds
-const POLLING_INTERVAL = 3000 // 3 segundos
+const DEFAULT_POLLING_INTERVAL_HOURS = 1
+const MIN_POLLING_INTERVAL_HOURS = 1 / 60
+
+const resolvePollingHours = (config) => {
+  if (!config) return DEFAULT_POLLING_INTERVAL_HOURS
+
+  const directHours = Number(config.pollingIntervalHours)
+  if (Number.isFinite(directHours) && directHours > 0) {
+    return Math.max(MIN_POLLING_INTERVAL_HOURS, directHours)
+  }
+
+  const ms = Number(config.pollingIntervalMs)
+  if (Number.isFinite(ms) && ms > 0) {
+    return Math.max(MIN_POLLING_INTERVAL_HOURS, ms / (60 * 60 * 1000))
+  }
+
+  return DEFAULT_POLLING_INTERVAL_HOURS
+}
+
+const formatHours = (hours) => {
+  const value = Number(hours)
+  if (!Number.isFinite(value)) return DEFAULT_POLLING_INTERVAL_HOURS.toString()
+  return value.toFixed(4).replace(/\.?0+$/, '')
+}
 
 function FitBounds({ geoJson }) {
   const map = useMap()
@@ -89,8 +111,22 @@ export default function SensorSessionPage() {
     username: '',
     password: '',
     topic: '',
-    clientId: ''
+    clientId: '',
+    pollingIntervalHours: DEFAULT_POLLING_INTERVAL_HOURS,
   })
+
+  const pollingIntervalHours = resolvePollingHours(
+    mqttConfig || { pollingIntervalMs: sensor?.pollingIntervalMs }
+  )
+  const pollingIntervalMs = pollingIntervalHours * 60 * 60 * 1000
+
+  const parseHoursValue = (value) => {
+    if (value === null || value === undefined) return NaN
+    if (typeof value === 'number') return value
+    const normalized = String(value).trim().replace(',', '.')
+    if (!normalized) return NaN
+    return Number(normalized)
+  }
 
   // Cargar sensor y parcel
   useEffect(() => {
@@ -103,6 +139,8 @@ export default function SensorSessionPage() {
         // Cargar sensor básico
         const sensorRes = await sensorApi.getById(sensorId)
         setSensor(sensorRes)
+        const sensorHours = resolvePollingHours({ pollingIntervalMs: sensorRes.pollingIntervalMs })
+        setFormConfig(prev => ({ ...prev, pollingIntervalHours: sensorHours }))
         console.log('✓ Sensor cargado:', sensorRes)
 
         // Cargar parcel si existe
@@ -125,11 +163,25 @@ export default function SensorSessionPage() {
         try {
           const configRes = await api.get(`/sensors/${sensorId}/mqtt-config`)
           setMqttConfig(configRes.data)
+          const initialHours = resolvePollingHours(configRes.data)
+          setFormConfig(prev => ({
+            ...prev,
+            brokerUrl: configRes.data.brokerUrl || '',
+            username: configRes.data.username || '',
+            password: '',
+            topic: configRes.data.topic || '',
+            clientId: configRes.data.clientId || '',
+            pollingIntervalHours: initialHours,
+          }))
           setShowConfigForm(false) // Ocultar formulario si ya existe config
           console.log('✓ Configuración MQTT cargada:', configRes.data)
         } catch (configErr) {
           // No hay configuración guardada aún
           console.log('Sin configuración MQTT guardada')
+          setFormConfig(prev => ({
+            ...prev,
+            pollingIntervalHours: resolvePollingHours({ pollingIntervalMs: sensorRes.pollingIntervalMs }),
+          }))
           setShowConfigForm(true) // Mostrar formulario
         }
       } catch (err) {
@@ -156,7 +208,7 @@ export default function SensorSessionPage() {
     }
   }
 
-  // Polling: cargar datos cada POLLING_INTERVAL
+  // Polling: cargar datos cada intervalo configurado por el usuario
   useEffect(() => {
     if (!isMonitoring || !sensorId) return
 
@@ -166,14 +218,14 @@ export default function SensorSessionPage() {
     // Configurar polling
     pollingIntervalRef.current = setInterval(() => {
       fetchSensorData()
-    }, POLLING_INTERVAL)
+    }, pollingIntervalMs)
 
     return () => {
       if (pollingIntervalRef.current) {
         clearInterval(pollingIntervalRef.current)
       }
     }
-  }, [isMonitoring, sensorId])
+  }, [isMonitoring, sensorId, pollingIntervalMs])
 
   // Guardar configuración MQTT desde el formulario
   const handleSaveConfig = async () => {
@@ -183,20 +235,30 @@ export default function SensorSessionPage() {
         return
       }
 
+      const parsedHours = parseHoursValue(formConfig.pollingIntervalHours)
+      if (!Number.isFinite(parsedHours) || parsedHours < MIN_POLLING_INTERVAL_HOURS) {
+        toast.error('ℹ El intervalo de consulta debe ser mayor o igual a 0.0167 horas (1 minuto)')
+        return
+      }
+
       setIsSavingConfig(true)
       const saveRes = await api.post(`/sensors/${sensorId}/mqtt-config`, {
         brokerUrl: formConfig.brokerUrl,
         username: formConfig.username,
         password: formConfig.password,
         topic: formConfig.topic,
-        clientId: formConfig.clientId || `sensor-${sensorId}`
+        clientId: formConfig.clientId || `sensor-${sensorId}`,
+        pollingIntervalHours: parsedHours,
       })
 
-      setMqttConfig(saveRes.data)
+      // Usar directamente la respuesta del POST (ya tiene los valores persistidos)
+      const savedConfig = saveRes.data
+      setMqttConfig(savedConfig)
+      const savedHours = resolvePollingHours(savedConfig)
       setShowConfigForm(false)
-      setFormConfig({ brokerUrl: '', username: '', password: '', topic: '', clientId: '' })
+      setFormConfig(prev => ({ ...prev, password: '', pollingIntervalHours: savedHours }))
       toast.success('✓ Configuración MQTT guardada')
-      console.log('✓ Config guardada:', saveRes.data)
+      console.log('✓ Config guardada:', savedConfig)
     } catch (err) {
       console.error('Error guardando configuración:', err)
       toast.error('Error al guardar configuración')
@@ -392,6 +454,16 @@ export default function SensorSessionPage() {
                   />
                 </div>
 
+                <div className="form-group mb-16">
+                  <label>Intervalo de consulta (horas)</label>
+                  <input
+                    type="text"
+                    value={formConfig.pollingIntervalHours}
+                    onChange={(e) => setFormConfig({ ...formConfig, pollingIntervalHours: e.target.value })}
+                    placeholder="0.0167"
+                  />
+                </div>
+
                 <button
                   className="action-btn action-btn--primary"
                   style={{ width: '100%' }}
@@ -417,6 +489,7 @@ export default function SensorSessionPage() {
                      Usuario: {mqttConfig.username}<br />
                      Topic: {mqttConfig.topic}<br />
                      Client ID: {mqttConfig.clientId}<br />
+                     Polling: {formatHours(pollingIntervalHours)} h<br />
                     <span style={{ marginTop: 8, display: 'block', color: '#10b981' }}>
                       ✓ {mqttConfig.state}
                     </span>
@@ -449,7 +522,7 @@ export default function SensorSessionPage() {
                       <div style={{ fontWeight: 600, marginBottom: 8 }}>✓ Monitoreo Activo</div>
                       <div style={{ fontSize: 11 }}>
                        Sensor: {sensor?.name}<br />
-                       Polling: {POLLING_INTERVAL / 1000}s<br />
+                       Polling: {formatHours(pollingIntervalHours)} hora(s)<br />
                        Datos recibidos: {sensorData.length}
                       </div>
                     </div>
@@ -497,7 +570,16 @@ export default function SensorSessionPage() {
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ fontWeight: 600, color: '#10b981' }}>
-                        {data.timestamp ? new Date(data.timestamp).toLocaleTimeString() : 'N/A'}
+                        {data.timestamp
+                          ? new Date(data.timestamp).toLocaleString('es-CO', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit',
+                            })
+                          : 'N/A'}
                       </span>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>

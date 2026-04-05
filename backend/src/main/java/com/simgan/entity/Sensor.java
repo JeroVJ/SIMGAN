@@ -28,6 +28,9 @@ public class Sensor {
     private String mqttBrokerUrl;
     private String clientId;
     private Boolean connected;
+    
+    @Column(name = "polling_interval_ms")
+    private Integer pollingIntervalMs;
 
     @OneToMany(mappedBy = "sensor", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default

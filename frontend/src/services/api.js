@@ -58,7 +58,11 @@ export const parcelApi = {
   getByTerrain: (terrainId) => api.get(`/parcels/terrain/${terrainId}`).then(r => r.data),
   create: (data) => api.post('/parcels', data).then(r => r.data),
   updateStatus: (id, status) => api.patch(`/parcels/${id}/status`, { status }).then(r => r.data),
-  delete: (id) => api.delete(`/parcels/${id}`)
+  delete: (id) => api.delete(`/parcels/${id}`),
+  getRotationPlan: (terrainId, loteId, tipoAnimal, numeroAnimales) =>
+    api.get(`/parcels/terrain/${terrainId}/rotation-plan`, {
+      params: { loteId, tipoAnimal, numeroAnimales },
+    }).then(r => r.data),
 }
 
 // ===== NDVI / ANALYTICS =====
@@ -149,6 +153,7 @@ export const loteApi = {
 // ===== SENSORES =====
 export const sensorApi = {
   getByParcel: (parcelId) => api.get(`/sensors/parcel/${parcelId}`).then(r => r.data),
+  getLastClassificationByParcel: (parcelId) => api.get(`/sensors/parcel/${parcelId}/last-classification`).then(r => r.data),
   getById: (id) => api.get(`/sensors/${id}`).then(r => r.data),
   create: (data) => api.post('/sensors', data).then(r => r.data),
   update: (id, data) => api.patch(`/sensors/${id}`, data).then(r => r.data),

@@ -18,7 +18,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -26,6 +28,10 @@ import java.util.stream.Collectors;
 @RequestMapping("/sensors")
 @RequiredArgsConstructor
 public class SensorController {
+
+    private static final int DEFAULT_POLLING_INTERVAL_MS = 3_600_000;
+    private static final int MIN_POLLING_INTERVAL_MS = 60_000;
+    private static final double MIN_POLLING_INTERVAL_HOURS = 1.0 / 60.0;
 
     private final SensorRepository sensorRepository;
     private final ParcelRepository parcelRepository;
@@ -53,6 +59,7 @@ public class SensorController {
                 .mqttBrokerUrl(sensor.getMqttBrokerUrl())
                 .clientId(sensor.getClientId())
                 .connected(sensor.getConnected() != null && sensor.getConnected())
+                .pollingIntervalMs(sensor.getPollingIntervalMs())
                 .parcelId(sensor.getParcel() != null ? sensor.getParcel().getId() : null)
                 .build();
     }
@@ -66,6 +73,7 @@ public class SensorController {
         sensor.setMqttTopic(sensorCreateDto.getMqttTopic());
         sensor.setMqttBrokerUrl(sensorCreateDto.getMqttBrokerUrl());
         sensor.setClientId(sensorCreateDto.getClientId());
+        sensor.setPollingIntervalMs(sensorCreateDto.getPollingIntervalMs() != null ? sensorCreateDto.getPollingIntervalMs() : DEFAULT_POLLING_INTERVAL_MS);
         
         // Validar y asignar el parcel
         if (sensorCreateDto.getParcelId() != null) {
@@ -214,6 +222,8 @@ public class SensorController {
                             .brokerUrl(sensor.getMqttBrokerUrl())
                             .topic(sensor.getMqttTopic())
                             .clientId(sensor.getClientId())
+                            .pollingIntervalHours((sensor.getPollingIntervalMs() != null ? sensor.getPollingIntervalMs() : DEFAULT_POLLING_INTERVAL_MS) / 3_600_000.0)
+                            .pollingIntervalMs(sensor.getPollingIntervalMs() != null ? sensor.getPollingIntervalMs() : DEFAULT_POLLING_INTERVAL_MS)
                             .username("SIMGAN")
                             .state(sensor.getConnected() != null && sensor.getConnected() ? "Conectado" : "Desconectado")
                             .build();
@@ -254,12 +264,16 @@ public class SensorController {
 
             MqttConfigResponseDto config = mqttBrokerService.saveSensorMqttConfig(id, request);
             
-            // Conectar automáticamente después de guardar
-            try {
-                mqttClientService.connectSensor(id, request.getBrokerUrl(), request.getUsername(), request.getPassword());
-                config.setState("Conectado a MQTT - Escuchando datos");
-            } catch (Exception e) {
-                config.setState("Config guardada - Error en conexión: " + e.getMessage());
+            // Solo intentar conexión MQTT si se proporcionó contraseña
+            if (request.getPassword() != null && !request.getPassword().isBlank()) {
+                try {
+                    mqttClientService.connectSensor(id, request.getBrokerUrl(), request.getUsername(), request.getPassword());
+                    config.setState("Conectado a MQTT - Escuchando datos");
+                } catch (Exception e) {
+                    config.setState("Config guardada - Error en conexión: " + e.getMessage());
+                }
+            } else {
+                config.setState("✓ Configuración actualizada");
             }
             
             return ResponseEntity.ok(config);
@@ -308,6 +322,22 @@ public class SensorController {
         }
     }
 
+    @GetMapping("/parcel/{parcelId}/last-classification")
+    public ResponseEntity<Map<String, Object>> getLastClassificationForParcel(@PathVariable Long parcelId) {
+        List<Sensor> sensors = sensorRepository.findByParcelId(parcelId);
+        Map<String, Object> result = new HashMap<>();
+        if (sensors.isEmpty()) {
+            result.put("hasSensor", false);
+            result.put("estado", null);
+        } else {
+            result.put("hasSensor", true);
+            Optional<ClasificacionSensor> latest = clasificacionSensorRepository
+                    .findFirstBySensorParcelIdOrderByTimestampDesc(parcelId);
+            result.put("estado", latest.map(ClasificacionSensor::getEstado).orElse(null));
+        }
+        return ResponseEntity.ok(result);
+    }
+
     @PatchMapping("/{id}/config")
     public ResponseEntity<MqttConfigResponseDto> updateConfig(@PathVariable Long id, @RequestBody MqttConfigUpdateDto.UpdateRequest request) {
         return sensorRepository.findById(id)
@@ -324,6 +354,12 @@ public class SensorController {
                     if (request.getClientId() != null) {
                         sensor.setClientId(request.getClientId());
                     }
+                    if (request.getPollingIntervalHours() != null) {
+                        sensor.setPollingIntervalMs(Math.max(MIN_POLLING_INTERVAL_MS,
+                                (int) Math.round(Math.max(MIN_POLLING_INTERVAL_HOURS, request.getPollingIntervalHours()) * 3_600_000d)));
+                    } else if (request.getPollingIntervalMs() != null) {
+                        sensor.setPollingIntervalMs(Math.max(MIN_POLLING_INTERVAL_MS, request.getPollingIntervalMs()));
+                    }
                     if (request.getConnected() != null) {
                         sensor.setConnected(request.getConnected());
                     }
@@ -333,6 +369,8 @@ public class SensorController {
                             .topic(updated.getMqttTopic())
                             .brokerUrl(updated.getMqttBrokerUrl())
                             .clientId(updated.getClientId())
+                            .pollingIntervalHours((updated.getPollingIntervalMs() != null ? updated.getPollingIntervalMs() : DEFAULT_POLLING_INTERVAL_MS) / 3_600_000.0)
+                            .pollingIntervalMs(updated.getPollingIntervalMs() != null ? updated.getPollingIntervalMs() : DEFAULT_POLLING_INTERVAL_MS)
                             .username("SIMGAN")
                             .state(updated.getConnected() != null && updated.getConnected() ? "Conectado" : "Desconectado")
                             .build();

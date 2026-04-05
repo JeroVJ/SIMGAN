@@ -16,4 +16,5 @@ public class SensorCreateDto {
     private String mqttTopic;
     private String mqttBrokerUrl;
     private String clientId;
+    private Integer pollingIntervalMs;
 }

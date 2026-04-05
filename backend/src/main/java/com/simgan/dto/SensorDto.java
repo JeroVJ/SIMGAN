@@ -13,5 +13,6 @@ public class SensorDto {
     private String mqttBrokerUrl;
     private String clientId;
     private Boolean connected;
+    private Integer pollingIntervalMs;
     private Long parcelId;
 }

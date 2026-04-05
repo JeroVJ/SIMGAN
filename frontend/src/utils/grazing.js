@@ -8,13 +8,47 @@
  * Based on Brachiaria/Estrella pasture literature for Colombian tropics.
  */
 
+const FORAGE_RATE_BY_TYPE = {
+  VACA: 0.10,
+  NOVILLA: 0.12,
+  NOVILLO: 0.13,
+  TORO: 0.11,
+}
+
+const DEFAULT_FORAGE_RATE = FORAGE_RATE_BY_TYPE.VACA
+
+function getForageRate(tipo) {
+  if (!tipo) return DEFAULT_FORAGE_RATE
+  const key = String(tipo).trim().toUpperCase()
+  return FORAGE_RATE_BY_TYPE[key] ?? DEFAULT_FORAGE_RATE
+}
+
+function getDailyIntakeTotal(lote) {
+  if (!lote) return null
+
+  if (Array.isArray(lote.ganados) && lote.ganados.length > 0) {
+    const total = lote.ganados.reduce((sum, g) => {
+      const peso = Number(g?.pesoActual)
+      if (!Number.isFinite(peso) || peso <= 0) return sum
+      return sum + peso * getForageRate(g?.tipo)
+    }, 0)
+    return total > 0 ? total : null
+  }
+
+  // Fallback para respuestas parciales sin detalle de ganados.
+  if (!lote.cabezas || lote.cabezas === 0) return null
+  if (!lote.pesoPromedioActual || lote.pesoPromedioActual === 0) return null
+  return lote.pesoPromedioActual * DEFAULT_FORAGE_RATE * lote.cabezas
+}
+
 /**
  * Estimate how many grazing days remain for a lote on a given parcel,
  * given the current biomass reading.
  *
  * Assumptions:
  *   - 30% residual biomass is left ungrazed (pasture recovery floor)
- *   - Dry-matter intake ≈ 2.5% of live weight per head per day
+ *   - Forage intake by animal type (daily, % of live weight):
+ *     vaca=10%, novilla=12%, novillo=13%, toro=11%
  *
  * @param {object} parcel  - { areaHectares }
  * @param {object} lote    - { cabezas, pesoPromedioActual }
@@ -23,18 +57,15 @@
  */
 export function estimateGrazingDays(parcel, lote, biomassKgPerHa) {
   if (!parcel || !lote || biomassKgPerHa == null) return null
-  if (!lote.cabezas || lote.cabezas === 0) return null
-  if (!lote.pesoPromedioActual || lote.pesoPromedioActual === 0) return null
 
   const areaHa = parcel.areaHectares || 0
   if (areaHa === 0) return null
 
   const totalBiomassKg   = biomassKgPerHa * areaHa
   const availableBiomass = Math.max(0, totalBiomassKg * 0.70) // leave 30% residual
-  const dailyIntakePerHead = lote.pesoPromedioActual * 0.025  // 2.5% of live weight
-  const dailyIntakeTotal   = dailyIntakePerHead * lote.cabezas
+  const dailyIntakeTotal = getDailyIntakeTotal(lote)
 
-  if (dailyIntakeTotal === 0) return null
+  if (!dailyIntakeTotal || dailyIntakeTotal === 0) return null
 
   return Math.max(0, Math.floor(availableBiomass / dailyIntakeTotal))
 }
@@ -46,8 +77,9 @@ export function estimateGrazingDays(parcel, lote, biomassKgPerHa) {
  * @returns {number|null}
  */
 export function getDailyConsumption(lote) {
-  if (!lote?.pesoPromedioActual || !lote?.cabezas) return null
-  return Math.round(lote.pesoPromedioActual * 0.025 * lote.cabezas * 10) / 10
+  const total = getDailyIntakeTotal(lote)
+  if (!total) return null
+  return Math.round(total * 10) / 10
 }
 
 /**
