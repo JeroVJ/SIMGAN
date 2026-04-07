@@ -62,6 +62,14 @@ public class Parcel {
     @Builder.Default
     private List<Sensor> sensores = new ArrayList<>();
 
+    /**
+     * RELACION 1:N
+     * Una parcela puede tener muchas alertas
+     */
+    @OneToMany(mappedBy = "parcel", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<Alert> alertas = new ArrayList<>();
+
     public enum ParcelStatus {
         DISPONIBLE,
         EN_USO,

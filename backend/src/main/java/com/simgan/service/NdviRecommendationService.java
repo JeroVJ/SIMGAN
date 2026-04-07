@@ -342,8 +342,9 @@ public class NdviRecommendationService {
 
     /**
      * Obtiene los umbrales [optim, alert] para una parcela, con fallback a terreno y luego a defaults.
+     * Expuesto como public para uso en reportes PDF.
      */
-    private double[] getThresholds(Long parcelId, Long terrainId) {
+    public double[] getThresholds(Long parcelId, Long terrainId) {
         // 1. Try parcel-level calibrations
         var optimParcel = calibrationRepository.findByParcelIdAndCalibrationType(parcelId, "OPTIM");
         double optim = optimParcel.map(NdviCalibration::getReferenceNdvi).orElse(-1.0);
@@ -360,13 +361,17 @@ public class NdviRecommendationService {
     }
 
     private String[] classifyHealth(double ndvi, double optim, double alert, double biomass) {
-        if (ndvi >= optim) return new String[]{"EXCELENTE", "#4ade80"};
-        if (ndvi > alert) {
-            if (biomass == 0.0) return new String[]{"CRÍTICO", "#ef4444"};
-            return new String[]{"OPTIMO", "#84cc16"};
-        }
+
+    if (ndvi <= alert) {
         return new String[]{"CRÍTICO", "#ef4444"};
     }
+
+    if (ndvi <= optim) {
+        return new String[]{"OPTIMO", "#84cc16"};
+    }
+
+    return new String[]{"EXCELENTE", "#4ade80"};
+   }
 
     private double calculateTrend(List<NdviRecord> history) {
         if (history.size() < 2) return 0;

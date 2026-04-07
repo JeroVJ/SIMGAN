@@ -1,8 +1,10 @@
 package com.simgan.service;
 
 import com.simgan.entity.ClasificacionSensor;
+import com.simgan.entity.Alert;
 import com.simgan.entity.LecturaSensor;
 import com.simgan.entity.Sensor;
+import com.simgan.repository.AlertRepository;
 import com.simgan.repository.ClasificacionSensorRepository;
 import com.simgan.repository.SensorRepository;
 
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Service
@@ -22,6 +25,12 @@ public class SensorService {
 
     @Autowired
     private ClasificacionSensorRepository clasificacionSensorRepository;
+
+    @Autowired
+    private AlertRepository alertRepository;
+
+    @Autowired
+    private EmailAlertService emailAlertService;
 
     private ObjectMapper objectMapper = new ObjectMapper();
 
@@ -60,6 +69,7 @@ public class SensorService {
 
             // Guardar en BD
             clasificacionSensorRepository.save(clasificacion);
+            createAlertFromSensorState(sensor, clasificacion);
             log.info("✓ Lectura guardada para sensor {} en topic {}", sensor.getId(), sensor.getMqttTopic());
 
         } catch (Exception e) {
@@ -80,6 +90,41 @@ public class SensorService {
         } catch (Exception e) {
             log.error(" Error en procesarLectura legacy: {}", e.getMessage());
         }
+    }
+
+    private void createAlertFromSensorState(Sensor sensor, ClasificacionSensor clasificacion) {
+        if (sensor == null || sensor.getParcel() == null || clasificacion == null || clasificacion.getEstado() == null) {
+            return;
+        }
+
+        Alert.AlertType alertType = null;
+        String estado = clasificacion.getEstado();
+        String message = clasificacion.getConsecuencia();
+
+        if ("SECO".equalsIgnoreCase(estado)) {
+            alertType = Alert.AlertType.POTRERO_CON_ESTRES_HIDRICO;
+        } else if ("ENCHARCADO".equalsIgnoreCase(estado)) {
+            alertType = Alert.AlertType.POTRERO_ENCHARCADO;
+        }
+
+        if (alertType != null) {
+            if (existsAlertTypeToday(sensor.getParcel().getId(), alertType)) {
+                return;
+            }
+
+            Alert savedAlert = alertRepository.save(Alert.builder()
+                    .parcel(sensor.getParcel())
+                    .alertType(alertType)
+                    .message(message)
+                    .build());
+            emailAlertService.sendAlertEmail(savedAlert);
+        }
+    }
+
+    private boolean existsAlertTypeToday(Long parcelId, Alert.AlertType alertType) {
+        return alertRepository.findByParcelIdAndDate(parcelId, LocalDate.now())
+                .stream()
+                .anyMatch(a -> a.getAlertType() == alertType);
     }
 
     private ClasificacionSensor clasificarLectura(LecturaSensor lectura, String tipoSuelo) {

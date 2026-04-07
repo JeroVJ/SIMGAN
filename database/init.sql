@@ -175,12 +175,23 @@ CREATE TABLE IF NOT EXISTS ndvi_alerts (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Alertas generales por parcela
+CREATE TABLE IF NOT EXISTS alertas (
+    id BIGSERIAL PRIMARY KEY,
+    parcel_id BIGINT NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
+    alert_type VARCHAR(80) NOT NULL,
+    
+    message VARCHAR(500),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Indexes
 CREATE INDEX IF NOT EXISTS idx_terrains_farm_id ON terrains(farm_id);
 CREATE INDEX IF NOT EXISTS idx_parcels_terrain_id ON parcels(terrain_id);
 CREATE INDEX IF NOT EXISTS idx_ndvi_parcel_date ON ndvi_records(parcel_id, capture_date);
 CREATE INDEX IF NOT EXISTS idx_ndvi_terrain_date ON ndvi_records(terrain_id, capture_date);
 CREATE INDEX IF NOT EXISTS idx_rotation_parcel ON rotation_history(parcel_id, changed_at);
+CREATE INDEX IF NOT EXISTS idx_alertas_parcel_id ON alertas(parcel_id);
 
 -- =============================================
 -- GANADO MODULE v0.2

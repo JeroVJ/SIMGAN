@@ -3,9 +3,10 @@ package com.simgan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
-
+import org.springframework.scheduling.annotation.EnableAsync;
 @SpringBootApplication
-@EnableScheduling
+@EnableScheduling   
+@EnableAsync
 public class SimganDemoApplication {
     public static void main(String[] args) {
         SpringApplication.run(SimganDemoApplication.class, args);

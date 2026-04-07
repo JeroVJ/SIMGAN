@@ -7,6 +7,7 @@ import com.simgan.entity.*;
 import com.simgan.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -32,6 +33,12 @@ public class AnalysisOrchestrator {
     private final TerrainRepository terrainRepository;
     private final ParcelRepository parcelRepository;
     private final BiomassCalibrationModelRepository biomassModelRepository;
+    private final NdviCalibrationRepository ndviCalibrationRepository;
+    private final AlertRepository alertRepository;
+    private final EmailAlertService emailAlertService;
+
+    @Value("${ndvi.alert.threshold:0.1}")
+    private double defaultAlertThreshold;
 
     public Map<String, Object> runAnalysis(Long terrainId, LocalDate startDate, LocalDate endDate, String biomassMethod) {
     Map<String, Object> result = new LinkedHashMap<>();
@@ -145,6 +152,8 @@ public class AnalysisOrchestrator {
                                 pendingParcels);
 
                         if (records != null && !records.isEmpty()) {
+                            createNdviThresholdAlerts(records, terrain.getId());
+
                             int recordCount = records.size();
                             totalRecordsProcessed += recordCount;
                             totalScenesProcessed++;
@@ -268,6 +277,8 @@ public class AnalysisOrchestrator {
                         );
 
                         if (records != null && !records.isEmpty()) {
+                            createNdviThresholdAlerts(records, terrain.getId());
+
                             int recordCount = records.size();
                             totalRecordsProcessed += recordCount;
                             totalScenesProcessed++;
@@ -379,6 +390,43 @@ public class AnalysisOrchestrator {
             return number.doubleValue();
         }
         return Double.MAX_VALUE;
+    }
+
+    private void createNdviThresholdAlerts(List<NdviRecord> records, Long terrainId) {
+        for (NdviRecord record : records) {
+            if (record == null || record.getParcel() == null || record.getMeanNdvi() == null) {
+                continue;
+            }
+
+            double alertThreshold = resolveAlertThreshold(record.getParcel().getId(), terrainId);
+            if (record.getMeanNdvi() <= alertThreshold) {
+                if (existsAlertTypeToday(record.getParcel().getId(), Alert.AlertType.ESTADO_FORRAJE_BAJO_O_EN_UMBRAL)) {
+                    continue;
+                }
+
+                Alert savedAlert = alertRepository.save(Alert.builder()
+                        .parcel(record.getParcel())
+                        .alertType(Alert.AlertType.ESTADO_FORRAJE_BAJO_O_EN_UMBRAL)
+                        .message("estado de forraje en mal estado, riesgo de sobrepastoreo.")
+                        .build());
+                emailAlertService.sendAlertEmail(savedAlert);
+            }
+        }
+    }
+
+    private boolean existsAlertTypeToday(Long parcelId, Alert.AlertType alertType) {
+        return alertRepository.findByParcelIdAndDate(parcelId, LocalDate.now())
+                .stream()
+                .anyMatch(a -> a.getAlertType() == alertType);
+    }
+
+    private double resolveAlertThreshold(Long parcelId, Long terrainId) {
+        return ndviCalibrationRepository
+                .findByParcelIdAndCalibrationType(parcelId, "ALERT")
+                .map(NdviCalibration::getReferenceNdvi)
+                .or(() -> ndviCalibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "ALERT")
+                        .map(NdviCalibration::getReferenceNdvi))
+                .orElse(defaultAlertThreshold);
     }
 
     /**
