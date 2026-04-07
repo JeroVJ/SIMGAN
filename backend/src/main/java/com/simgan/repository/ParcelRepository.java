@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface ParcelRepository extends JpaRepository<Parcel, Long> {
     List<Parcel> findByTerrainId(Long terrainId);
+    List<Parcel> findByTerrainIdAndRotationOrderIsNotNullOrderByRotationOrder(Long terrainId);
+    List<Parcel> findByTerrainIdAndStatus(Long terrainId, Parcel.ParcelStatus status);
 }

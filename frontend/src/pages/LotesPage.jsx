@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { MapContainer, TileLayer, GeoJSON, useMap, Tooltip, Marker } from 'react-leaflet'
 import * as turf from '@turf/turf'
 import L from 'leaflet'
 import { useTerrain } from '../hooks'
 import { getBiomassColor, getBiomassLabel, getDailyConsumption } from '../utils/grazing'
-import { parcelApi } from '../services/api'
+import { parcelApi, loteApi } from '../services/api'
 import Spinner from '../components/Spinner'
 import ConfirmDialog from '../components/ConfirmDialog'
 
@@ -58,11 +58,80 @@ export default function LotesPage() {
   const [closingLote, setClosingLote] = useState(null)
   const [closeFecha, setCloseFecha] = useState(new Date().toISOString().split('T')[0])
   const [confirm, setConfirm] = useState(null)
+
+  // ── Timing info: DO/DD restantes por potrero ────────────────────────────────
+  const parcelTimingInfo = useMemo(() => {
+    const today = new Date()
+    const info = {}
+    for (const p of parcels) {
+      if (p.status === 'EN_USO' && p.diasOcupacion != null) {
+        const occupyingLote = lotes.find(l => l.currentParcelId === p.id)
+        if (occupyingLote) {
+          // Find the most recent history entry for this parcel (fechaSalida may be pre-filled)
+          const entries = (occupyingLote.parcelHistory || []).filter(h => h.parcelId === p.id)
+          const activeHistory = entries.sort((a, b) => new Date(b.fechaIngreso) - new Date(a.fechaIngreso))[0]
+          if (activeHistory?.fechaIngreso) {
+            const assignedAt = new Date(activeHistory.fechaIngreso + 'T00:00:00')
+            const daysElapsed = Math.floor((today - assignedAt) / 86400000)
+            // fechaRotacion comes directly from pre-calculated fechaSalida stored in DB
+            const fechaRotacion = activeHistory.fechaSalida
+              ? new Date(activeHistory.fechaSalida + 'T00:00:00').toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' })
+              : null
+            info[p.id] = {
+              diasOcupRestantes: Math.max(0, Math.round(p.diasOcupacion - daysElapsed)),
+              diasDescansoRestantes: null,
+              fechaRotacion,
+            }
+          }
+        }
+      } else if (p.status === 'EN_DESCANSO' && p.diasDescanso != null) {
+        // Find the most recent fechaSalida for this parcel across all lotes
+        let lastSalida = null
+        for (const l of lotes) {
+          for (const h of (l.parcelHistory || [])) {
+            if (h.parcelId === p.id && h.fechaSalida) {
+              const d = new Date(h.fechaSalida)
+              if (!lastSalida || d > lastSalida) lastSalida = d
+            }
+          }
+        }
+        if (lastSalida) {
+          const daysResting = Math.floor((today - lastSalida) / 86400000)
+          info[p.id] = {
+            diasOcupRestantes: null,
+            diasDescansoRestantes: Math.max(0, Math.round(p.diasDescanso - daysResting)),
+          }
+        }
+      }
+    }
+    return info
+  }, [parcels, lotes])
   const [rotationLote, setRotationLote] = useState(null)
   const [rotationRows, setRotationRows] = useState([])
   const [rotationLoading, setRotationLoading] = useState(false)
   const [rotationTipoAnimal, setRotationTipoAnimal] = useState('NOVILLO')
   const [rotationNumAnimales, setRotationNumAnimales] = useState('')
+
+  // ── Assign-mode menu & rotation assignment modal ─────────────────────────
+  const [assignMenuLote, setAssignMenuLote] = useState(null)       // loteId showing the choice menu
+  const [showRotaAssignModal, setShowRotaAssignModal] = useState(null) // lote object
+  const [rotaAssignRows, setRotaAssignRows] = useState([])
+  const [rotaAssignSaving, setRotaAssignSaving] = useState(false)
+
+  // Auto-sync DO/DD from rotation plan into assignment rows whenever plan is (re)calculated
+  useEffect(() => {
+    if (!showRotaAssignModal || rotationRows.length === 0) return
+    if (rotationLote?.id !== showRotaAssignModal.id) return
+    setRotaAssignRows(prev => prev.map(row => {
+      const planRow = rotationRows.find(r => r.parcelId === row.parcelId)
+      if (!planRow) return row
+      return {
+        ...row,
+        diasOcupacion: planRow.diasOcupacion != null ? String(planRow.diasOcupacion) : row.diasOcupacion,
+        diasDescanso:  planRow.diasDescanso  != null ? String(planRow.diasDescanso)  : row.diasDescanso,
+      }
+    }))
+  }, [rotationRows]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleOpenRotation(lote) {
     if (rotationLote?.id === lote.id) { setRotationLote(null); return }
@@ -82,6 +151,70 @@ export default function LotesPage() {
     } finally {
       setRotationLoading(false)
     }
+  }
+
+  function openRotaAssignModal(lote) {
+    const isSameLote = rotationLote?.id === lote.id
+    if (!isSameLote) {
+      setRotationLote(lote)
+      setRotationRows([])
+    }
+    const hasPlan = isSameLote && rotationRows.length > 0
+    const rows = availableParcels.map(p => {
+      const planRow = hasPlan ? rotationRows.find(r => r.parcelId === p.id) : null
+      return {
+        parcelId:      p.id,
+        parcelName:    p.name,
+        areaHa:        p.areaHectares,
+        status:        p.status,
+        biomass:       parcelInfo[p.id]?.biomass ?? null,
+        diasOcupacion: planRow?.diasOcupacion != null ? String(planRow.diasOcupacion) : '',
+        diasDescanso:  planRow?.diasDescanso  != null ? String(planRow.diasDescanso)  : '',
+        orden:         '',
+      }
+    })
+    setRotaAssignRows(rows)
+    setShowRotaAssignModal(lote)
+    setAssignMenuLote(null)
+  }
+
+  function handleRotaDOChange(idx, value) {
+    setRotaAssignRows(prev => {
+      const updated = [...prev]
+      const raw = value === '' ? '' : parseFloat(value)
+      const do_ = raw === '' ? '' : Math.max(0, raw)
+      const n   = parcels.length   // total terrain parcels — same formula as backend
+      const dd  = do_ === '' ? '' : String(Math.round((n - 1) * do_ * 10) / 10)
+      updated[idx] = { ...updated[idx], diasOcupacion: do_ === '' ? '' : String(do_), diasDescanso: dd }
+      return updated
+    })
+  }
+
+  function handleRotaOrdenChange(idx, value) {
+    setRotaAssignRows(prev => {
+      const updated = [...prev]
+      updated[idx] = { ...updated[idx], orden: value }
+      return updated
+    })
+  }
+
+  async function handleSaveRotaAssign() {
+    if (!showRotaAssignModal) return
+    const withOrder = rotaAssignRows.filter(r => r.orden !== '' && r.orden != null && !isNaN(Number(r.orden)))
+    if (withOrder.length === 0) return
+    setRotaAssignSaving(true)
+    try {
+      const entries = withOrder.map(r => ({
+        parcelId: r.parcelId,
+        diasOcupacion: r.diasOcupacion !== '' && r.diasOcupacion != null ? Number(r.diasOcupacion) : null,
+        diasDescanso: r.diasDescanso !== '' && r.diasDescanso != null ? Number(r.diasDescanso) : null,
+        rotationOrder: Number(r.orden)
+      }))
+      await loteApi.saveRotationAssignment(showRotaAssignModal.id, entries)
+      setShowRotaAssignModal(null)
+      setRotaAssignRows([])
+    } catch { /* toast shown in hook */ }
+    finally { setRotaAssignSaving(false) }
   }
 
   function estadoEdaficoLabel(estado, hasSensor) {
@@ -258,6 +391,41 @@ export default function LotesPage() {
                             ~{info.grazingDays} dias de pasto restante
                           </div>
                         )}
+                        {/* Rotation timing */}
+                        {p.status === 'EN_USO' && parcelTimingInfo[p.id]?.diasOcupRestantes != null && (
+                          <>
+                          <div style={{ fontSize: 12, marginTop: 4, padding: '4px 0', borderTop: '1px solid #eee',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#555' }}>⏱ DO restantes:</span>
+                            <span style={{
+                              fontWeight: 700, fontSize: 13,
+                              color: parcelTimingInfo[p.id].diasOcupRestantes <= 3 ? '#ef4444'
+                                : parcelTimingInfo[p.id].diasOcupRestantes <= 7 ? '#f59e0b' : '#22c55e',
+                            }}>
+                              {parcelTimingInfo[p.id].diasOcupRestantes} días
+                            </span>
+                          </div>
+                          {parcelTimingInfo[p.id].fechaRotacion && (
+                            <div style={{ fontSize: 11, marginTop: 2, color: '#64748b',
+                              display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                              <span>Rota el:</span>
+                              <span style={{ fontWeight: 600 }}>{parcelTimingInfo[p.id].fechaRotacion}</span>
+                            </div>
+                          )}
+                          </>
+                        )}
+                        {p.status === 'EN_DESCANSO' && parcelTimingInfo[p.id]?.diasDescansoRestantes != null && (
+                          <div style={{ fontSize: 12, marginTop: 4, padding: '4px 0', borderTop: '1px solid #eee',
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ color: '#555' }}>💤 DD restantes:</span>
+                            <span style={{
+                              fontWeight: 700, fontSize: 13,
+                              color: parcelTimingInfo[p.id].diasDescansoRestantes <= 5 ? '#3b82f6' : '#64748b',
+                            }}>
+                              {parcelTimingInfo[p.id].diasDescansoRestantes} días
+                            </span>
+                          </div>
+                        )}
                         {info.ndvi !== null ? (
                           <div style={{ fontSize: 12, marginTop: 2 }}>
                             <span style={{ color: '#888' }}>NDVI: </span>
@@ -321,6 +489,9 @@ export default function LotesPage() {
             const info = parcelForLote ? parcelInfo[parcelForLote.id] : null
             const grazingDays = info?.grazingDays
             const dailyConsumption = getDailyConsumption(lote)
+            const timing = parcelForLote ? parcelTimingInfo[parcelForLote.id] : null
+            const diasOcupRestantes = timing?.diasOcupRestantes ?? null
+            const fechaRotacion = timing?.fechaRotacion ?? null
 
             return (
               <div key={lote.id} className="lote-card-v2">
@@ -365,6 +536,25 @@ export default function LotesPage() {
                     </div>
                     <div className="lote-stat__label">Pasto Restante</div>
                   </div>
+                  {diasOcupRestantes != null && (
+                    <div className="lote-stat" style={{ gridColumn: '1 / -1', borderTop: '1px solid var(--color-border)', paddingTop: 6 }}>
+                      <div className="lote-stat__value" style={{
+                        color: diasOcupRestantes <= 3 ? 'var(--color-danger)' : diasOcupRestantes <= 7 ? 'var(--color-warning)' : 'var(--color-ndvi-good)',
+                        fontSize: 17,
+                      }}>
+                        {diasOcupRestantes}<span className="lote-stat__unit">dias</span>
+                      </div>
+                      <div className="lote-stat__label">DO Restantes en {lote.currentParcelName}</div>
+                    </div>
+                  )}
+                  {fechaRotacion != null && (
+                    <div className="lote-stat" style={{ gridColumn: '1 / -1', paddingTop: 4 }}>
+                      <div className="lote-stat__value" style={{ fontSize: 14, fontWeight: 700, color: 'var(--color-text)' }}>
+                        {fechaRotacion}
+                      </div>
+                      <div className="lote-stat__label">Fecha de rotación</div>
+                    </div>
+                  )}
                 </div>
 
                 {grazingDays != null && (
@@ -390,16 +580,16 @@ export default function LotesPage() {
                   <button className="action-btn action-btn--nav-sm" onClick={() => navigate(`/lotes/${lote.id}`)}>Gestionar</button>
                   {!lote.currentParcelId ? (
                     <button className="action-btn action-btn--nav-sm action-btn--accent"
-                      onClick={() => setShowAssign(showAssign === lote.id ? null : lote.id)}>Asignar Potrero</button>
+                      onClick={() => {
+                        if (showAssign === lote.id) { setShowAssign(null); return }
+                        setAssignMenuLote(prev => prev === lote.id ? null : lote.id)
+                      }}>
+                      Asignar Potrero
+                    </button>
                   ) : (
                     <button className="action-btn action-btn--nav-sm action-btn--warning"
                       onClick={() => handleUnassign(lote.id)}>Mover</button>
                   )}
-                  <button className="action-btn action-btn--nav-sm"
-                    style={{ background: 'var(--color-primary)', color: '#fff', borderColor: 'var(--color-primary)' }}
-                    onClick={() => handleOpenRotation(lote)}>
-                    Programar Rotación
-                  </button>
                   <button className="action-btn action-btn--nav-sm action-btn--ghost" onClick={() => handleClose(lote.id)}>Cerrar</button>
                 </div>
 
@@ -419,8 +609,61 @@ export default function LotesPage() {
                   </div>
                 )}
 
+                {/* ── Assign-mode choice menu ─────────────────────────────── */}
+                {assignMenuLote === lote.id && !lote.currentParcelId && (
+                  <div style={{
+                    marginTop: 8, borderRadius: 8, overflow: 'hidden',
+                    border: '1px solid var(--color-border)',
+                    background: 'var(--color-surface)',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+                  }}>
+                    {/* Option 1 */}
+                    <button
+                      onClick={() => { setShowAssign(lote.id); setAssignMenuLote(null) }}
+                      style={{
+                        width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+                        textAlign: 'left', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 2,
+                        borderBottom: '1px solid var(--color-border)',
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-2)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >
+                      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{ fontSize: 15 }}></span> Asignar ganado a potrero
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                        Elige un potrero disponible y el lote se traslada ahí directamente
+                      </span>
+                    </button>
+                    {/* Option 2 */}
+                    <button
+                      onClick={() => openRotaAssignModal(lote)}
+                      style={{
+                        width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+                        textAlign: 'left', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 2,
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-2)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                    >
+                      <span style={{ fontWeight: 600, fontSize: 13, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{ fontSize: 15 }}></span> Asignar rotación de potreros
+                      </span>
+                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                        Planifica la secuencia de rotación: DO, DD y orden entre potreros
+                      </span>
+                    </button>
+                  </div>
+                )}
+
                 {showAssign === lote.id && (
                   <div className="assign-dropdown">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 600 }}>Selecciona un potrero</span>
+                      <button onClick={() => setShowAssign(null)}
+                        style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1 }}>×</button>
+                    </div>
                     {availableParcels.length === 0
                       ? <p style={{ color: 'var(--color-danger)', fontSize: 13, margin: 0 }}>No hay potreros disponibles</p>
                       : <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -469,6 +712,281 @@ export default function LotesPage() {
           )}
         </div>
       </div>
+
+      {/* ══ Rotation Assignment Modal ══════════════════════════════════════ */}
+      {showRotaAssignModal && (
+        <div
+          onClick={e => { if (e.target === e.currentTarget) setShowRotaAssignModal(null) }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1100,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+        >
+          <div style={{
+            background: 'var(--color-surface)', borderRadius: 12, width: '100%',
+            maxWidth: 960, maxHeight: '92vh', overflow: 'auto',
+            boxShadow: '0 8px 40px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column',
+            border: '1px solid var(--color-border)',
+          }}>
+
+            {/* Header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '18px 24px 14px', borderBottom: '1px solid var(--color-border)',
+            }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}>
+                  Asignar Rotación de Potreros
+                </h3>
+                <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>
+                  Lote: <strong style={{ color: 'var(--color-primary)' }}>{showRotaAssignModal.name}</strong>
+                  {' · '}{showRotaAssignModal.cabezas} cabezas
+                  {showRotaAssignModal.tipoAnimal && ` · ${showRotaAssignModal.tipoAnimal}`}
+                </div>
+              </div>
+              <button onClick={() => setShowRotaAssignModal(null)}
+                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer',
+                  color: 'var(--color-text-muted)', lineHeight: 1, padding: 4 }}>
+                ×
+              </button>
+            </div>
+
+            {/* ── Calculadora de rotación integrada ── */}
+            <div style={{
+              padding: '14px 24px', borderBottom: '1px solid var(--color-border)',
+              background: 'var(--color-surface-2)',
+              display: 'flex', alignItems: 'flex-end', gap: 14, flexWrap: 'wrap',
+            }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: 0.5 }}>Tipo de animal</label>
+                <select value={rotationTipoAnimal} onChange={e => setRotationTipoAnimal(e.target.value)}
+                  className="input-field" style={{ minWidth: 160, paddingTop: 7, paddingBottom: 7 }}>
+                  <option value="NOVILLO">Novillo (1 UGG · 450 kg)</option>
+                  <option value="NOVILLA">Novilla (0.8 UGG · 360 kg)</option>
+                  <option value="VACA">Vaca (1.2 UGG · 540 kg)</option>
+                  <option value="TORO">Toro (1.8 UGG · 810 kg)</option>
+                </select>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                <label style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600,
+                  textTransform: 'uppercase', letterSpacing: 0.5 }}>N° de animales</label>
+                <input type="number" min="1" value={rotationNumAnimales}
+                  onChange={e => setRotationNumAnimales(e.target.value)}
+                  placeholder="ej. 50" className="input-field"
+                  style={{ width: 110, paddingTop: 7, paddingBottom: 7 }} />
+              </div>
+              <button
+                onClick={handleCalculateRotation}
+                disabled={!rotationNumAnimales || parseInt(rotationNumAnimales) <= 0 || rotationLoading}
+                className="action-btn action-btn--primary"
+                style={{ paddingTop: 9, paddingBottom: 9, minWidth: 130 }}>
+                {rotationLoading ? 'Calculando…' : 'Calcular DO / DD'}
+              </button>
+              {rotationRows.length > 0 && rotationLote?.id === showRotaAssignModal?.id && !rotationLoading && (
+                <span style={{ fontSize: 12, color: 'var(--color-success)', alignSelf: 'center', fontWeight: 600 }}>
+                  ✓ Plan calculado · DO/DD llenados automáticamente
+                </span>
+              )}
+            </div>
+
+            {/* ── Carga estimation banner (visible only when rotation plan was calculated for this lote) ── */}
+            {rotationLote?.id === showRotaAssignModal.id && rotationRows.length > 0 && (() => {
+              const withCarga   = rotationRows.filter(r => r.cargaAnimal    != null)
+              const withBiomass = rotationRows.filter(r => r.biomassKgPerHa != null)
+              const avgCarga    = withCarga.length   > 0 ? Math.round(withCarga.reduce((s, r) => s + r.cargaAnimal, 0) / withCarga.length) : null
+              const avgBiomass  = withBiomass.length > 0 ? Math.round(withBiomass.reduce((s, r) => s + r.biomassKgPerHa, 0) / withBiomass.length) : null
+              const totalForaje = rotationRows.reduce((s, r) => s + (r.forrajeDisponible ?? 0), 0)
+              return (
+                <div style={{
+                  padding: '10px 24px', borderBottom: '1px solid var(--color-border)',
+                  background: 'var(--color-surface-2)',
+                  display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center',
+                }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                    letterSpacing: 0.6, color: 'var(--color-text-muted)', marginRight: 4 }}>
+                    Estimación de carga:
+                  </span>
+                  {avgBiomass != null && (
+                    <span style={{ padding: '3px 10px', background: 'rgba(132,204,22,0.1)',
+                      border: '1px solid rgba(132,204,22,0.25)', borderRadius: 5, fontSize: 12 }}>
+                      Biomasa prom. <strong>{avgBiomass.toLocaleString()} kg/ha</strong>
+                    </span>
+                  )}
+                  {avgCarga != null && (
+                    <span style={{ padding: '3px 10px', background: 'rgba(245,158,11,0.1)',
+                      border: '1px solid rgba(245,158,11,0.25)', borderRadius: 5, fontSize: 12 }}>
+                      Carga prom. <strong>{avgCarga.toLocaleString()} anim./potrero</strong>
+                    </span>
+                  )}
+                  <span style={{ padding: '3px 10px', background: 'rgba(59,130,246,0.1)',
+                    border: '1px solid rgba(59,130,246,0.25)', borderRadius: 5, fontSize: 12 }}>
+                    Forraje total <strong>{totalForaje.toLocaleString()} kg</strong>
+                  </span>
+                  <span style={{ padding: '3px 10px', background: 'rgba(139,92,246,0.1)',
+                    border: '1px solid rgba(139,92,246,0.25)', borderRadius: 5, fontSize: 12 }}>
+                    {rotationTipoAnimal} · {rotationNumAnimales} animales
+                  </span>
+                </div>
+              )
+            })()}
+
+            {/* Body */}
+            <div style={{ padding: '16px 24px 8px', overflow: 'auto', flex: 1 }}>
+              {rotaAssignRows.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)', fontSize: 14 }}>
+                  No hay potreros disponibles para incluir en la rotación.
+                </div>
+              ) : (
+                <>
+                  <div style={{ fontSize: 12, color: 'var(--color-text-muted)', marginBottom: 12, lineHeight: 1.6 }}>
+                    Si calculaste el plan de rotación, los valores de DO y DD ya están pre-cargados.
+                    Puedes editarlos: cambiar el <strong>DO</strong> recalcula el <strong>DD</strong>{' '}
+                    automáticamente (DD = (N° potreros totales − 1) × DO).
+                    El <strong>Orden</strong> define la secuencia: 1 es el primer potrero que recibirá el lote.
+                  </div>
+
+                  <div style={{ overflowX: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                      <thead>
+                        <tr style={{ background: 'var(--color-surface-2)' }}>
+                          {['Potrero', 'N° Animales', 'Días de Ocupación (DO)', 'Días de Descanso (DD)', 'Orden de Rotación'].map(h => (
+                            <th key={h} style={{
+                              padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 11,
+                              borderBottom: '2px solid var(--color-border)',
+                              color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5,
+                            }}>{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {/* Sort rows by assigned orden for display, empty orden at bottom */}
+                        {[...rotaAssignRows]
+                          .map((row, idx) => ({ ...row, _origIdx: idx }))
+                          .sort((a, b) => {
+                            const ao = a.orden === '' || a.orden == null ? Infinity : Number(a.orden)
+                            const bo = b.orden === '' || b.orden == null ? Infinity : Number(b.orden)
+                            return ao - bo
+                          })
+                          .map(row => {
+                            const idx = row._origIdx
+                            return (
+                              <tr key={row.parcelId} style={{
+                                background: row.orden !== '' && row.orden != null
+                                  ? 'rgba(74,222,128,0.04)' : 'transparent',
+                                borderBottom: '1px solid var(--color-border)',
+                              }}>
+                                {/* Potrero */}
+                                <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--color-text)' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                                    {row.orden !== '' && row.orden != null && (
+                                      <span style={{
+                                        minWidth: 20, height: 20, borderRadius: '50%', background: 'var(--color-primary)',
+                                        color: '#000', fontSize: 10, fontWeight: 800, display: 'flex',
+                                        alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+                                      }}>
+                                        {row.orden}
+                                      </span>
+                                    )}
+                                    <span style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                                      background: STATUS_COLORS_HEX[row.status] || '#888', display: 'inline-block' }} />
+                                    {row.parcelName}
+                                  </div>
+                                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2, paddingLeft: row.orden !== '' ? 30 : 0 }}>
+                                    {row.areaHa?.toFixed(2)} ha
+                                    {row.biomass != null && (
+                                      <span style={{ marginLeft: 6, color: getBiomassColor(row.biomass) }}>
+                                        · {Math.round(row.biomass).toLocaleString()} kg/ha
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* N° Animales */}
+                                <td style={{ padding: '10px 12px' }}>
+                                  <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: 15 }}>
+                                    {showRotaAssignModal.cabezas || '—'}
+                                  </span>
+                                  <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 4 }}>cab.</span>
+                                </td>
+
+                                {/* DO — editable */}
+                                <td style={{ padding: '10px 12px' }}>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.5"
+                                    value={row.diasOcupacion}
+                                    onChange={e => handleRotaDOChange(idx, e.target.value)}
+                                    placeholder="— días"
+                                    className="input-field"
+                                    style={{ width: 100 }}
+                                  />
+                                </td>
+
+                                {/* DD — auto-calculated, read-only */}
+                                <td style={{ padding: '10px 12px' }}>
+                                  {row.diasDescanso !== '' && row.diasDescanso != null ? (
+                                    <>
+                                      <span style={{ fontWeight: 700, color: 'var(--color-text)', fontSize: 15 }}>
+                                        {row.diasDescanso}
+                                      </span>
+                                      <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginLeft: 4 }}>días</span>
+                                    </>
+                                  ) : (
+                                    <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>—</span>
+                                  )}
+                                </td>
+
+                                {/* Orden — user sets 1, 2, 3… */}
+                                <td style={{ padding: '10px 12px' }}>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    max={rotaAssignRows.length}
+                                    value={row.orden}
+                                    onChange={e => handleRotaOrdenChange(idx, e.target.value)}
+                                    placeholder="—"
+                                    className="input-field"
+                                    style={{ width: 75 }}
+                                  />
+                                </td>
+                              </tr>
+                            )
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: '14px 24px', borderTop: '1px solid var(--color-border)',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+              background: 'var(--color-surface-2)',
+            }}>
+              <div style={{ fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>
+                Al guardar, el lote quedará asignado al potrero con <strong>Orden = 1</strong>.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="action-btn action-btn--ghost" onClick={() => setShowRotaAssignModal(null)}>
+                  Cancelar
+                </button>
+                <button
+                  className="action-btn action-btn--primary"
+                  disabled={rotaAssignSaving || rotaAssignRows.filter(r => r.orden !== '' && r.orden != null).length === 0}
+                  onClick={handleSaveRotaAssign}
+                >
+                  {rotaAssignSaving ? 'Guardando…' : 'Guardar Asignación'}
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Rotation Planning Modal */}
       {rotationLote && (

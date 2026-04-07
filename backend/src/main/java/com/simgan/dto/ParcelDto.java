@@ -41,6 +41,9 @@ public class ParcelDto {
         private String pastureType;
         private Parcel.ParcelStatus status;
         private String createdAt;
+        private Double diasOcupacion;
+        private Double diasDescanso;
+        private Integer rotationOrder;
     }
 
     @Getter @Setter
@@ -74,5 +77,7 @@ public class ParcelDto {
         private Double diasOcupacion;
         /** Rest days = (totalParcels − 1) × diasOcupacion */
         private Double diasDescanso;
+        /** Position in the rotation sequence for this parcel (1 = first) */
+        private Integer rotationOrder;
     }
 }

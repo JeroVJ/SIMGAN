@@ -113,6 +113,13 @@ public class LoteService {
             }
         }
 
+        // Idempotency: if lote is already in the requested parcel, do nothing
+        if (lote.getCurrentParcel() != null
+                && lote.getCurrentParcel().getId().equals(newParcel.getId())) {
+            log.info("Lote {} ya está en la parcela {}, sin cambios.", lote.getName(), newParcel.getName());
+            return toResponse(lote);
+        }
+
         // Unassign from previous parcel
         if (lote.getCurrentParcel() != null) {
             unassignFromCurrentParcel(lote);
@@ -123,16 +130,21 @@ public class LoteService {
         newParcel.setStatus(Parcel.ParcelStatus.EN_USO);
         parcelRepository.save(newParcel);
 
-        // Create history entry
+        // Create history entry — pre-calculate fechaSalida if DO is already configured
+        LocalDate ingresoHoy = LocalDate.now();
+        LocalDate salidaCalculada = (newParcel.getDiasOcupacion() != null)
+                ? ingresoHoy.plusDays(Math.round(newParcel.getDiasOcupacion()))
+                : null;
         LoteParcelHistory history = LoteParcelHistory.builder()
                 .lote(lote)
                 .parcel(newParcel)
-                .fechaIngreso(LocalDate.now())
+                .fechaIngreso(ingresoHoy)
+                .fechaSalida(salidaCalculada)
                 .build();
         parcelHistoryRepository.save(history);
 
         lote = loteRepository.save(lote);
-        log.info("Lote {} asignado a parcela {}", lote.getName(), newParcel.getName());
+        log.info("Lote {} asignado a parcela {} (DO hasta {})", lote.getName(), newParcel.getName(), salidaCalculada);
         return toResponse(lote);
     }
 
@@ -155,14 +167,61 @@ public class LoteService {
         prev.setStatus(Parcel.ParcelStatus.EN_DESCANSO);
         parcelRepository.save(prev);
 
-        // Close history entry
-        parcelHistoryRepository.findByLoteIdAndFechaSalidaIsNull(lote.getId())
+        // Close history entry — override fechaSalida to today (manual move)
+        parcelHistoryRepository.findTopByLoteIdOrderByFechaIngresoDesc(lote.getId())
                 .ifPresent(h -> {
                     h.setFechaSalida(LocalDate.now());
                     parcelHistoryRepository.save(h);
                 });
 
         lote.setCurrentParcel(null);
+    }
+
+    // ===== ROTATION ASSIGNMENT =====
+
+    /**
+     * Persists DO, DD and rotation order for each parcel in the assignment,
+     * then moves the lote to the parcel with rotationOrder = 1.
+     */
+    @Transactional
+    public LoteDto.LoteResponse saveRotationAssignment(Long loteId, LoteDto.RotationAssignmentRequest req) {
+        Lote lote = loteRepository.findById(loteId)
+                .orElseThrow(() -> new RuntimeException("Lote no encontrado: " + loteId));
+
+        for (LoteDto.RotationAssignmentEntry entry : req.getEntries()) {
+            Parcel parcel = parcelRepository.findById(entry.getParcelId())
+                    .orElseThrow(() -> new RuntimeException("Parcela no encontrada: " + entry.getParcelId()));
+            if (!parcel.getTerrain().getId().equals(lote.getTerrain().getId())) {
+                throw new RuntimeException("Parcela " + entry.getParcelId() + " no pertenece al terreno del lote");
+            }
+            if (entry.getDiasOcupacion() != null) {
+                parcel.setDiasOcupacion(entry.getDiasOcupacion());
+            }
+            if (entry.getDiasDescanso() != null) {
+                parcel.setDiasDescanso(entry.getDiasDescanso());
+            }
+            parcel.setRotationOrder(entry.getRotationOrder());
+            parcelRepository.save(parcel);
+        }
+
+        // Assign lote to the first parcel in the rotation sequence ONLY if not already
+        // placed in one of the rotation parcels. This avoids creating a spurious 0-day
+        // history entry when the user updates DO/DD for a lote that is already assigned.
+        Set<Long> rotationParcelIds = req.getEntries().stream()
+                .map(LoteDto.RotationAssignmentEntry::getParcelId)
+                .collect(Collectors.toSet());
+
+        boolean alreadyInRotation = lote.getCurrentParcel() != null
+                && rotationParcelIds.contains(lote.getCurrentParcel().getId());
+
+        if (!alreadyInRotation) {
+            req.getEntries().stream()
+                    .filter(e -> e.getRotationOrder() != null && e.getRotationOrder() == 1)
+                    .findFirst()
+                    .ifPresent(e -> assignParcel(loteId, new LoteDto.AssignParcelRequest(e.getParcelId())));
+        }
+
+        return getLote(loteId);
     }
 
     // ===== GANADO =====

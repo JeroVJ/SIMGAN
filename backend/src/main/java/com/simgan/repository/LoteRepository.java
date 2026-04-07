@@ -11,4 +11,5 @@ public interface LoteRepository extends JpaRepository<Lote, Long> {
     List<Lote> findByTerrainIdOrderByCreatedAtDesc(Long terrainId);
     List<Lote> findByTerrainIdAndFechaSalidaIsNullOrderByCreatedAtDesc(Long terrainId);
     List<Lote> findByCurrentParcelId(Long parcelId);
+    List<Lote> findByFechaSalidaIsNull();
 }

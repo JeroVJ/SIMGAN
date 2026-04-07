@@ -6,6 +6,7 @@ import com.simgan.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -161,20 +162,33 @@ public class ParcelService {
                 // 1) DO base (sin ajuste edafico)
                 double doRaw = biomasaTotal / ((double) numeroAnimales * ofertaFV);
 
-                // 2) Carga usando DO base (antes del ajuste edafico)
-                if (doRaw > 0) {
-                    double carga = biomasaTotal / (consumoIndividual * doRaw);
+                // 2) Ajuste edafico sobre DO y recalculo de DD
+                String soilType = firstNonBlank(
+                    parcel.getSoilType(),
+                    parcel.getTerrain() != null && parcel.getTerrain().getFarm() != null
+                        ? parcel.getTerrain().getFarm().getSoilType()
+                        : null
+                );
+                String pastureType = firstNonBlank(
+                    parcel.getPastureType(),
+                    parcel.getTerrain() != null && parcel.getTerrain().getFarm() != null
+                        ? parcel.getTerrain().getFarm().getPastureType()
+                        : null
+                );
+
+                double factor = edaphicFactor(soilType, pastureType, estadoEdafico);
+                double doAdjusted = Math.max(0.0, doRaw * factor);
+                double ddAdjusted = Math.max(0.0, (totalParcels - 1) * doAdjusted);
+
+                // 3) Carga usando DO ajustado (con factor edafico)
+                if (doAdjusted > 0) {
+                    double carga = biomasaTotal / (consumoIndividual * doAdjusted);
                     cargaAnimal = Math.round(carga);
                     cargaPerHa = Math.round((carga / areaHa) * 10.0) / 10.0;
                 } else {
                     cargaAnimal = 0L;
                     cargaPerHa = 0.0;
                 }
-
-                // 3) Ajuste edafico posterior sobre DO y recalculo de DD
-                double factor = edaphicFactor(parcel.getSoilType(), parcel.getPastureType(), estadoEdafico);
-                double doAdjusted = Math.max(0.0, doRaw * factor);
-                double ddAdjusted = Math.max(0.0, (totalParcels - 1) * doAdjusted);
 
                 diasOcupacion = Math.round(doAdjusted * 10.0) / 10.0;
                 diasDescanso = Math.round(ddAdjusted * 10.0) / 10.0;
@@ -197,6 +211,7 @@ public class ParcelService {
                     .cargaPerHa(cargaPerHa)
                     .diasOcupacion(diasOcupacion)
                     .diasDescanso(diasDescanso)
+                    .rotationOrder(parcel.getRotationOrder())
                     .build());
         }
 
@@ -228,15 +243,31 @@ public class ParcelService {
     }
 
     private boolean isFrancoArcilloso(String soilType) {
-        if (soilType == null) return false;
-        String s = soilType.toLowerCase();
+        String s = normalizeText(soilType);
+        if (s == null) return false;
         return s.contains("franco") && s.contains("arcill");
     }
 
     private boolean isBrachiariaHumidicola(String pastureType) {
-        if (pastureType == null) return false;
-        String p = pastureType.toLowerCase();
+        String p = normalizeText(pastureType);
+        if (p == null) return false;
         return p.contains("brachiaria") && p.contains("humid");
+    }
+
+    private String normalizeText(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) return null;
+        String withoutAccents = Normalizer.normalize(trimmed, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}+", "");
+        return withoutAccents.toLowerCase();
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        String p = normalizeText(primary);
+        if (p != null) return primary;
+        String f = normalizeText(fallback);
+        return f != null ? fallback : null;
     }
 
     private double edaphicFactor(String soilType, String pastureType, String estado) {
@@ -263,6 +294,9 @@ public class ParcelService {
                 .pastureType(parcel.getPastureType())
                 .status(parcel.getStatus())
                 .createdAt(parcel.getCreatedAt() != null ? parcel.getCreatedAt().toString() : null)
+                .diasOcupacion(parcel.getDiasOcupacion())
+                .diasDescanso(parcel.getDiasDescanso())
+                .rotationOrder(parcel.getRotationOrder())
                 .build();
     }
 }

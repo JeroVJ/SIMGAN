@@ -40,6 +40,9 @@ public class Parcel {
     @Column(name = "dias_descanso")
     private Double diasDescanso;
 
+    @Column(name = "rotation_order")
+    private Integer rotationOrder;
+
     @Enumerated(EnumType.STRING)
     @Builder.Default
     private ParcelStatus status = ParcelStatus.DISPONIBLE;

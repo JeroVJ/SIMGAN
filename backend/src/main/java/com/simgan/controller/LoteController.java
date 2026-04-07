@@ -66,6 +66,13 @@ public class LoteController {
         return ResponseEntity.ok(loteService.unassignParcel(loteId));
     }
 
+    @PostMapping("/{loteId}/rotation-assignment")
+    public ResponseEntity<LoteDto.LoteResponse> saveRotationAssignment(
+            @PathVariable Long loteId,
+            @RequestBody LoteDto.RotationAssignmentRequest req) {
+        return ResponseEntity.ok(loteService.saveRotationAssignment(loteId, req));
+    }
+
     // ===== GANADO =====
 
     @GetMapping("/{loteId}/ganado")

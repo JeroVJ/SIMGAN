@@ -2,6 +2,7 @@ package com.simgan.controller;
 
 import com.simgan.dto.ParcelDto;
 import com.simgan.service.ParcelService;
+import com.simgan.service.RotationSchedulerService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -9,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/parcels")
@@ -16,6 +18,7 @@ import java.util.List;
 public class ParcelController {
 
     private final ParcelService parcelService;
+    private final RotationSchedulerService rotationSchedulerService;
 
     @PostMapping
     public ResponseEntity<ParcelDto.Response> create(@Valid @RequestBody ParcelDto.CreateRequest request) {
@@ -56,5 +59,16 @@ public class ParcelController {
             @RequestParam String tipoAnimal,
             @RequestParam int numeroAnimales) {
         return ResponseEntity.ok(parcelService.getRotationPlan(terrainId, loteId, tipoAnimal, numeroAnimales));
+    }
+
+    /**
+     * POST /api/parcels/rotation/trigger
+     * Manually triggers the rotation advancement check for all active lotes.
+     * Useful for testing without waiting for the nightly schedule.
+     */
+    @PostMapping("/rotation/trigger")
+    public ResponseEntity<Map<String, String>> triggerRotation() {
+        rotationSchedulerService.triggerNow();
+        return ResponseEntity.ok(Map.of("status", "ok", "message", "Rotation check executed"));
     }
 }

@@ -10,5 +10,8 @@ import java.util.Optional;
 @Repository
 public interface LoteParcelHistoryRepository extends JpaRepository<LoteParcelHistory, Long> {
     List<LoteParcelHistory> findByLoteIdOrderByFechaIngresoDesc(Long loteId);
+    /** Legacy: used when parcel has no diasOcupacion (fechaSalida intentionally null). */
     Optional<LoteParcelHistory> findByLoteIdAndFechaSalidaIsNull(Long loteId);
+    /** Current assignment: the most recent history entry regardless of fechaSalida. */
+    Optional<LoteParcelHistory> findTopByLoteIdOrderByFechaIngresoDesc(Long loteId);
 }

@@ -45,6 +45,23 @@ public class LoteDto {
         private String fechaSalida; // yyyy-MM-dd
     }
 
+    // ===== ROTATION ASSIGNMENT =====
+
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+    public static class RotationAssignmentRequest {
+        /** Entries with DO, DD and order for each parcel in the rotation. */
+        private List<RotationAssignmentEntry> entries;
+    }
+
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+    public static class RotationAssignmentEntry {
+        private Long parcelId;
+        private Double diasOcupacion;
+        private Double diasDescanso;
+        /** 1-based position in the rotation sequence. */
+        private Integer rotationOrder;
+    }
+
     // ===== GANADO =====
 
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor

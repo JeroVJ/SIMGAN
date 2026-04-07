@@ -141,6 +141,8 @@ export const loteApi = {
   // Asignación de parcela
   assignParcel: (loteId, parcelId) => api.post(`/lotes/${loteId}/assign-parcel`, { parcelId }).then(r => r.data),
   unassignParcel: (loteId) => api.post(`/lotes/${loteId}/unassign-parcel`).then(r => r.data),
+  saveRotationAssignment: (loteId, entries) =>
+    api.post(`/lotes/${loteId}/rotation-assignment`, { entries }).then(r => r.data),
 
   // Ganado
   getGanado: (loteId) => api.get(`/lotes/${loteId}/ganado`).then(r => r.data),

@@ -81,6 +81,12 @@ CREATE TABLE IF NOT EXISTS parcels (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Parcels rotation fields migration (safe for existing databases)
+ALTER TABLE IF EXISTS parcels
+    ADD COLUMN IF NOT EXISTS dias_ocupacion DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS dias_descanso DOUBLE PRECISION,
+    ADD COLUMN IF NOT EXISTS rotation_order INTEGER;
+
 --Sensors
 
 CREATE TABLE IF NOT EXISTS sensores (
