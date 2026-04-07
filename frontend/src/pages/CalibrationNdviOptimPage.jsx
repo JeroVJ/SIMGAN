@@ -199,7 +199,7 @@ export default function CalibrationNdviOptimPage() {
             </div>
             <p style={{ color: 'var(--color-text-secondary)', marginBottom: 20 }}>
               Ingresa una fecha en la que el terreno y sus potreros estaban en <strong>buenas condiciones</strong>.
-              El sistema buscará imágenes satelitales disponibles (máx 30% nubosidad) cerca de esa fecha
+              El sistema buscará imágenes satelitales disponibles de <strong>Sentinel y Planet</strong> (máx 30% nubosidad) cerca de esa fecha
               para que puedas elegir cuál utilizar.
             </p>
 
@@ -289,7 +289,7 @@ export default function CalibrationNdviOptimPage() {
             </h3>
             <div style={{ color: 'var(--color-text-secondary)', fontSize: 13, lineHeight: 1.7 }}>
               <p><strong>1.</strong> Seleccionas una fecha donde el pasto estaba en su <strong>mejor estado</strong>.</p>
-              <p><strong>2.</strong> El sistema busca imágenes Sentinel-2 disponibles (≤30% nubosidad).</p>
+              <p><strong>2.</strong> El sistema busca imágenes disponibles en Sentinel y Planet (≤30% nubosidad).</p>
               <p><strong>3.</strong> Eliges la imagen que deseas utilizar según fecha y nubosidad.</p>
               <p><strong>4.</strong> Se calcula el NDVI promedio de todos los potreros y se guarda como <strong>referencia óptima</strong> (línea verde en la gráfica).</p>
             </div>

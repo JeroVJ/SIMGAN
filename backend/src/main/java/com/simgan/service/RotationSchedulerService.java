@@ -8,6 +8,8 @@ import com.simgan.repository.LoteRepository;
 import com.simgan.repository.ParcelRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,11 +36,19 @@ public class RotationSchedulerService {
     private final ParcelRepository parcelRepository;
     private final LoteParcelHistoryRepository historyRepository;
 
+    // Ejecuta una vez al iniciar el backend para no esperar la primera ventana del cron.
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void runAtStartup() {
+        checkAndAdvanceRotations();
+    }
+    
+
     /**
-     * Runs every day at 00:05 by default. Override with
-     *   rotation.schedule.cron=<expression>  in application.properties.
+     * Runs every 6 hours by default. Override with
+     *   rotation.schedule.cron=<expression> in application.properties.
      */
-    @Scheduled(cron = "${rotation.schedule.cron:0 5 0 * * *}")
+    @Scheduled(cron = "${rotation.schedule.cron:0 0 */6 * * *}")
     @Transactional
     public void checkAndAdvanceRotations() {
         LocalDate today = LocalDate.now();
@@ -58,16 +68,33 @@ public class RotationSchedulerService {
             // Use the most-recent history entry; fechaSalida is pre-calculated on assign
             Optional<LoteParcelHistory> currentHistory =
                     historyRepository.findTopByLoteIdOrderByFechaIngresoDesc(lote.getId());
-            if (currentHistory.isEmpty()) continue;
+            if (currentHistory.isEmpty()) continue;  
 
-            LoteParcelHistory hist = currentHistory.get();
-            // Only rotate if fechaSalida is set (rotation-configured parcel) and due today
-            if (hist.getFechaSalida() == null || today.isBefore(hist.getFechaSalida())) {
+            LoteParcelHistory hist = currentHistory.get();  
+
+             //evitar rotar más de una vez el mismo día
+            if (hist.getFechaIngreso() != null && hist.getFechaIngreso().equals(today)) {
+                continue;
+            }
+            // If fechaSalida is missing (legacy/manual state), derive it from ingreso + DO.
+            LocalDate dueDate = hist.getFechaSalida();
+            if (dueDate == null
+                    && hist.getFechaIngreso() != null
+                    && currentParcel.getDiasOcupacion() != null) {
+                dueDate = hist.getFechaIngreso().plusDays(Math.round(currentParcel.getDiasOcupacion()));
+                hist.setFechaSalida(dueDate);
+                historyRepository.save(hist);
+                log.info("[RotationScheduler] Backfilled fechaSalida={} for lote '{}' in parcel '{}'.",
+                        dueDate, lote.getName(), currentParcel.getName());
+            }
+
+            // Rotate only when due date exists and has been reached.
+            if (dueDate == null || today.isBefore(dueDate)) {
                 continue; // not yet expired or no planned rotation date
             }
 
             log.info("[RotationScheduler] Lote '{}' rotation date {} reached in '{}'. Advancing.",
-                    lote.getName(), hist.getFechaSalida(), currentParcel.getName());
+                    lote.getName(), dueDate, currentParcel.getName());
 
             advanceToNextParcel(lote, currentParcel, hist, today);
         }
@@ -90,25 +117,25 @@ public class RotationSchedulerService {
             return;
         }
 
-        // Find current position and determine next
-        int currentOrder = currentParcel.getRotationOrder();
-        int maxOrder = rotationParcels.stream()
-                .mapToInt(Parcel::getRotationOrder)
-                .max().orElse(currentOrder);
+        // Determine next parcel by position in sorted sequence.
+        int currentIndex = -1;
+        for (int i = 0; i < rotationParcels.size(); i++) {
+            if (rotationParcels.get(i).getId().equals(currentParcel.getId())) {
+                currentIndex = i;
+                break;
+            }
+        }
 
-        int nextOrder = (currentOrder >= maxOrder) ? 1 : currentOrder + 1;
-
-        Optional<Parcel> nextParcelOpt = rotationParcels.stream()
-                .filter(p -> p.getRotationOrder() == nextOrder)
-                .findFirst();
-
-        if (nextParcelOpt.isEmpty()) {
-            log.warn("[RotationScheduler] No parcel found with rotation_order={} in terrain {}. Skipping.",
-                    nextOrder, terrainId);
+        if (currentIndex < 0) {
+            log.warn("[RotationScheduler] Current parcel {} not present in configured rotation for terrain {}. Skipping.",
+                    currentParcel.getId(), terrainId);
             return;
         }
 
-        Parcel nextParcel = nextParcelOpt.get();
+        int nextIndex = (currentIndex + 1) % rotationParcels.size();
+        Parcel nextParcel = rotationParcels.get(nextIndex);
+        Integer currentOrder = currentParcel.getRotationOrder();
+        Integer nextOrder = nextParcel.getRotationOrder();
 
         // Safety: never assign a lote back to the parcel it just left
         if (nextParcel.getId().equals(currentParcel.getId())) {

@@ -66,6 +66,8 @@ public class AnalysisOrchestrator {
     int totalScenesProcessed = 0;
     int planetRecordsProcessed = 0;
     int planetScenesProcessed = 0;
+    int planetScenesFound = 0;
+    int planetScenesSkippedNoAsset = 0;
     int sentinelRecordsProcessed = 0;
     int sentinelScenesProcessed = 0;
     long totalProcessingDurationMs = 0L;
@@ -80,6 +82,11 @@ public class AnalysisOrchestrator {
         if (planetApi.isConfigured()) {
             List<Map<String, Object>> scenes =
                     planetApi.searchScenes(geoJson, startDate, endDate, 0.2);
+
+            planetScenesFound = scenes.size();
+            if (planetScenesFound == 0) {
+                log.info("Planet no devolvió escenas para terreno {} en rango {} -> {}", terrainId, startDate, endDate);
+            }
 
             if (!scenes.isEmpty()) {
             //    - Ordena las escenas:
@@ -97,6 +104,8 @@ public class AnalysisOrchestrator {
 
                         Map<String, Object> asset = planetApi.activateAndGetDownloadUrl(sceneId);
                         if (asset == null) {
+                            planetScenesSkippedNoAsset++;
+                            log.warn("Planet escena {} omitida: no hay asset descargable activo (todavía activando o sin permisos para asset).", sceneId);
                             continue;
                         }
 
@@ -165,6 +174,8 @@ public class AnalysisOrchestrator {
                     }
                 }
             }
+        } else {
+            log.warn("Planet está deshabilitado para esta corrida: isConfigured()=false");
         }
     } catch (Exception e) {
         log.warn("Error con Planet: {}", e.getMessage());
@@ -311,6 +322,10 @@ public class AnalysisOrchestrator {
             result.put("planetScenesProcessed", planetScenesProcessed);
             result.put("planetRecordsProcessed", planetRecordsProcessed);
         }
+        if (planetScenesFound > 0) {
+            result.put("planetScenesFound", planetScenesFound);
+            result.put("planetScenesSkippedNoAsset", planetScenesSkippedNoAsset);
+        }
         if (sentinelScenesProcessed > 0) {
             result.put("sentinelScenesProcessed", sentinelScenesProcessed);
             result.put("sentinelRecordsProcessed", sentinelRecordsProcessed);
@@ -331,6 +346,8 @@ public class AnalysisOrchestrator {
     // 3. SIN DATOS
     // =========================
     result.put("source", "NONE");
+    result.put("planetScenesFound", planetScenesFound);
+    result.put("planetScenesSkippedNoAsset", planetScenesSkippedNoAsset);
     if (sentinelLastError != null && !sentinelLastError.isBlank()) {
         result.put("sentinelError", sentinelLastError);
         result.put("message", "Se encontraron imágenes Sentinel en el rango, pero el procesamiento falló al decodificar bandas JP2 grandes.");

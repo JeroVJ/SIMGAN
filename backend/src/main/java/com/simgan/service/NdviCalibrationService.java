@@ -1,6 +1,7 @@
 package com.simgan.service;
 
 import com.simgan.dto.CalibrationDto;
+import com.simgan.dto.PlanetImageProcessingResponse;
 import com.simgan.dto.ProcessedParcelNdviDto;
 import com.simgan.dto.SentinelImageProcessingResponse;
 import com.simgan.entity.*;
@@ -23,14 +24,14 @@ public class NdviCalibrationService {
     private final ParcelRepository parcelRepository;
     private final FarmRepository farmRepository;
     private final SentinelApiService sentinelApi;
-    // private final PlanetApiService planetApi;
+    private final PlanetApiService planetApi;
     private final ImageProcessingClientService imageProcessingClientService;
 
     private static final double MAX_CLOUD_COVER_CALIBRATION = 0.30;
 
     /**
-     * Busca escenas Sentinel disponibles para la fecha de calibración (±2 días)
-     * sin procesarlas. Devuelve lista de escenas con id, fecha y nubosidad.
+     * Busca escenas disponibles para la fecha de calibración (±2 días)
+     * en Sentinel y Planet, sin procesarlas.
      */
     public List<Map<String, Object>> searchAvailableScenes(Long terrainId, LocalDate calibrationDate) {
         Terrain terrain = terrainRepository.findById(terrainId)
@@ -62,24 +63,59 @@ public class NdviCalibrationService {
                 info.put("source", "SENTINEL");
                 availableScenes.add(info);
             }
-
-            // Ordenar por cercanía a la fecha solicitada, luego menor nubosidad
-            availableScenes.sort(Comparator
-                    .<Map<String, Object>>comparingLong(s -> {
-                        String d = (String) s.get("date");
-                        if (d != null) {
-                            return Math.abs(LocalDate.parse(d).toEpochDay() - calibrationDate.toEpochDay());
-                        }
-                        return Long.MAX_VALUE;
-                    })
-                    .thenComparingDouble(s -> {
-                        Object cc = s.get("cloudCoverPercent");
-                        return cc instanceof Number n ? n.doubleValue() : Double.MAX_VALUE;
-                    }));
-
         } catch (Exception e) {
-            log.warn("Error buscando escenas disponibles: {}", e.getMessage());
+            log.warn("Error buscando escenas disponibles en Sentinel: {}", e.getMessage());
         }
+
+        try {
+            if (planetApi.isConfigured()) {
+                List<Map<String, Object>> scenes =
+                        planetApi.searchScenes(geoJson, searchStart, searchEnd, MAX_CLOUD_COVER_CALIBRATION);
+
+                for (Map<String, Object> scene : scenes) {
+                    String sceneId = (String) scene.get("id");
+                    if (sceneId == null || sceneId.isBlank()) {
+                        continue;
+                    }
+
+                    if (!planetApi.hasDownloadableAsset(sceneId)) {
+                        log.info("Escena Planet {} filtrada en calibración: sin assets descargables por licencia/estado.", sceneId);
+                        continue;
+                    }
+
+                    Map<String, Object> info = new LinkedHashMap<>();
+                    info.put("sceneId", sceneId);
+
+                    String dt = (String) scene.get("acquired");
+                    if (dt != null && dt.length() >= 10) {
+                        info.put("date", dt.substring(0, 10));
+                    }
+
+                    Object cc = scene.get("cloud_cover");
+                    if (cc instanceof Number n) {
+                        info.put("cloudCoverPercent", Math.round(n.doubleValue() * 100.0) / 100.0);
+                    }
+                    info.put("source", "PLANET");
+                    availableScenes.add(info);
+                }
+            }
+        } catch (Exception e) {
+            log.warn("Error buscando escenas disponibles en Planet: {}", e.getMessage());
+        }
+
+        // Ordenar por cercanía a la fecha solicitada, luego menor nubosidad
+        availableScenes.sort(Comparator
+                .<Map<String, Object>>comparingLong(s -> {
+                    String d = (String) s.get("date");
+                    if (d != null) {
+                        return Math.abs(LocalDate.parse(d).toEpochDay() - calibrationDate.toEpochDay());
+                    }
+                    return Long.MAX_VALUE;
+                })
+                .thenComparingDouble(s -> {
+                    Object cc = s.get("cloudCoverPercent");
+                    return cc instanceof Number n ? n.doubleValue() : Double.MAX_VALUE;
+                }));
 
         return availableScenes;
     }
@@ -146,7 +182,7 @@ public class NdviCalibrationService {
         result.put("calibrationType", calibrationType);
         result.put("calibrationDate", calibrationDate.toString());
 
-        // Buscar escenas Sentinel con <= 20% nubosidad para la fecha de calibración
+        // Buscar escenas con <= 30% nubosidad para la fecha de calibración
         // Buscamos en ventana de +/- 2 días por si no hay imagen exacta
         LocalDate searchStart = calibrationDate.minusDays(2);
         LocalDate searchEnd = calibrationDate.plusDays(2);
@@ -166,10 +202,6 @@ public class NdviCalibrationService {
                 scenes = scenes.stream()
                         .filter(s -> selectedSceneId.equals(s.get("id")))
                         .collect(Collectors.toList());
-                if (scenes.isEmpty()) {
-                    result.put("error", "La escena seleccionada " + selectedSceneId + " no se encontró.");
-                    return result;
-                }
             }
 
             if (!scenes.isEmpty()) {
@@ -235,18 +267,101 @@ public class NdviCalibrationService {
             try { sentinelApi.cleanDownloadDir(); } catch (Exception ignored) {}
         }
 
-        // === PLANET (comentado - sin escenas disponibles) ===
-        // if (parcelResults == null) {
-        //     try {
-        //         if (planetApi.isConfigured()) {
-        //             List<Map<String, Object>> scenes =
-        //                     planetApi.searchScenes(geoJson, searchStart, searchEnd, MAX_CLOUD_COVER_CALIBRATION);
-        //             // ... procesar Planet igual que Sentinel ...
-        //         }
-        //     } catch (Exception e) {
-        //         log.warn("Calibración: error con Planet: {}", e.getMessage());
-        //     }
-        // }
+        // === PLANET ===
+        // Si no hubo resultados con Sentinel, o si el usuario eligió una escena específica
+        // que no pertenece a Sentinel, intentamos con Planet.
+        if (parcelResults == null || parcelResults.isEmpty()) {
+            try {
+                if (planetApi.isConfigured()) {
+                    List<Map<String, Object>> scenes =
+                            planetApi.searchScenes(geoJson, searchStart, searchEnd, MAX_CLOUD_COVER_CALIBRATION);
+
+                    if (selectedSceneId != null && !selectedSceneId.isBlank()) {
+                        scenes = scenes.stream()
+                                .filter(s -> selectedSceneId.equals(s.get("id")))
+                                .collect(Collectors.toList());
+                    }
+
+                    if (!scenes.isEmpty()) {
+                        scenes.sort(Comparator
+                                .<Map<String, Object>>comparingLong(scene -> {
+                                    String dt = (String) scene.get("acquired");
+                                    if (dt != null && dt.length() >= 10) {
+                                        LocalDate d = LocalDate.parse(dt.substring(0, 10));
+                                        return Math.abs(d.toEpochDay() - calibrationDate.toEpochDay());
+                                    }
+                                    return Long.MAX_VALUE;
+                                })
+                                .thenComparingDouble(scene -> {
+                                    Object cc = scene.get("cloud_cover");
+                                    return cc instanceof Number n ? n.doubleValue() : Double.MAX_VALUE;
+                                }));
+
+                        for (Map<String, Object> scene : scenes) {
+                            String sceneId = (String) scene.get("id");
+                            String acquired = (String) scene.get("acquired");
+                            if (acquired == null || acquired.length() < 10) {
+                                continue;
+                            }
+                            LocalDate sceneDate = LocalDate.parse(acquired.substring(0, 10));
+
+                            Double cloudCover = null;
+                            Object ccVal = scene.get("cloud_cover");
+                            if (ccVal instanceof Number n) {
+                                cloudCover = n.doubleValue();
+                            }
+
+                            try {
+                                Map<String, Object> asset = planetApi.activateAndGetDownloadUrl(sceneId);
+                                if (asset == null) {
+                                    log.warn("Calibración: escena Planet {} sin asset descargable activo", sceneId);
+                                    continue;
+                                }
+
+                                PlanetImageProcessingResponse response = imageProcessingClientService.processPlanetScene(
+                                        terrain,
+                                        new ArrayList<>(parcels),
+                                        sceneDate,
+                                        sceneId,
+                                        (String) asset.get("url"),
+                                        (String) asset.get("assetType"),
+                                        (Integer) asset.get("numBands"),
+                                        cloudCover
+                                );
+
+                                if (response.getParcelResults() != null && !response.getParcelResults().isEmpty()) {
+                                    for (ProcessedParcelNdviDto dto : response.getParcelResults()) {
+                                        if (dto.getMeanNdvi() != null) {
+                                            double biomass = Math.max(0.0, (dto.getMeanNdvi() - 0.1) * 12000.0);
+                                            dto.setBiomassKgPerHa(Math.round(biomass * 100.0) / 100.0);
+                                        }
+                                    }
+                                    parcelResults = response.getParcelResults();
+                                    usedSceneId = sceneId;
+                                    usedCloudCover = cloudCover;
+                                    usedSource = "PLANET";
+                                    log.info("Calibración: escena Planet {} procesada para terreno {}", sceneId, terrainId);
+                                    break;
+                                }
+                            } catch (Exception e) {
+                                log.warn("Calibración: error procesando escena Planet {}: {}", sceneId, e.getMessage());
+                            }
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Calibración: error buscando escenas Planet: {}", e.getMessage());
+            } finally {
+                try { planetApi.cleanDownloadDir(); } catch (Exception ignored) {}
+            }
+        }
+
+        if ((parcelResults == null || parcelResults.isEmpty())
+                && selectedSceneId != null
+                && !selectedSceneId.isBlank()) {
+            result.put("error", "La escena seleccionada " + selectedSceneId + " no se encontró o no fue procesable.");
+            return result;
+        }
 
         if (parcelResults == null || parcelResults.isEmpty()) {
             result.put("error", String.format(

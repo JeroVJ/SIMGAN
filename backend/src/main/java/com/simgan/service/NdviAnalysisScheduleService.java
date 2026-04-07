@@ -5,6 +5,8 @@ import com.simgan.repository.NdviRecordRepository;
 import com.simgan.repository.TerrainRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -52,7 +54,13 @@ public class NdviAnalysisScheduleService {
         return buildScheduleResponse(terrain, ndviRecords);
     }
 
-    @Scheduled(cron = "${ndvi.schedule.cron:0 0 6 * * *}")
+    // Ejecuta una vez al iniciar para no depender de que el backend esté encendido en una hora exacta.
+    @EventListener(ApplicationReadyEvent.class)
+    public void runDueScheduledAnalysesAtStartup() {
+        runDueScheduledAnalyses();
+    }
+
+    @Scheduled(cron = "${ndvi.schedule.cron:0 0 */6 * * *}")
     public void runDueScheduledAnalyses() {
         LocalDate today = LocalDate.now();
         List<Terrain> dueTerrains = terrainRepository
@@ -61,6 +69,12 @@ public class NdviAnalysisScheduleService {
         for (Terrain terrain : dueTerrains) {
             Integer days = terrain.getAnalysisScheduleDays();
             if (days == null || days < 1) {
+                continue;
+            }
+
+            LocalDate dueDate = terrain.getNextAnalysisDueDate();
+            if (dueDate == null || !dueDate.equals(today)) {
+                // Solo se ejecuta en la fecha programada exacta.
                 continue;
             }
 

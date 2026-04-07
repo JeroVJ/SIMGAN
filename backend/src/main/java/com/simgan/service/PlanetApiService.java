@@ -225,6 +225,51 @@ public class PlanetApiService {
     };
 
     /**
+     * Verifica si la escena tiene al menos un asset NDVI-candidato con permiso de descarga.
+        * Se usa para filtrar escenas en UI y evitar mostrar resultados no utilizables por licencia.
+        *
+        * Importante: "disponible para descarga" aquí significa asset ya ACTIVO con URL de descarga.
+     */
+    public boolean hasDownloadableAsset(String sceneId) {
+        if (!isConfigured()) return false;
+
+        String assetsUrl = String.format("%s/item-types/%s/items/%s/assets", baseUrl, itemType, sceneId);
+        Request getAssets = new Request.Builder()
+                .url(assetsUrl)
+                .addHeader("Authorization", "Basic " + Base64.getEncoder().encodeToString((apiKey + ":").getBytes()))
+                .build();
+
+        try (Response response = client.newCall(getAssets).execute()) {
+            if (!response.isSuccessful() || response.body() == null) {
+                return false;
+            }
+
+            JsonNode assets = mapper.readTree(response.body().string());
+            for (String assetType : ASSET_FALLBACKS) {
+                JsonNode asset = assets.get(assetType);
+                if (asset == null) continue;
+
+                JsonNode permissions = asset.get("_permissions");
+                boolean canDownload = permissions != null
+                        && permissions.isArray()
+                        && java.util.stream.StreamSupport.stream(permissions.spliterator(), false)
+                        .anyMatch(p -> "download".equalsIgnoreCase(p.asText()));
+
+                if (!canDownload) continue;
+
+                String status = asset.path("status").asText();
+                if ("active".equals(status)) {
+                    return asset.has("location") && !asset.get("location").asText().isBlank();
+                }
+            }
+        } catch (Exception e) {
+            log.debug("No se pudo validar assets descargables para escena {}: {}", sceneId, e.getMessage());
+        }
+
+        return false;
+    }
+
+    /**
      * Activa un asset para descarga, probando múltiples tipos en cascada.
      * Retorna Map con: "url", "assetType", "numBands" o null si ninguno sirve.
      */
