@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { authApi } from '../services/api'
 
@@ -23,7 +24,7 @@ const strMeta = [null,
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 
-function LoginForm({ onLogin }) {
+function LoginForm({ onLogin, onForgot }) {
   const [f, setF]       = useState({ email: '', password: '' })
   const [e, setE]       = useState({})
   const [show, setShow] = useState(false)
@@ -94,7 +95,7 @@ function LoginForm({ onLogin }) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
-        <button type="button" style={{
+        <button type="button" onClick={onForgot} style={{
           background: 'none', border: 'none', cursor: 'pointer',
           color: 'var(--color-primary)', fontSize: 13, fontWeight: 600,
           fontFamily: 'var(--font-body)', padding: 0
@@ -259,10 +260,230 @@ function SignupForm({ onLogin }) {
   )
 }
 
+// ── Forgot Password ──────────────────────────────────────────────────────────
+
+function ForgotPasswordForm({ onBack }) {
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState('')
+
+  async function submit() {
+    if (!email) {
+      setError('El correo es requerido')
+      return
+    }
+    if (!/\S+@\S+\.\S+/.test(email)) {
+      setError('Correo inválido')
+      return
+    }
+
+    setLoading(true)
+    setError('')
+    try {
+      await authApi.forgotPassword(email)
+      setSent(true)
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Error al procesar la solicitud'
+      setError(msg)
+      toast.error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (sent) {
+    return (
+      <>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, marginBottom: 12 }}>
+          Reestablecer la contraseña
+        </h3>
+        <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>
+          Listo, Haga los pasos a seguir enviados a su correo electrónico.
+        </p>
+
+        <button type="button" onClick={onBack} style={{
+           background: 'none', border: 'none', cursor: 'pointer',
+           color: 'var(--color-info)', fontSize: 14, fontWeight: 600,
+           display: 'flex', alignItems: 'center', gap: 4, marginBottom: 24, padding: 0
+         }}>
+           {'<<'} Atras
+         </button>
+      </>
+    )
+  }
+
+  return (
+    <>
+      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, marginBottom: 12 }}>
+        Reestablecer la contraseña
+      </h3>
+      <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 24, lineHeight: 1.6 }}>
+        Introduzca su correo electrónico para recibir instrucciones para reestablecer su contraseña:
+      </p>
+
+      <div className="form-group">
+        <input
+          type="email"
+          placeholder="Dirección de correo electrónico"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          style={{
+            width: '100%',
+            background: 'var(--color-surface-2)',
+            border: error ? '1px solid var(--color-danger)' : '1px solid var(--color-border)',
+            padding: '12px 16px',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--color-text)',
+            fontSize: 14
+          }}
+        />
+        {error && <span style={{ fontSize: 12, color: 'var(--color-danger)', marginTop: 4, display: 'block' }}>{error}</span>}
+      </div>
+
+      <button type="button" onClick={onBack} style={{
+        background: 'none', border: 'none', cursor: 'pointer',
+        color: 'var(--color-info)', fontSize: 14, fontWeight: 600,
+        display: 'flex', alignItems: 'center', gap: 4, marginBottom: 24, padding: 0
+      }}>
+        {'<<'} Atras
+      </button>
+
+      <button
+        className="btn btn-primary"
+        style={{ width: '100%', justifyContent: 'center', background: '#45413F', borderColor: '#45413F' }}
+        onClick={submit}
+        disabled={loading}
+      >
+        {loading
+          ? <><div className="spinner" style={{ width: 16, height: 16, borderTopColor: 'var(--color-bg)' }} /> Procesando...</>
+          : 'Continuar'}
+      </button>
+    </>
+  )
+}
+
+// ── Reset Password ───────────────────────────────────────────────────────────
+
+export function ResetPasswordPage() {
+  const { token } = useParams()
+  const navigate = useNavigate()
+  const [f, setF] = useState({ password: '', confirm: '' })
+  const [e, setE] = useState({})
+  const [loading, setLoading] = useState(false)
+  const [show, setShow] = useState(false)
+
+  const set = k => ev => setF(p => ({ ...p, [k]: ev.target.value }))
+
+  function validate() {
+    const err = {}
+    if (f.password.length < 8) err.password = 'Mínimo 8 caracteres'
+    if (f.password !== f.confirm) err.confirm = 'No coinciden'
+    setE(err)
+    return !Object.keys(err).length
+  }
+
+  async function submit() {
+    if (!validate()) return
+    setLoading(true)
+    try {
+      await authApi.resetPassword(token, f.password)
+      toast.success('¡Contraseña actualizada! Ya puedes ingresar.')
+      navigate('/')
+    } catch (err) {
+      const msg = err.response?.data?.message || 'Error al actualizar la contraseña'
+      toast.error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      background: 'var(--color-bg)'
+    }}>
+      <div className="card" style={{ width: '100%', maxWidth: 440 }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 22, fontWeight: 400, marginBottom: 12 }}>
+          Recuperar contraseña
+        </h3>
+        <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 24 }}>
+          Ingresa tu nueva contraseña para continuar.
+        </p>
+
+        <div className="form-group">
+          <label>Nueva contraseña</label>
+          <div style={{ position: 'relative' }}>
+            <input
+              type={show ? 'text' : 'password'}
+              placeholder="Mínimo 8 caracteres"
+              value={f.password}
+              onChange={set('password')}
+              style={{ width: '100%', paddingRight: 40, ...(e.password ? { borderColor: 'var(--color-danger)' } : {}) }}
+            />
+            <button type="button" onClick={() => setShow(s => !s)} style={{
+              position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: 'var(--color-text-muted)', fontSize: 15, lineHeight: 1, padding: 2
+            }}>
+              {show ? 'Ocultar' : 'Ver'}
+            </button>
+          </div>
+          {e.password && <span style={{ fontSize: 12, color: 'var(--color-danger)' }}>{e.password}</span>}
+        </div>
+
+        <div className="form-group">
+          <label>Confirmar nueva contraseña</label>
+          <input
+            type="password"
+            placeholder="Repite tu contraseña"
+            value={f.confirm}
+            onChange={set('confirm')}
+            style={e.confirm ? { borderColor: 'var(--color-danger)' } : {}}
+          />
+          {e.confirm && <span style={{ fontSize: 12, color: 'var(--color-danger)' }}>{e.confirm}</span>}
+        </div>
+
+        <button
+          className="btn btn-primary"
+          style={{ width: '100%', justifyContent: 'center' }}
+          onClick={submit}
+          disabled={loading}
+        >
+          {loading
+            ? <><div className="spinner" style={{ width: 16, height: 16, borderTopColor: 'var(--color-bg)' }} /> Procesando...</>
+            : 'Confirmar nueva contraseña'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AuthPage({ onLogin }) {
   const [tab, setTab] = useState('login')
+
+  if (tab === 'forgot') {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        background: 'var(--color-bg)'
+      }}>
+        <div className="card" style={{ width: '100%', maxWidth: 440 }}>
+          <ForgotPasswordForm onBack={() => setTab('login')} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{
@@ -318,7 +539,7 @@ export default function AuthPage({ onLogin }) {
         </p>
 
         {tab === 'login'
-          ? <LoginForm onLogin={onLogin} />
+          ? <LoginForm onLogin={onLogin} onForgot={() => setTab('forgot')} />
           : <SignupForm onLogin={onLogin} />
         }
       </div>

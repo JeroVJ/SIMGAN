@@ -34,7 +34,9 @@ export const authApi = {
   me: () => api.get('/auth/me').then(r => r.data),
   logout: () => api.post('/auth/logout').then(r => r.data),
   getSessions: () => api.get('/auth/sessions').then(r => r.data),
-  revokeAll: () => api.post('/auth/revoke-all').then(r => r.data)
+  revokeAll: () => api.post('/auth/revoke-all').then(r => r.data),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }).then(r => r.data),
+  resetPassword: (token, newPassword) => api.post('/auth/reset-password', { token, newPassword }).then(r => r.data)
 }
 
 // ===== FARMS =====

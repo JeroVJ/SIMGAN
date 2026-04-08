@@ -20,7 +20,7 @@ import CalibrationNdviAlertPage from './pages/CalibrationNdviAlertPage'
 import CalibrationBiomassPage from './pages/CalibrationBiomassPage'
 import LotesPage         from './pages/LotesPage'
 import LoteDetailPage    from './pages/LoteDetailPage'
-import AuthPage          from './pages/AuthPages'
+import AuthPage, { ResetPasswordPage } from './pages/AuthPages'
 
 
 // Inyectar token en cada request
@@ -126,7 +126,10 @@ export default function App() {
     return (
       <>
         <Toaster position="top-right" />
-        <AuthPage onLogin={handleLogin} />
+        <Routes>
+          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+          <Route path="*" element={<AuthPage onLogin={handleLogin} />} />
+        </Routes>
       </>
     )
   }

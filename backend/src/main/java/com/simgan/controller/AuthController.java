@@ -11,9 +11,11 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/auth")
@@ -24,12 +26,59 @@ public class AuthController {
     private final GanaderoService ganaderoService;
     private final AuthTokenService authTokenService;
 
+    // A simple map to store reset tokens (for now, in memory or we can use the AuthToken table)
+    private static final Map<String, String> resetTokens = new HashMap<>();
+    private static final Map<String, LocalDateTime> resetTokenExpirations = new HashMap<>();
+
     public AuthController(AuthenticationManager authenticationManager, JwtUtil jwtUtil, 
                          GanaderoService ganaderoService, AuthTokenService authTokenService) {
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
         this.ganaderoService = ganaderoService;
         this.authTokenService = authTokenService;
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        Optional<Ganadero> ganaderoOpt = ganaderoService.buscarPorCorreo(email);
+
+        if (ganaderoOpt.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("message", "No existe la cuenta asociada al correo electrónico ingresado"));
+        }
+
+        // Generate token
+        String token = UUID.randomUUID().toString();
+        resetTokens.put(token, email);
+        resetTokenExpirations.put(token, LocalDateTime.now().plusHours(1));
+
+        // En un entorno real, aquí se enviaría el correo.
+        // Por ahora simulamos que se envió.
+        System.out.println("Enlace de recuperación para " + email + ": http://localhost:5173/reset-password/" + token);
+
+        return ResponseEntity.ok(Map.of("message", "Instrucciones enviadas al correo"));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request) {
+        String token = request.get("token");
+        String newPassword = request.get("newPassword");
+
+        String email = resetTokens.get(token);
+        LocalDateTime expiration = resetTokenExpirations.get(token);
+
+        if (email == null || expiration == null || expiration.isBefore(LocalDateTime.now())) {
+            return ResponseEntity.status(400).body(Map.of("message", "Token inválido o expirado"));
+        }
+
+        Ganadero ganadero = ganaderoService.buscarPorCorreo(email).orElseThrow();
+        ganaderoService.actualizarContrasena(ganadero, newPassword);
+
+        // Remove used token
+        resetTokens.remove(token);
+        resetTokenExpirations.remove(token);
+
+        return ResponseEntity.ok(Map.of("message", "Contraseña actualizada exitosamente"));
     }
 
     @PostMapping("/login")
