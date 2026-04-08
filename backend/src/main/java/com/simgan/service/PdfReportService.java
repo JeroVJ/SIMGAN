@@ -143,7 +143,7 @@ public class PdfReportService {
             canvas.add(new Paragraph("SIMGAN")
                     .setFont(bold).setFontSize(42).setFontColor(C_WHITE)
                     .setMargin(0));
-            canvas.add(new Paragraph("Sistema Inteligente de Monitoreo Ganadero")
+            canvas.add(new Paragraph("Sistema de gestión de potreros en ganadería bovina rotativa de ceba")
                     .setFont(regular).setFontSize(13).setFontColor(C_LIGHT_GREEN)
                     .setMargin(0));
         }
@@ -228,7 +228,7 @@ public class PdfReportService {
                     fmt(dashboard.getAvgNdvi(), "%.3f"), ndviColor(dashboard.getAvgNdvi()), bold, regular);
             addMetricCell(metrics, "Biomasa Total",
                     dashboard.getTotalBiomassKg() != null
-                            ? String.format("%.1f t MS", dashboard.getTotalBiomassKg() / 1000) : "—",
+                            ? String.format("%.1f t ", dashboard.getTotalBiomassKg() / 1000) : "—",
                     C_MID_GREEN, bold, regular);
             addMetricCell(metrics, "Biomasa / ha",
                     fmt(dashboard.getAvgBiomassPerHa(), "%.0f kg/ha"), C_BLUE, bold, regular);
@@ -747,10 +747,10 @@ public class PdfReportService {
                 canvas.add(new Paragraph("Sin historial de rotación registrado.")
                         .setFont(regular).setFontSize(10).setFontColor(C_TEXT_MUTED));
             } else {
-                float[] hc = {inner * 0.18f, inner * 0.18f, inner * 0.20f,
-                              inner * 0.10f, inner * 0.10f, inner * 0.24f};
+                float[] hc = {inner * 0.16f, inner * 0.20f, inner * 0.18f,
+                          inner * 0.18f, inner * 0.14f, inner * 0.14f};
                 Table ht = new Table(hc).setWidth(UnitValue.createPercentValue(100));
-                String[] hh = {"Fecha", "Potrero", "Estado Anterior → Nuevo", "NDVI", "Biomasa", "Nota"};
+                String[] hh = {"Fecha", "Potrero", "Estado anterior", "Estado nuevo", "NDVI", "Biomasa"};
                 for (String h : hh) ht.addHeaderCell(headerCell(h, bold));
 
                 boolean alt = false;
@@ -760,17 +760,19 @@ public class PdfReportService {
 
                     String date = h.getChangedAt() != null
                             ? h.getChangedAt().substring(0, 16).replace("T", " ") : "—";
-                    String transition = (h.getPreviousStatus() != null
-                            ? statusLabel(h.getPreviousStatus()) + " → " : "") + statusLabel(h.getNewStatus());
+                    String previousStatus = h.getPreviousStatus() != null
+                        ? statusLabel(h.getPreviousStatus()) : "—";
+                    String newStatus = h.getNewStatus() != null
+                        ? statusLabel(h.getNewStatus()) : "—";
 
                     ht.addCell(dataCell(date, regular, rowBg).setFontSize(9));
                     ht.addCell(dataCell(h.getParcelName(), bold, rowBg));
-                    ht.addCell(dataCell(transition, regular, rowBg).setFontSize(9));
+                    ht.addCell(dataCell(previousStatus, regular, rowBg).setFontSize(9));
+                    ht.addCell(dataCell(newStatus, regular, rowBg).setFontSize(9));
                     ht.addCell(dataCell(h.getNdviAtChange() != null
                             ? String.format("%.3f", h.getNdviAtChange()) : "—", regular, rowBg));
                     ht.addCell(dataCell(h.getBiomassAtChange() != null
                             ? String.format("%.0f", h.getBiomassAtChange()) : "—", regular, rowBg));
-                    ht.addCell(dataCell(nvl(h.getNote()), regular, rowBg).setFontSize(8));
                 }
                 canvas.add(ht);
             }

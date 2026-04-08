@@ -6,6 +6,7 @@ import com.simgan.repository.GanaderoRepository;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
@@ -21,7 +22,7 @@ import java.util.List;
 @Slf4j
 public class EmailAlertService {
 
-    private final JavaMailSender mailSender;
+  private final ObjectProvider<JavaMailSender> mailSenderProvider;
     private final GanaderoRepository ganaderoRepository;
   private final AlertRepository alertRepository;
 
@@ -37,6 +38,13 @@ public class EmailAlertService {
      */
     @Async
     public void sendAlertEmail(Alert alert) {
+      JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
+      if (mailSender == null) {
+        log.warn("SMTP not configured (JavaMailSender unavailable). Skipping alert email for alertId={}",
+            alert != null ? alert.getId() : null);
+        return;
+      }
+
       if (isDuplicateTypeForToday(alert)) {
         log.info("Duplicate alert email skipped for parcel {} and type {} (alertId={})",
             alert.getParcel().getId(), alert.getAlertType(), alert.getId());

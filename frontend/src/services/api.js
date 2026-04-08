@@ -152,6 +152,20 @@ export const loteApi = {
   deleteGanado: (ganadoId) => api.delete(`/lotes/ganado/${ganadoId}`)
 }
 
+// ===== REPORTS =====
+export const reportApi = {
+  /**
+   * Downloads a PDF terrain report. Returns a Blob.
+   */
+  downloadTerrainReport: (terrainId) =>
+    api.get(`/reports/terrain/${terrainId}`, { responseType: 'blob' }).then(r => r.data),
+}
+
+// ===== ALERTS =====
+export const alertApi = {
+  getByTerrain: (terrainId) => api.get(`/alerts/terrain/${terrainId}`).then(r => r.data),
+}
+
 // ===== SENSORES =====
 export const sensorApi = {
   getByParcel: (parcelId) => api.get(`/sensors/parcel/${parcelId}`).then(r => r.data),

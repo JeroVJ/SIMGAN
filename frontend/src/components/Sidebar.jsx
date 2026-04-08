@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutGrid, Plus, Satellite, X, LogOut } from 'lucide-react'
+import { LayoutGrid, Plus, Satellite, X, LogOut, FileText, Bell } from 'lucide-react'
 
 /**
  * Sidebar
@@ -26,6 +26,18 @@ const NAV_ITEMS = [
     end: false,
     label: 'Nueva Finca',
     Icon: Plus,
+  },
+  {
+    to: '/reportes',
+    end: true,
+    label: 'Reportes',
+    Icon: FileText,
+  },
+  {
+    to: '/alertas',
+    end: true,
+    label: 'Alertas',
+    Icon: Bell,
   },
 ]
 
