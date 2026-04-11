@@ -125,7 +125,7 @@ export default function MainMenuPage() {
   if (loading) return <Spinner page label="Cargando menú principal..." />
 
   return (
-    <div className="page-container" style={{ background: '#f8fafc', minHeight: '100vh', padding: '24px' }}>
+    <div className="page-container" style={{ background: 'var(--color-bg)', minHeight: '100vh', padding: '24px' }}>
       
       {/* Selector de Finca */}
       <div style={{ marginBottom: '24px', position: 'relative', display: 'inline-block' }}>
@@ -134,15 +134,15 @@ export default function MainMenuPage() {
           onChange={(e) => setSelectedFarmId(e.target.value)}
           style={{
             appearance: 'none',
-            background: 'white',
-            border: '1px solid #e2e8f0',
+            background: 'var(--color-surface-2)',
+            border: '1px solid var(--color-border)',
             borderRadius: '8px',
             padding: '10px 40px 10px 16px',
             fontSize: '18px',
             fontWeight: '600',
-            color: '#1e293b',
+            color: 'var(--color-text)',
             cursor: 'pointer',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+            boxShadow: '0 1px 2px rgba(0,0,0,0.2)',
             minWidth: '200px'
           }}
         >
@@ -150,7 +150,7 @@ export default function MainMenuPage() {
             <option key={f.id} value={f.id}>{f.name}</option>
           ))}
         </select>
-        <ChevronDown size={20} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#64748b' }} />
+        <ChevronDown size={20} style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: 'var(--color-text-muted)' }} />
       </div>
 
       <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
@@ -158,22 +158,22 @@ export default function MainMenuPage() {
         {/* Ganancia Estimada */}
         <div style={{ 
           flex: '1 1 300px', 
-          background: 'white', 
+          background: 'var(--color-surface)', 
           borderRadius: '16px', 
           padding: '32px', 
-          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+          boxShadow: 'var(--shadow)',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
-          border: '1px solid #f1f5f9'
+          border: '1px solid var(--color-border)'
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-            <div style={{ background: '#f0fdf4', padding: '10px', borderRadius: '50%' }}>
-              <TrendingUp size={24} color="#15803d" />
+            <div style={{ background: 'rgba(74, 222, 128, 0.1)', padding: '10px', borderRadius: '50%' }}>
+              <TrendingUp size={24} color="var(--color-primary)" />
             </div>
-            <span style={{ fontSize: '14px', fontWeight: '600', color: '#64748b' }}>Ganancia Total Estimada (KG)</span>
+            <span style={{ fontSize: '14px', fontWeight: '600', color: 'var(--color-text-secondary)' }}>Ganancia Total Estimada (KG)</span>
           </div>
-          <div style={{ fontSize: '42px', fontWeight: '700', color: '#14532d' }}>
+          <div style={{ fontSize: '42px', fontWeight: '700', color: 'var(--color-primary)' }}>
             +{Number(metrics.gananciaEstimada).toLocaleString()} kg
           </div>
         </div>
@@ -193,8 +193,8 @@ export default function MainMenuPage() {
             label="Potreros disponibles" 
             value={metrics.disponibles} 
             sub="Listos para 48h" 
-            iconBg="#eff6ff"
-            iconColor="#1d4ed8"
+            iconBg="rgba(74, 222, 128, 0.1)"
+            iconColor="var(--color-primary)"
           />
 
           <MetricCard 
@@ -202,16 +202,16 @@ export default function MainMenuPage() {
             label="Potreros Ocupados" 
             value={metrics.ocupados} 
             sub="Ocupación actual" 
-            iconBg="#fef2f2"
-            iconColor="#b91c1c"
+            iconBg="rgba(245, 158, 11, 0.1)"
+            iconColor="var(--color-warning)"
           />
 
           <MetricCard 
             icon={<PauseCircle size={20} />} 
             label="Potreros en descanso" 
             value={metrics.enDescanso} 
-            iconBg="#f8fafc"
-            iconColor="#475569"
+            iconBg="rgba(59, 130, 246, 0.1)"
+            iconColor="var(--color-info)"
           />
 
           <MetricCard 
@@ -232,25 +232,25 @@ export default function MainMenuPage() {
             icon={<Heart size={20} />} 
             label="Animales afectados" 
             value={metrics.animalesAfectados} 
-            valueColor="#ef4444"
-            iconBg="#fef2f2"
-            iconColor="#ef4444"
+            valueColor="var(--color-danger)"
+            iconBg="rgba(239, 68, 68, 0.1)"
+            iconColor="var(--color-danger)"
           />
 
           <MetricCard 
             icon={<AlertTriangle size={20} />} 
             label="Potreros en alerta" 
             value={metrics.potrerosEnAlerta} 
-            valueColor="#ef4444"
-            iconBg="#fef2f2"
-            iconColor="#ef4444"
+            valueColor="var(--color-danger)"
+            iconBg="rgba(239, 68, 68, 0.1)"
+            iconColor="var(--color-danger)"
           />
 
         </div>
       </div>
 
       {refreshing && (
-        <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '8px', color: '#64748b', fontSize: '14px' }}>
+        <div style={{ marginTop: '20px', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-text-muted)', fontSize: '14px' }}>
           <div className="spinner" style={{ width: '16px', height: '16px' }} /> Actualizando datos...
         </div>
       )}
@@ -258,14 +258,14 @@ export default function MainMenuPage() {
   )
 }
 
-function MetricCard({ icon, label, value, sub, iconBg = '#f8fafc', iconColor = '#64748b', valueColor = '#1e293b' }) {
+function MetricCard({ icon, label, value, sub, iconBg = 'var(--color-surface-2)', iconColor = 'var(--color-text-muted)', valueColor = 'var(--color-text)' }) {
   return (
     <div style={{ 
-      background: 'white', 
+      background: 'var(--color-surface)', 
       borderRadius: '12px', 
       padding: '16px', 
-      boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-      border: '1px solid #f1f5f9',
+      boxShadow: 'var(--shadow)',
+      border: '1px solid var(--color-border)',
       display: 'flex',
       flexDirection: 'column',
       gap: '8px'
@@ -273,9 +273,9 @@ function MetricCard({ icon, label, value, sub, iconBg = '#f8fafc', iconColor = '
       <div style={{ background: iconBg, color: iconColor, width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {icon}
       </div>
-      <div style={{ fontSize: '13px', fontWeight: '500', color: '#64748b', lineHeight: '1.2' }}>{label}</div>
+      <div style={{ fontSize: '13px', fontWeight: '500', color: 'var(--color-text-secondary)', lineHeight: '1.2' }}>{label}</div>
       <div style={{ fontSize: '24px', fontWeight: '700', color: valueColor }}>{value}</div>
-      {sub && <div style={{ fontSize: '11px', color: '#94a3b8' }}>{sub}</div>}
+      {sub && <div style={{ fontSize: '11px', color: 'var(--color-text-muted)' }}>{sub}</div>}
     </div>
   )
 }
