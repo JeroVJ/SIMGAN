@@ -16,6 +16,12 @@ import { LayoutGrid, Plus, Satellite, X, LogOut } from 'lucide-react'
 
 const NAV_ITEMS = [
   {
+    to: '/dashboard',
+    end: true,
+    label: 'Menú Principal',
+    Icon: LayoutGrid,
+  },
+  {
     to: '/farms',
     end: true,
     label: 'Mis Fincas',

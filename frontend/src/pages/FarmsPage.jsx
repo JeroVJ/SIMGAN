@@ -68,6 +68,20 @@ export default function FarmsPage() {
       <div className="page-header">
         <h2>Mis Fincas</h2>
         <p>Gestiona tus fincas ganaderas y sus Terrenos</p>
+        <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
+          <button
+            className="action-btn action-btn--primary"
+            onClick={() => navigate('/farms/new')}
+          >
+            Crear Finca
+          </button>
+          <button
+            className="action-btn action-btn--outline"
+            onClick={() => navigate('/dashboard')}
+          >
+            Menú Principal
+          </button>
+        </div>
       </div>
 
       {farms.length === 0 ? (

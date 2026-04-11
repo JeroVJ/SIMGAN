@@ -20,6 +20,7 @@ import CalibrationNdviAlertPage from './pages/CalibrationNdviAlertPage'
 import CalibrationBiomassPage from './pages/CalibrationBiomassPage'
 import LotesPage         from './pages/LotesPage'
 import LoteDetailPage    from './pages/LoteDetailPage'
+import MainMenuPage      from './pages/MainMenuPage'
 import AuthPage, { ResetPasswordPage } from './pages/AuthPages'
 
 
@@ -162,6 +163,8 @@ export default function App() {
               <Route path="/" element={<Navigate to="/farms" replace />} />
 
               <Route path="/farms" element={<FarmsPage />} />
+
+              <Route path="/dashboard" element={<MainMenuPage />} />
 
               <Route path="/farms/new" element={<CreateFarmPage />} />
 
