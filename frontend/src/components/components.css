@@ -113,6 +113,7 @@
   background: transparent;
   color: var(--color-danger);
   border-color: rgba(239, 68, 68, 0.25);
+
 }
 .comp-btn--danger:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.1);

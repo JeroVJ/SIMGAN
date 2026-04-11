@@ -161,19 +161,7 @@ CREATE TABLE IF NOT EXISTS rotation_history (
     changed_at TIMESTAMP DEFAULT NOW()
 );
 
--- NDVI Alerts
-CREATE TABLE IF NOT EXISTS ndvi_alerts (
-    id BIGSERIAL PRIMARY KEY,
-    parcel_id BIGINT NOT NULL REFERENCES parcels(id) ON DELETE CASCADE,
-    alert_type VARCHAR(50) NOT NULL,
-    threshold DOUBLE PRECISION,
-    current_value DOUBLE PRECISION,
-    message VARCHAR(500),
-    severity VARCHAR(20) DEFAULT 'MEDIUM',
-    acknowledged BOOLEAN DEFAULT FALSE,
-    acknowledged_at TIMESTAMP,
-    created_at TIMESTAMP DEFAULT NOW()
-);
+
 
 -- Alertas generales por parcela
 CREATE TABLE IF NOT EXISTS alertas (

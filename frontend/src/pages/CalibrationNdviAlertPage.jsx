@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Spinner from '../components/Spinner'
+import OperationProgress from '../components/OperationProgress'
 import { useCalibration } from '../hooks'
 
 export default function CalibrationNdviAlertPage() {
   const { terrainId } = useParams()
   const navigate = useNavigate()
   const { status, loading, calibrating, calibrate, scenes, searchingScenes, searchScenes } = useCalibration(terrainId, 'ALERT')
+  const { status: optimStatus, loading: optimLoading } = useCalibration(terrainId, 'OPTIM')
 
   const today = new Date().toISOString().slice(0, 10)
   const [calibrationDate, setCalibrationDate] = useState('')
@@ -21,7 +23,15 @@ export default function CalibrationNdviAlertPage() {
     calibrate(calibrationDate, selectedScene)
   }
 
-  if (loading) return <Spinner page label="Verificando calibración umbral de alerta..." />
+  useEffect(() => {
+    if (!optimLoading && optimStatus && !optimStatus.calibrated) {
+      navigate(`/terrains/${terrainId}/ndvi/calibration-optim`, { replace: true })
+    }
+  }, [optimLoading, optimStatus, terrainId, navigate])
+
+  if (loading || optimLoading) {
+    return <Spinner page label="Verificando calibración umbral de alerta..." />
+  }
 
   const isCalibrated = status?.calibrated
 
@@ -43,6 +53,11 @@ export default function CalibrationNdviAlertPage() {
             </p>
           </div>
         </div>
+        <OperationProgress
+          active={searchingScenes || calibrating}
+          title={searchingScenes ? 'Buscando imagenes satelitales' : 'Calibracion umbral de alerta en curso'}
+          expectedSeconds={searchingScenes ? 18 : 45}
+        />
       </div>
 
       {isCalibrated ? (

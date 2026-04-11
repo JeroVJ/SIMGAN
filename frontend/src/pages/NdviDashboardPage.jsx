@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Spinner from '../components/Spinner'
+import OperationProgress from '../components/OperationProgress'
 import EmptyState from '../components/EmptyState'
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
 } from 'recharts'
 import { useNdvi } from '../hooks'
-import { useCalibration } from '../hooks'
+import { useCalibration, useBiomassCalibration } from '../hooks'
 import { getHealthColor } from '../utils/ndvi'
 
 const PARCEL_COLORS = ['#4ade80', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7', '#ec4899', '#14b8a6', '#f97316']
@@ -35,6 +36,7 @@ export default function NdviDashboardPage() {
 
   const { status: calOptim, loading: calOptimLoading } = useCalibration(terrainId, 'OPTIM')
   const { status: calAlert, loading: calAlertLoading } = useCalibration(terrainId, 'ALERT')
+  const { status: biomassStatus, loading: biomassLoading } = useBiomassCalibration(terrainId)
 
   const [activeTab, setActiveTab] = useState('overview')
   const today = new Date().toISOString().slice(0, 10)
@@ -59,6 +61,30 @@ export default function NdviDashboardPage() {
     }
   }, [calOptimLoading, calOptim, calAlertLoading, calAlert, terrainId, navigate])
 
+  // Redirect to biomass calibration if NDVI is ready but biomass is not calibrated in all parcels
+  useEffect(() => {
+    if (
+      !calOptimLoading &&
+      !calAlertLoading &&
+      !biomassLoading &&
+      calOptim?.calibrated &&
+      calAlert?.calibrated &&
+      biomassStatus &&
+      !biomassStatus.allCalibrated
+    ) {
+      navigate(`/terrains/${terrainId}/ndvi/calibration-biomass`, { replace: true })
+    }
+  }, [
+    calOptimLoading,
+    calAlertLoading,
+    biomassLoading,
+    calOptim,
+    calAlert,
+    biomassStatus,
+    terrainId,
+    navigate,
+  ])
+
   // Compute calibrated reference values for chart lines
   const optimNdvi = useMemo(() => {
     if (!calOptim?.calibrations?.length) return 0.6
@@ -80,7 +106,9 @@ export default function NdviDashboardPage() {
 
   const hasData = dashboard?.timeline?.length > 0
 
-  if (loading || calOptimLoading || calAlertLoading) return <Spinner page label="Cargando analíticas NDVI..." />
+  if (loading || calOptimLoading || calAlertLoading || biomassLoading) {
+    return <Spinner page label="Cargando analíticas NDVI..." />
+  }
 
   return (
     <div className="page-container">
@@ -176,6 +204,11 @@ export default function NdviDashboardPage() {
           </div>
         </div>
         <p className="ndvi-analysis-steps">1) Fecha inicial &amp; final · 2) Método biomasa · 3) <strong>Ejecutar Análisis</strong></p>
+        <OperationProgress
+          active={analyzing}
+          title="Analisis NDVI en curso"
+          expectedSeconds={55}
+        />
       </div>
 
       {!hasData ? (

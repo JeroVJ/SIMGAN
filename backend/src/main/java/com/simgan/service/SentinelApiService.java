@@ -134,6 +134,33 @@ public class SentinelApiService {
         return Collections.emptyList();
     }
 
+    /**
+     * Verifica si la escena Sentinel tiene un asset potencialmente descargable.
+     * Acepta URL directa desde STAC o URL resolvible vía UUID en OData.
+     */
+    public boolean hasDownloadableAsset(Map<String, Object> scene) {
+        if (scene == null || !isConfigured()) {
+            return false;
+        }
+
+        try {
+            String downloadUrl = (String) scene.get("downloadUrl");
+            if (downloadUrl != null && !downloadUrl.isBlank() && !downloadUrl.contains("('S2")) {
+                return true;
+            }
+
+            String sceneId = (String) scene.get("id");
+            if (sceneId == null || sceneId.isBlank()) {
+                return false;
+            }
+
+            return findProductUuid(sceneId) != null;
+        } catch (Exception e) {
+            log.debug("No se pudo validar asset descargable para escena Sentinel: {}", e.getMessage());
+            return false;
+        }
+    }
+
     private List<Map<String, Object>> executeStacSearch(String jsonBody, double maxCloudCover) throws IOException {
         int maxRetries = 3;
         for (int attempt = 0; attempt <= maxRetries; attempt++) {

@@ -7,6 +7,7 @@ import {
   ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import Spinner from '../components/Spinner'
+import OperationProgress from '../components/OperationProgress'
 import { useBiomassCalibration, useCalibration } from '../hooks'
 
 delete L.Icon.Default.prototype._getIconUrl
@@ -157,6 +158,7 @@ export default function CalibrationBiomassPage() {
   const navigate = useNavigate()
   const { status, loading, calibrating, calibrateParcel } = useBiomassCalibration(terrainId)
   const { status: optimStatus, loading: optimLoading } = useCalibration(terrainId, 'OPTIM')
+  const { status: alertStatus, loading: alertLoading } = useCalibration(terrainId, 'ALERT')
 
   // Per-parcel local state for point placement
   const [activeParcelId, setActiveParcelId] = useState(null)
@@ -202,7 +204,13 @@ export default function CalibrationBiomassPage() {
     [activeParcel?.model]
   )
 
-  if (loading || optimLoading) return <Spinner page label="Cargando calibración de biomasa..." />
+  useEffect(() => {
+    if (!optimLoading && !alertLoading && optimStatus?.calibrated && alertStatus && !alertStatus.calibrated) {
+      navigate(`/terrains/${terrainId}/ndvi/calibration-alert`, { replace: true })
+    }
+  }, [optimLoading, alertLoading, optimStatus, alertStatus, terrainId, navigate])
+
+  if (loading || optimLoading || alertLoading) return <Spinner page label="Cargando calibración de biomasa..." />
 
   if (!optimStatus?.calibrated) {
     return (
@@ -316,6 +324,11 @@ export default function CalibrationBiomassPage() {
             </p>
           </div>
         </div>
+        <OperationProgress
+          active={calibrating}
+          title="Calibracion de biomasa en curso"
+          expectedSeconds={65}
+        />
       </div>
 
       {/* How it works */}

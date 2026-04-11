@@ -39,6 +39,8 @@ public class AnalysisOrchestrator {
 
     @Value("${ndvi.alert.threshold:0.1}")
     private double defaultAlertThreshold;
+    
+
 
     public Map<String, Object> runAnalysis(Long terrainId, LocalDate startDate, LocalDate endDate, String biomassMethod) {
     Map<String, Object> result = new LinkedHashMap<>();
@@ -80,7 +82,10 @@ public class AnalysisOrchestrator {
     long totalProcessingDurationMs = 0L;
     Set<String> sourcesUsed = new LinkedHashSet<>();
     Set<LocalDate> processedDates = new LinkedHashSet<>();
-    String planetLastError = null;
+    String planetLastError = null;  
+
+
+    /* 
 
     // =========================
     // 1. PLANET
@@ -191,7 +196,9 @@ public class AnalysisOrchestrator {
         planetLastError = e.getMessage();
     } finally {
         try { planetApi.cleanDownloadDir(); } catch (Exception ignored) {}
-    }
+    } 
+
+    */
 
     // =========================
     // 2. SENTINEL

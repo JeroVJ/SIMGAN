@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import Spinner from '../components/Spinner'
+import OperationProgress from '../components/OperationProgress'
 import { useCalibration } from '../hooks'
 import { getHealthColor } from '../utils/ndvi'
 
@@ -45,6 +46,11 @@ export default function CalibrationNdviOptimPage() {
             </p>
           </div>
         </div>
+        <OperationProgress
+          active={searchingScenes || calibrating}
+          title={searchingScenes ? 'Buscando imagenes satelitales' : 'Calibracion NDVI optima en curso'}
+          expectedSeconds={searchingScenes ? 18 : 45}
+        />
       </div>
 
       {/* Already calibrated — show results + continue button */}

@@ -93,10 +93,14 @@ public class RotationSchedulerService {
                 continue; // not yet expired or no planned rotation date
             }
 
+            // If backend was down and rotation is overdue, backfill using the due date
+            // instead of shifting history to "today".
+            LocalDate effectiveTransitionDate = dueDate.isBefore(today) ? dueDate : today;
+
             log.info("[RotationScheduler] Lote '{}' rotation date {} reached in '{}'. Advancing.",
                     lote.getName(), dueDate, currentParcel.getName());
 
-            advanceToNextParcel(lote, currentParcel, hist, today);
+            advanceToNextParcel(lote, currentParcel, hist, effectiveTransitionDate);
         }
     }
 
@@ -105,7 +109,7 @@ public class RotationSchedulerService {
      * After last order → wraps around to order 1.
      */
     private void advanceToNextParcel(Lote lote, Parcel currentParcel,
-                                      LoteParcelHistory openHistory, LocalDate today) {
+                                      LoteParcelHistory openHistory, LocalDate transitionDate) {
         Long terrainId = currentParcel.getTerrain().getId();
 
         // All parcels of this terrain that participate in rotation, sorted by order
@@ -163,12 +167,12 @@ public class RotationSchedulerService {
 
         // 5. Open new history entry with pre-calculated fechaSalida for next parcel
         LocalDate nextSalida = (nextParcel.getDiasOcupacion() != null)
-                ? today.plusDays(Math.round(nextParcel.getDiasOcupacion()))
+            ? transitionDate.plusDays(Math.round(nextParcel.getDiasOcupacion()))
                 : null;
         LoteParcelHistory newHistory = LoteParcelHistory.builder()
                 .lote(lote)
                 .parcel(nextParcel)
-                .fechaIngreso(today)
+            .fechaIngreso(transitionDate)
                 .fechaSalida(nextSalida)
                 .build();
         historyRepository.save(newHistory);
