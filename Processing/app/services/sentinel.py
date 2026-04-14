@@ -168,13 +168,39 @@ def _find_product_uuid(product_name: str) -> str | None:
     return values[0].get("Id")
 
 
-def _download_with_auth(url: str, output: Path, token: str) -> None:
-    with requests.get(url, headers={"Authorization": f"Bearer {token}"}, stream=True, timeout=(30, 300)) as response:
-        response.raise_for_status()
-        with output.open("wb") as handle:
-            for chunk in response.iter_content(chunk_size=1024 * 1024):
-                if chunk:
-                    handle.write(chunk)
+def _download_with_auth(url: str, output: Path, token: str, max_retries: int = 5) -> None:
+    """Descarga con soporte de reanudación (Range) y reintentos ante ConnectionReset."""
+    import time
+
+    for attempt in range(1, max_retries + 1):
+        downloaded = output.stat().st_size if output.exists() else 0
+        headers = {"Authorization": f"Bearer {token}"}
+        if downloaded > 0:
+            headers["Range"] = f"bytes={downloaded}-"
+            logger.info("Reanudando descarga desde byte %d (intento %d/%d)", downloaded, attempt, max_retries)
+
+        try:
+            with requests.get(url, headers=headers, stream=True, timeout=(30, 300)) as response:
+                if response.status_code == 416:
+                    # El servidor dice que el rango pedido ya está completo
+                    return
+                response.raise_for_status()
+                mode = "ab" if downloaded > 0 and response.status_code == 206 else "wb"
+                if mode == "wb" and downloaded > 0:
+                    output.unlink()  # reiniciar si el servidor no soporta Range
+                with output.open(mode) as handle:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if chunk:
+                            handle.write(chunk)
+            return  # descarga completa
+        except (requests.exceptions.ChunkedEncodingError,
+                requests.exceptions.ConnectionError,
+                requests.exceptions.Timeout) as exc:
+            if attempt == max_retries:
+                raise
+            wait = 10 * attempt
+            logger.warning("Descarga interrumpida (intento %d/%d): %s — reintentando en %ds", attempt, max_retries, exc, wait)
+            time.sleep(wait)
 
 
 def _download_and_extract_bands(payload: SentinelProcessRequest, work_dir: Path) -> tuple[Path, Path, int, float, float]:

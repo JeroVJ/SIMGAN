@@ -12,6 +12,7 @@ import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -51,9 +52,7 @@ public class EmailAlertService {
         return;
       }
 
-        String recipientEmail = ganaderoRepository
-                .findEmailByParcelId(alert.getParcel().getId())
-                .orElse(null);
+        String recipientEmail = resolveRecipientEmail(alert);
 
         if (recipientEmail == null || recipientEmail.isBlank()) {
             log.warn("No email found for parcel {}. Skipping alert email.", alert.getParcel().getId());
@@ -76,6 +75,27 @@ public class EmailAlertService {
         } catch (Exception e) {
             log.error("Failed to send alert email to {}: {}", recipientEmail, e.getMessage());
         }
+    }
+
+    private String resolveRecipientEmail(Alert alert) {
+      if (alert == null || alert.getParcel() == null) {
+        return null;
+      }
+
+      if (alert.getParcel().getTerrain() != null
+          && alert.getParcel().getTerrain().getFarm() != null
+          && alert.getParcel().getTerrain().getFarm().getGanadero() != null) {
+        String directEmail = alert.getParcel().getTerrain().getFarm().getGanadero().getCorreo();
+        if (StringUtils.hasText(directEmail)) {
+          return directEmail.trim();
+        }
+      }
+
+      return ganaderoRepository
+          .findEmailByParcelId(alert.getParcel().getId())
+          .map(String::trim)
+          .filter(StringUtils::hasText)
+          .orElse(null);
     }
 
       private boolean isDuplicateTypeForToday(Alert alert) {

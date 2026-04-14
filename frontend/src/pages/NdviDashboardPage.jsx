@@ -207,7 +207,8 @@ export default function NdviDashboardPage() {
         <OperationProgress
           active={analyzing}
           title="Analisis NDVI en curso"
-          expectedSeconds={55}
+          expectedSeconds={180}
+          hint="Cada imagen Sentinel tarda entre 2 y 4 minutos en descargarse y procesarse."
         />
       </div>
 

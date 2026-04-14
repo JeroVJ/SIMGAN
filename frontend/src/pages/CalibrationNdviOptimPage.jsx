@@ -49,7 +49,8 @@ export default function CalibrationNdviOptimPage() {
         <OperationProgress
           active={searchingScenes || calibrating}
           title={searchingScenes ? 'Buscando imagenes satelitales' : 'Calibracion NDVI optima en curso'}
-          expectedSeconds={searchingScenes ? 18 : 45}
+          expectedSeconds={searchingScenes ? 18 : 180}
+          hint={!searchingScenes ? 'La calibracion procesa una imagen Sentinel. Puede tardar entre 2 y 4 minutos.' : undefined}
         />
       </div>
 

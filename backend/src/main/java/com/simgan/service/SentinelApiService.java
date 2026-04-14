@@ -120,11 +120,14 @@ public class SentinelApiService {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("collections", List.of(collections));
             body.put("datetime", startDate + "T00:00:00Z/" + endDate + "T23:59:59Z");
-            body.put("limit", 20);
+                body.put("limit", 100);
             body.put("intersects", mapper.readValue(mapper.writeValueAsString(geometry), Map.class));
+                body.put("query", Map.of(
+                    "eo:cloud_cover", Map.of("lte", maxCloudCover * 100)
+                ));
 
             String jsonBody = mapper.writeValueAsString(body);
-            log.info("Sentinel STAC (collection={})", collections[0]);
+                log.info("Sentinel STAC (collection={}, cloudCover<= {}%)", collections[0], (int) (maxCloudCover * 100));
 
             List<Map<String, Object>> results = executeStacSearch(jsonBody, maxCloudCover);
             if (results != null && !results.isEmpty()) {
@@ -220,7 +223,7 @@ public class SentinelApiService {
                     // Extract PRODUCT download URL from assets
                     JsonNode assets = feature.get("assets");
                     if (assets != null) {
-                        for (String key : List.of("PRODUCT", "product", "downloadLink")) {
+                        for (String key : List.of("Product", "PRODUCT", "product", "downloadLink")) {
                             if (assets.has(key) && assets.get(key).has("href")) {
                                 scene.put("downloadUrl", assets.get(key).get("href").asText());
                                 log.info("Scene {} download URL from STAC: {}", featureId,

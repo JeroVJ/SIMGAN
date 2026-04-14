@@ -327,7 +327,8 @@ export default function CalibrationBiomassPage() {
         <OperationProgress
           active={calibrating}
           title="Calibracion de biomasa en curso"
-          expectedSeconds={65}
+          expectedSeconds={300}
+          hint="La calibracion de biomasa puede tardar hasta 5 minutos."
         />
       </div>
 
