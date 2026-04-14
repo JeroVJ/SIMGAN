@@ -9,6 +9,7 @@ import { Sidebar, MobileHeader } from './components'
 import FarmsPage         from './pages/FarmsPage'
 import CreateFarmPage    from './pages/CreateFarmPage'
 import CreateTerrainPage from './pages/CreateTerrainPage'
+import EditParcelPage    from './pages/EditParcelPage'
 import FarmDashboardPage from './pages/FarmDashboardPage'
 import ParcelsPage       from './pages/ParcelsPage'
 import SensorPage        from './pages/SensorPage'
@@ -168,7 +169,11 @@ export default function App() {
 
               <Route path="/farms/:farmId/terrain/new" element={<CreateTerrainPage />} />
 
+              <Route path="/terrains/:terrainId/edit" element={<CreateTerrainPage />} />
+
               <Route path="/terrains/:terrainId/parcels" element={<ParcelsPage />} />
+
+              <Route path="/parcels/:parcelId/edit" element={<EditParcelPage />} />
 
               <Route path="/parcels/:parcelId/sensors" element={<SensorPage />} />
 

@@ -1,14 +1,33 @@
+import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { MapPin, Layers, LayoutGrid, Tractor, Beef } from 'lucide-react'
 import { useFarm } from '../hooks'
+import { terrainApi } from '../services/api'
 import StatCard from '../components/StatCard'
 import Spinner from '../components/Spinner'
 import EmptyState from '../components/EmptyState'
+import ConfirmDialog from '../components/ConfirmDialog'
+import toast from 'react-hot-toast'
 
 export default function FarmDashboardPage() {
   const { farmId } = useParams()
   const navigate = useNavigate()
-  const { farm, terrains, terrainData, stats, loading } = useFarm(farmId)
+  const { farm, terrains, terrainData, stats, loading, reload } = useFarm(farmId)
+  const [confirmDelete, setConfirmDelete] = useState(null)
+
+  async function handleDeleteTerrain() {
+    if (!confirmDelete?.id) return
+
+    try {
+      await terrainApi.delete(confirmDelete.id)
+      toast.success('Terreno eliminado')
+      await reload()
+    } catch (err) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || 'Error eliminando terreno')
+    } finally {
+      setConfirmDelete(null)
+    }
+  }
 
   if (loading) return <Spinner page label="Cargando finca..." />
 
@@ -16,6 +35,16 @@ export default function FarmDashboardPage() {
 
   return (
     <div className="page-container">
+      <ConfirmDialog
+        open={!!confirmDelete}
+        title="Eliminar terreno"
+        message={confirmDelete ? `¿Eliminar el terreno "${confirmDelete.name}"? También se eliminarán sus potreros. Esta acción no se puede deshacer.` : ''}
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={handleDeleteTerrain}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
       {/* Breadcrumb */}
       <div className="breadcrumb">
         <Link to="/farms">Fincas</Link>
@@ -136,6 +165,9 @@ export default function FarmDashboardPage() {
                 </div>
 
                 <div className="terrain-card__footer-nav">
+                  <button className="terrain-card__footer-nav-item" onClick={() => navigate(`/terrains/${t.id}/edit`)}>
+                    Editar
+                  </button>
                   <button className="terrain-card__footer-nav-item" onClick={() => navigate(`/terrains/${t.id}/parcels`)}>
                     Potreros
                   </button>
@@ -147,6 +179,13 @@ export default function FarmDashboardPage() {
                   </button>
                   <button className="terrain-card__footer-nav-item" onClick={() => navigate(`/terrains/${t.id}/rotation`)}>
                     Pastoreo
+                  </button>
+                  <button
+                    className="terrain-card__footer-nav-item"
+                    style={{ color: '#ef4444' }}
+                    onClick={() => setConfirmDelete({ id: t.id, name: t.name || `Terreno ${t.id}` })}
+                  >
+                    Eliminar
                   </button>
                 </div>
               </div>

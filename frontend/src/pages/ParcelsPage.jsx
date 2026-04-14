@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useLocation, useParams, useNavigate, Link } from 'react-router-dom'
 import { MapContainer, TileLayer, FeatureGroup, GeoJSON, useMap, Tooltip } from 'react-leaflet'
 import { EditControl } from 'react-leaflet-draw'
 import * as turf from '@turf/turf'
@@ -56,6 +56,7 @@ export default function ParcelsPage() {
 
   const { terrainId } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const {
     terrain,
@@ -220,6 +221,7 @@ export default function ParcelsPage() {
   })()
 
   const totalParcelArea = parcels.reduce((sum, p) => sum + (p.areaHectares || 0), 0)
+  const outOfBoundsParcelIds = new Set(location.state?.outOfBoundsParcelIds || [])
 
   const coveragePercent =
     terrain?.areaHectares
@@ -278,7 +280,29 @@ export default function ParcelsPage() {
           {terrain?.name} — {terrain?.areaHectares?.toFixed(2)} ha
         </p>
 
+        <div className="flex gap-12" style={{ marginTop: 16 }}>
+          <button className="action-btn action-btn--primary" onClick={() => navigate(`/terrains/${terrainId}/edit`)}>
+            Editar Terreno
+          </button>
+        </div>
+
       </div>
+
+      {location.state?.terrainEdited && (
+        <div className="card mb-24" style={{ borderLeft: `4px solid ${outOfBoundsParcelIds.size > 0 ? '#ef4444' : '#f59e0b'}` }}>
+          <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
+            Revisión de potreros requerida
+          </h3>
+          <p style={{ color: 'var(--color-text-secondary)', marginBottom: outOfBoundsParcelIds.size > 0 ? 12 : 0 }}>
+            El terreno fue actualizado. Ahora debes revisar y editar los potreros para que coincidan con el nuevo contorno.
+          </p>
+          {outOfBoundsParcelIds.size > 0 && (
+            <p style={{ color: '#ef4444', fontSize: 13, margin: 0 }}>
+              Potreros fuera del terreno: {(location.state?.outOfBoundsParcelNames || []).join(', ')}
+            </p>
+          )}
+        </div>
+      )}
 
 
       <div className="two-col">
@@ -333,8 +357,8 @@ export default function ParcelsPage() {
                     key={`p-${p.id}`}
                     data={geo}
                     style={{
-                      color,
-                      fillColor: color,
+                      color: outOfBoundsParcelIds.has(p.id) ? '#ef4444' : color,
+                      fillColor: outOfBoundsParcelIds.has(p.id) ? '#ef4444' : color,
                       weight: 2,
                       fillOpacity: 0.25
                     }}
@@ -520,6 +544,15 @@ export default function ParcelsPage() {
                     <option value="EN_USO">En Uso</option>
                     <option value="EN_DESCANSO">En Descanso</option>
                   </select>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigate(`/parcels/${p.id}/edit`)
+                    }}
+                    style={{ background: 'none', border: '1px solid var(--color-border)', color: 'var(--color-text)', cursor: 'pointer', fontSize: 12, padding: '4px 8px', borderRadius: 4 }}
+                  >
+                    Editar
+                  </button>
                   <button
                     onClick={(e) => {
                       e.stopPropagation()

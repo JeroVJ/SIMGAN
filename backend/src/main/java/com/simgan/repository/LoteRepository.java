@@ -8,6 +8,7 @@ import java.util.List;
 
 @Repository
 public interface LoteRepository extends JpaRepository<Lote, Long> {
+    boolean existsByTerrainId(Long terrainId);
     List<Lote> findByTerrainIdOrderByCreatedAtDesc(Long terrainId);
     List<Lote> findByTerrainIdAndFechaSalidaIsNullOrderByCreatedAtDesc(Long terrainId);
     List<Lote> findByCurrentParcelId(Long parcelId);

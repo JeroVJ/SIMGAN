@@ -11,6 +11,7 @@ import java.util.List;
 public interface TerrainRepository extends JpaRepository<Terrain, Long> {
     List<Terrain> findByFarmId(Long farmId);
     boolean existsByFarmIdAndNameIgnoreCase(Long farmId, String name);
+    boolean existsByFarmIdAndNameIgnoreCaseAndIdNot(Long farmId, String name, Long id);
 
     List<Terrain> findByAnalysisScheduleDaysIsNotNullAndNextAnalysisDueDateLessThanEqual(LocalDate dueDate);
 }

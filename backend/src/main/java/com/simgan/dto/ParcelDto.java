@@ -28,6 +28,21 @@ public class ParcelDto {
     @Getter @Setter
     @NoArgsConstructor @AllArgsConstructor
     @Builder
+    public static class UpdateRequest {
+        private String name;
+
+        @NotBlank(message = "geoJson es obligatorio")
+        private String geoJson;
+
+        private Double areaSqMeters;
+        private Double areaHectares;
+        private String soilType;
+        private String pastureType;
+    }
+
+    @Getter @Setter
+    @NoArgsConstructor @AllArgsConstructor
+    @Builder
     public static class Response {
         private Long id;
         private String name;

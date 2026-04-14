@@ -7,6 +7,7 @@ import { farmApi, terrainApi } from '../services/api'
 import { useFarm } from '../hooks'
 import toast from 'react-hot-toast'
 import L from 'leaflet'
+import Spinner from '../components/Spinner'
 
 // Fix Leaflet default marker icons
 delete L.Icon.Default.prototype._getIconUrl
@@ -26,10 +27,66 @@ function MapCenter({ lat, lng }) {
 
 const TERRAIN_COLORS = ['#4ade80', '#3b82f6', '#f59e0b', '#ef4444', '#a855f7']
 
+const panelTitleStyle = {
+  fontFamily: 'var(--font-body)',
+  fontSize: 16,
+  fontWeight: 700,
+  lineHeight: 1.25,
+  letterSpacing: '0',
+  color: '#f3f7f1',
+  marginBottom: 18,
+}
+
+const fieldLabelStyle = {
+  display: 'block',
+  marginBottom: 9,
+  fontSize: 11,
+  fontWeight: 700,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: '#6f8d6f',
+}
+
+const helperCardStyle = {
+  padding: '16px 18px',
+  background: '#102114',
+  border: '1px solid rgba(255,255,255,0.03)',
+  borderRadius: 'var(--radius-sm)',
+  fontSize: 13,
+  color: '#9bb29a',
+  marginBottom: 16,
+  lineHeight: 1.65,
+}
+
+const helperTitleStyle = {
+  color: '#f3f7f1',
+  fontWeight: 700,
+  display: 'block',
+  marginBottom: 8,
+}
+
+function getEditableGeoJson(featureGroup) {
+  if (!featureGroup) return null
+
+  let editableGeoJson = null
+  featureGroup.eachLayer((layer) => {
+    if (!editableGeoJson && typeof layer.toGeoJSON === 'function') {
+      editableGeoJson = layer.toGeoJSON()
+    }
+  })
+
+  return editableGeoJson
+}
+
 export default function CreateTerrainPage() {
-  const { farmId } = useParams()
+  const { farmId: routeFarmId, terrainId } = useParams()
   const navigate = useNavigate()
-  const { farm, terrains: existingTerrains } = useFarm(farmId)
+  const isEdit = Boolean(terrainId)
+
+  const [currentTerrain, setCurrentTerrain] = useState(null)
+  const [loadingTerrain, setLoadingTerrain] = useState(isEdit)
+  const effectiveFarmId = routeFarmId || currentTerrain?.farmId
+  const { farm, terrains: existingTerrains } = useFarm(effectiveFarmId)
 
   const [terrainName, setTerrainName] = useState('')
   const [drawnGeoJson, setDrawnGeoJson] = useState(null)
@@ -37,6 +94,58 @@ export default function CreateTerrainPage() {
   const [areaHa, setAreaHa] = useState(0)
   const [saving, setSaving] = useState(false)
   const featureGroupRef = useRef(null)
+  const initializedRef = useRef(false)
+
+  useEffect(() => {
+    const featureGroup = featureGroupRef.current
+    if (!featureGroup) return
+
+    featureGroup.clearLayers()
+
+    if (!drawnGeoJson) return
+
+    const editableLayer = L.geoJSON(drawnGeoJson, {
+      style: { color: '#4ade80', weight: 3, fillOpacity: 0.2 },
+    })
+
+    editableLayer.eachLayer((layer) => {
+      featureGroup.addLayer(layer)
+    })
+  }, [drawnGeoJson])
+
+  useEffect(() => {
+    if (!isEdit) return
+
+    const loadTerrain = async () => {
+      try {
+        setLoadingTerrain(true)
+        const data = await terrainApi.getById(terrainId)
+        setCurrentTerrain(data)
+      } catch (err) {
+        toast.error('Error cargando terreno')
+        navigate('/farms')
+      } finally {
+        setLoadingTerrain(false)
+      }
+    }
+
+    loadTerrain()
+  }, [isEdit, navigate, terrainId])
+
+  useEffect(() => {
+    if (!isEdit || !currentTerrain || initializedRef.current) return
+
+    try {
+      setTerrainName(currentTerrain.name || '')
+      const parsedGeo = JSON.parse(currentTerrain.geoJson)
+      setDrawnGeoJson(parsedGeo)
+      setAreaSqM(currentTerrain.areaSqMeters || turf.area(parsedGeo))
+      setAreaHa(currentTerrain.areaHectares || (turf.area(parsedGeo) / 10000))
+      initializedRef.current = true
+    } catch {
+      toast.error('Error leyendo la geometría del terreno')
+    }
+  }, [currentTerrain, isEdit])
 
   const center = (farm?.centerLat && farm?.centerLng)
     ? [farm.centerLat, farm.centerLng]
@@ -67,15 +176,40 @@ export default function CreateTerrainPage() {
   }
 
   async function handleSave() {
-    if (!drawnGeoJson) { toast.error('Dibuja el polígono del terreno en el mapa'); return }
+    const liveGeoJson = getEditableGeoJson(featureGroupRef.current)
+    const geoJsonToSave = liveGeoJson || drawnGeoJson
+
+    if (!geoJsonToSave) { toast.error('Dibuja el polígono del terreno en el mapa'); return }
+
+    const areaSqMetersToSave = turf.area(geoJsonToSave)
+    const areaHectaresToSave = areaSqMetersToSave / 10000
+
     setSaving(true)
     try {
-      const terrain = await terrainApi.create({
+      const payload = {
         name: terrainName.trim() || `Terreno ${existingTerrains.length + 1}`,
-        farmId: parseInt(farmId),
-        geoJson: JSON.stringify(drawnGeoJson),
-        areaSqMeters: areaSqM,
-        areaHectares: areaHa,
+        geoJson: JSON.stringify(geoJsonToSave),
+        areaSqMeters: areaSqMetersToSave,
+        areaHectares: areaHectaresToSave,
+      }
+
+      if (isEdit) {
+        const updatedTerrain = await terrainApi.update(terrainId, payload)
+        toast.success('Terreno actualizado')
+        navigate(`/terrains/${updatedTerrain.id}/parcels`, {
+          state: {
+            terrainEdited: true,
+            terrainName: updatedTerrain.name,
+            outOfBoundsParcelIds: updatedTerrain.outOfBoundsParcelIds || [],
+            outOfBoundsParcelNames: updatedTerrain.outOfBoundsParcelNames || [],
+          },
+        })
+        return
+      }
+
+      const terrain = await terrainApi.create({
+        ...payload,
+        farmId: parseInt(routeFarmId),
       })
       toast.success(`Terreno guardado: ${terrain.areaHectares?.toFixed(2)} ha`)
       navigate(`/terrains/${terrain.id}/parcels`)
@@ -86,6 +220,14 @@ export default function CreateTerrainPage() {
     }
   }
 
+  if (loadingTerrain) {
+    return <Spinner page label="Cargando terreno..." />
+  }
+
+  const visibleTerrains = isEdit
+    ? existingTerrains.filter(t => t.id !== Number(terrainId))
+    : existingTerrains
+
   return (
     <div>
       <div className="page-header">
@@ -94,10 +236,10 @@ export default function CreateTerrainPage() {
           <span>›</span>
           <span>{farm?.name || '...'}</span>
           <span>›</span>
-          <span>Crear Terreno</span>
+          <span>{isEdit ? 'Editar Terreno' : 'Crear Terreno'}</span>
         </div>
-        <h2>Crear Terreno</h2>
-        <p>Dibuja el contorno del terreno sobre la imagen satelital</p>
+        <h2>{isEdit ? 'Editar Terreno' : 'Crear Terreno'}</h2>
+        <p>{isEdit ? 'Ajusta el contorno y luego revisa los potreros del terreno' : 'Dibuja el contorno del terreno sobre la imagen satelital'}</p>
       </div>
 
       <div className="two-col">
@@ -114,7 +256,7 @@ export default function CreateTerrainPage() {
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
                 maxZoom={19}
               />
-              {existingTerrains.map((t, i) => {
+              {visibleTerrains.map((t, i) => {
                 try {
                   return (
                     <GeoJSON key={t.id} data={JSON.parse(t.geoJson)}
@@ -128,8 +270,11 @@ export default function CreateTerrainPage() {
                   onCreated={handleCreated}
                   onEdited={handleEdited}
                   onDeleted={handleDeleted}
+                  edit={{
+                    remove: false,
+                  }}
                   draw={{
-                    polygon: { allowIntersection: false, shapeOptions: { color: '#4ade80', weight: 3, fillOpacity: 0.2 } },
+                    polygon: drawnGeoJson ? false : { allowIntersection: false, shapeOptions: { color: '#4ade80', weight: 3, fillOpacity: 0.2 } },
                     rectangle: false, circle: false, circlemarker: false, marker: false, polyline: false,
                   }}
                 />
@@ -156,20 +301,21 @@ export default function CreateTerrainPage() {
 
         {/* Side Panel */}
         <div className="col-side">
-          <div className="card">
-            <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 16 }}>
+          <div className="card" style={{ background: '#162616', borderColor: 'rgba(255,255,255,0.06)' }}>
+            <h3 style={panelTitleStyle}>
               Datos del Terreno
             </h3>
             <div className="form-group mb-16">
-              <label>Nombre del Terreno</label>
+              <label style={fieldLabelStyle}>Nombre del Terreno</label>
               <input
+                style={{ color: '#edf6eb' }}
                 value={terrainName}
                 onChange={(e) => setTerrainName(e.target.value)}
                 placeholder="Ej: Terreno Norte"
               />
             </div>
-            <div style={{ padding: '12px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', fontSize: 13, color: 'var(--color-text-secondary)', marginBottom: 16 }}>
-              <strong style={{ color: 'var(--color-text)' }}>Instrucciones:</strong><br />
+            <div style={helperCardStyle}>
+              <strong style={helperTitleStyle}>Instrucciones:</strong>
               1. Usa el icono de polígono (▭) en el mapa<br />
               2. Haz clic para definir cada vértice<br />
               3. Cierra el polígono haciendo clic en el primer punto<br />
@@ -181,19 +327,19 @@ export default function CreateTerrainPage() {
               onClick={handleSave}
               disabled={!drawnGeoJson || saving}
             >
-              {saving ? <><span className="spinner" /> Guardando...</> : '✓ Guardar Terreno'}
+              {saving ? <><span className="spinner" /> Guardando...</> : isEdit ? '✓ Guardar Cambios' : '✓ Guardar Terreno'}
             </button>
-            <button className="action-btn mt-16" style={{ width: '100%' }} onClick={() => navigate('/farms')}>
-              ← Volver a Fincas
+            <button className="action-btn mt-16" style={{ width: '100%' }} onClick={() => navigate(isEdit ? `/terrains/${terrainId}/parcels` : '/farms')}>
+              ← {isEdit ? 'Volver a Potreros' : 'Volver a Fincas'}
             </button>
           </div>
 
-          {existingTerrains.length > 0 && (
+          {visibleTerrains.length > 0 && (
             <div className="card">
               <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 18, marginBottom: 12 }}>
                 Terrenos Existentes
               </h3>
-              {existingTerrains.map((t, i) => (
+              {visibleTerrains.map((t, i) => (
                 <div
                   key={t.id}
                   className="parcel-item"

@@ -50,13 +50,16 @@ export const terrainApi = {
   getByFarm: (farmId) => api.get(`/terrains/farm/${farmId}`).then(r => r.data),
   getById: (id) => api.get(`/terrains/${id}`).then(r => r.data),
   create: (data) => api.post('/terrains', data).then(r => r.data),
+  update: (id, data) => api.put(`/terrains/${id}`, data).then(r => r.data),
   delete: (id) => api.delete(`/terrains/${id}`)
 }
 
 // ===== PARCELS =====
 export const parcelApi = {
+  getById: (id) => api.get(`/parcels/${id}`).then(r => r.data),
   getByTerrain: (terrainId) => api.get(`/parcels/terrain/${terrainId}`).then(r => r.data),
   create: (data) => api.post('/parcels', data).then(r => r.data),
+  update: (id, data) => api.put(`/parcels/${id}`, data).then(r => r.data),
   updateStatus: (id, status) => api.patch(`/parcels/${id}/status`, { status }).then(r => r.data),
   delete: (id) => api.delete(`/parcels/${id}`),
   getRotationPlan: (terrainId, loteId, tipoAnimal, numeroAnimales) =>

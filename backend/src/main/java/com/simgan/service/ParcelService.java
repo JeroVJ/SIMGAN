@@ -3,6 +3,7 @@ package com.simgan.service;
 import com.simgan.dto.ParcelDto;
 import com.simgan.entity.*;
 import com.simgan.repository.*;
+import com.simgan.util.GeoJsonUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -41,6 +42,10 @@ public class ParcelService {
                     "Ya existe un potrero con el nombre '" + normalizedName + "' en este terreno.");
         }
 
+        if (!GeoJsonUtils.covers(terrain.getGeoJson(), request.getGeoJson())) {
+            throw new IllegalArgumentException("El potrero debe quedar completamente dentro del terreno.");
+        }
+
         Parcel parcel = Parcel.builder()
                 .name(normalizedName)
                 .geoJson(request.getGeoJson())
@@ -53,6 +58,31 @@ public class ParcelService {
 
         parcel = parcelRepository.save(parcel);
         return toResponse(parcel);
+    }
+
+    public ParcelDto.Response update(Long id, ParcelDto.UpdateRequest request) {
+        Parcel parcel = parcelRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Parcela no encontrada con id: " + id));
+
+        Terrain terrain = parcel.getTerrain();
+        String normalizedName = normalizeName(request.getName(), "El nombre del potrero");
+        if (parcelRepository.existsByTerrainIdAndNameIgnoreCaseAndIdNot(terrain.getId(), normalizedName, id)) {
+            throw new IllegalArgumentException(
+                    "Ya existe un potrero con el nombre '" + normalizedName + "' en este terreno.");
+        }
+
+        if (!GeoJsonUtils.covers(terrain.getGeoJson(), request.getGeoJson())) {
+            throw new IllegalArgumentException("El potrero debe quedar completamente dentro del terreno.");
+        }
+
+        parcel.setName(normalizedName);
+        parcel.setGeoJson(request.getGeoJson());
+        parcel.setAreaSqMeters(request.getAreaSqMeters());
+        parcel.setAreaHectares(request.getAreaHectares());
+        parcel.setSoilType(request.getSoilType());
+        parcel.setPastureType(request.getPastureType());
+
+        return toResponse(parcelRepository.save(parcel));
     }
 
     public List<ParcelDto.Response> findByTerrainId(Long terrainId) {
