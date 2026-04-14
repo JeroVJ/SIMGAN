@@ -24,12 +24,25 @@ public class ParcelService {
     private final SensorRepository sensorRepository;
     private final ClasificacionSensorRepository clasificacionSensorRepository;
 
+    private static String normalizeName(String name, String fieldLabel) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException(fieldLabel + " es obligatorio.");
+        }
+        return name.trim();
+    }
+
     public ParcelDto.Response create(ParcelDto.CreateRequest request) {
         Terrain terrain = terrainRepository.findById(request.getTerrainId())
                 .orElseThrow(() -> new RuntimeException("Terreno no encontrado con id: " + request.getTerrainId()));
 
+        String normalizedName = normalizeName(request.getName(), "El nombre del potrero");
+        if (parcelRepository.existsByTerrainIdAndNameIgnoreCase(terrain.getId(), normalizedName)) {
+            throw new IllegalArgumentException(
+                    "Ya existe un potrero con el nombre '" + normalizedName + "' en este terreno.");
+        }
+
         Parcel parcel = Parcel.builder()
-                .name(request.getName())
+                .name(normalizedName)
                 .geoJson(request.getGeoJson())
                 .areaSqMeters(request.getAreaSqMeters())
                 .areaHectares(request.getAreaHectares())

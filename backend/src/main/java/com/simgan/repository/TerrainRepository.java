@@ -10,6 +10,7 @@ import java.util.List;
 @Repository
 public interface TerrainRepository extends JpaRepository<Terrain, Long> {
     List<Terrain> findByFarmId(Long farmId);
+    boolean existsByFarmIdAndNameIgnoreCase(Long farmId, String name);
 
     List<Terrain> findByAnalysisScheduleDaysIsNotNullAndNextAnalysisDueDateLessThanEqual(LocalDate dueDate);
 }

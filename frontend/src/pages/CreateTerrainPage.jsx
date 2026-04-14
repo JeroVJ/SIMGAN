@@ -79,8 +79,8 @@ export default function CreateTerrainPage() {
       })
       toast.success(`Terreno guardado: ${terrain.areaHectares?.toFixed(2)} ha`)
       navigate(`/terrains/${terrain.id}/parcels`)
-    } catch {
-      toast.error('Error guardando terreno')
+    } catch (err) {
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || 'Error guardando terreno')
     } finally {
       setSaving(false)
     }

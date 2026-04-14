@@ -18,12 +18,25 @@ public class TerrainService {
     private final TerrainRepository terrainRepository;
     private final FarmRepository farmRepository;
 
+    private static String normalizeName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("El nombre del terreno es obligatorio.");
+        }
+        return name.trim();
+    }
+
     public TerrainDto.Response create(TerrainDto.CreateRequest request) {
         Farm farm = farmRepository.findById(request.getFarmId())
                 .orElseThrow(() -> new RuntimeException("Finca no encontrada con id: " + request.getFarmId()));
 
+        String normalizedName = normalizeName(request.getName());
+        if (terrainRepository.existsByFarmIdAndNameIgnoreCase(farm.getId(), normalizedName)) {
+            throw new IllegalArgumentException(
+                    "Ya existe un terreno con el nombre '" + normalizedName + "' en esta finca.");
+        }
+
         Terrain terrain = Terrain.builder()
-                .name(request.getName())
+                .name(normalizedName)
                 .geoJson(request.getGeoJson())
                 .areaSqMeters(request.getAreaSqMeters())
                 .areaHectares(request.getAreaHectares())

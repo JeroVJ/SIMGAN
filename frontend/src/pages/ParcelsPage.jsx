@@ -183,7 +183,7 @@ export default function ParcelsPage() {
 
     } catch (err) {
       console.error('Error guardando potrero:', err)
-      toast.error(err?.message || 'Error guardando potrero')
+      toast.error(err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Error guardando potrero')
     }
 
     finally {
