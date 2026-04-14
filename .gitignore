@@ -2,6 +2,10 @@
 /backend/target/
 .env
 
+# Frontend dependencies & build
+frontend/node_modules/
+frontend/dist/
+
 # Archivos temporales
 tmp/
 hs_err_pid*.log

@@ -1,0 +1,25 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: simgan-postgres
+    environment:
+      POSTGRES_DB: simgan_db
+      POSTGRES_USER: simgan
+      POSTGRES_PASSWORD: simgan123
+    ports:
+      - "5432:5432"
+    volumes:
+      - simgan_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+
+  # rabbitmq:
+  #   image: rabbitmq:3-management
+  #   container_name: simgan-rabbitmq
+  #   ports:
+  #     - "5672:5672"   # AMQP
+  #     - "15672:15672" # UI
+  #   restart: unless-stopped
+
+volumes:
+  simgan_data:
