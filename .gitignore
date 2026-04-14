@@ -1,0 +1,14 @@
+# Project exclude paths
+/backend/target/
+.env
+
+# Archivos temporales
+tmp/
+hs_err_pid*.log
+
+# Imágenes pesadas (como las satelitales)
+*.tif
+
+# Archivos de IDE
+.idea/
+.vscode/
