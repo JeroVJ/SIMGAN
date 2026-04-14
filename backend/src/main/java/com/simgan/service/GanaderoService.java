@@ -43,5 +43,11 @@ public class GanaderoService {
 
     public Optional<Ganadero> buscarPorIdDocumento(int idDocumento) {
         return ganaderoRepository.findByIdDocumento(idDocumento);
+    }  
+
+
+     public void actualizarContrasena(Ganadero ganadero, String nuevaContrasena) {
+        ganadero.setContrasena(passwordEncoder.encode(nuevaContrasena));
+        ganaderoRepository.save(ganadero);
     }
 }
