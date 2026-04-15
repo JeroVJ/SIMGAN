@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { authApi } from '../services/api'
 
@@ -23,7 +24,7 @@ const strMeta = [null,
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 
-function LoginForm({ onLogin }) {
+function LoginForm({ onLogin, onForgotPassword }) {
   const [f, setF]       = useState({ email: '', password: '' })
   const [e, setE]       = useState({})
   const [show, setShow] = useState(false)
@@ -94,11 +95,15 @@ function LoginForm({ onLogin }) {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
-        <button type="button" style={{
-          background: 'none', border: 'none', cursor: 'pointer',
-          color: 'var(--color-primary)', fontSize: 13, fontWeight: 600,
-          fontFamily: 'var(--font-body)', padding: 0
-        }}>
+        <button 
+          type="button" 
+          onClick={onForgotPassword}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--color-primary)', fontSize: 13, fontWeight: 600,
+            fontFamily: 'var(--font-body)', padding: 0
+          }}
+        >
           ¿Olvidaste tu contraseña?
         </button>
       </div>
@@ -259,10 +264,225 @@ function SignupForm({ onLogin }) {
   )
 }
 
+// ── Forgot Password ───────────────────────────────────────────────────────────
+
+function ForgotPasswordForm({ onBack }) {
+  const [email, setEmail] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [sent, setSent] = useState(false)
+
+  async function submit() {
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      toast.error('Por favor ingresa un correo válido')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await authApi.forgotPassword(email)
+      setSent(true)
+    } catch (err) {
+      const msg = err.response?.data?.message || 'No se pudo procesar la solicitud'
+      toast.error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (sent) {
+    return (
+      <div style={{ textAlign: 'left' }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, marginBottom: 24, color: 'var(--color-text)' }}>
+          Reestablecer la contraseña
+        </h3>
+        <p style={{ fontSize: 15, color: 'var(--color-text)', marginBottom: 32, lineHeight: 1.5 }}>
+          Listo, Haga los pasos a seguir enviados a su correo electrónico.
+        </p>
+        <button
+          type="button"
+          onClick={onBack}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 6,
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: '#00BFFF', fontSize: 16, fontWeight: 600,
+            fontFamily: 'var(--font-body)', padding: 0, marginBottom: 20
+          }}
+        >
+          <span>{"<<"}</span> Atras
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ textAlign: 'left' }}>
+      <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, marginBottom: 24, color: 'var(--color-text)' }}>
+        Reestablecer la contraseña
+      </h3>
+      <p style={{ fontSize: 15, color: 'var(--color-text)', marginBottom: 24, lineHeight: 1.5 }}>
+        Introduzca su correo electrónico para recibir instrucciones para reestablecer su contraseña:
+      </p>
+
+      <div className="form-group" style={{ marginBottom: 32 }}>
+        <input
+          type="email"
+          placeholder="Dirección de correo electrónico"
+          value={email}
+          onChange={e => setEmail(e.target.value)}
+          style={{ 
+            background: '#F0F0F0', 
+            border: 'none', 
+            padding: '16px',
+            fontSize: 15
+          }}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={onBack}
+        style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          background: 'none', border: 'none', cursor: 'pointer',
+          color: '#00BFFF', fontSize: 16, fontWeight: 600,
+          fontFamily: 'var(--font-body)', padding: 0, marginBottom: 24
+        }}
+      >
+        <span>{"<<"}</span> Atras
+      </button>
+
+      <button
+        className="btn btn-primary"
+        style={{ 
+          width: '100%', 
+          justifyContent: 'center', 
+          background: '#4A4644', 
+          border: 'none',
+          padding: '14px',
+          fontSize: 16,
+          fontWeight: 500,
+          borderRadius: '8px'
+        }}
+        onClick={submit}
+        disabled={loading}
+      >
+        {loading ? 'Procesando...' : 'Continuar'}
+      </button>
+    </div>
+  )
+}
+
+// ── Reset Password Page ───────────────────────────────────────────────────────
+
+export function ResetPasswordPage() {
+  const { token } = useParams()
+  const navigate = useNavigate()
+  const [f, setF] = useState({ password: '', confirm: '' })
+  const [loading, setLoading] = useState(false)
+
+  async function submit() {
+    if (f.password.length < 8) {
+      toast.error('La contraseña debe tener al menos 8 caracteres')
+      return
+    }
+    if (f.password !== f.confirm) {
+      toast.error('Las contraseñas no coinciden')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await authApi.resetPassword(token, f.password)
+      toast.success('Contraseña actualizada correctamente')
+      navigate('/')
+    } catch (err) {
+      const msg = err.response?.data?.message || 'El enlace es inválido o ha expirado'
+      toast.error(msg)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: 24,
+      background: 'var(--color-bg)'
+    }}>
+      <div className="card" style={{ width: '100%', maxWidth: 440, textAlign: 'left' }}>
+        <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 600, marginBottom: 24, color: 'var(--color-text)' }}>
+          Nueva contraseña
+        </h3>
+        <p style={{ fontSize: 15, color: 'var(--color-text-secondary)', marginBottom: 24 }}>
+          Ingresa tu nueva contraseña para acceder a tu cuenta.
+        </p>
+
+        <div className="form-group">
+          <label>Nueva contraseña</label>
+          <input
+            type="password"
+            placeholder="Mínimo 8 caracteres"
+            value={f.password}
+            onChange={e => setF(p => ({ ...p, password: e.target.value }))}
+          />
+        </div>
+
+        <div className="form-group" style={{ marginBottom: 32 }}>
+          <label>Confirmar nueva contraseña</label>
+          <input
+            type="password"
+            placeholder="Repite tu nueva contraseña"
+            value={f.confirm}
+            onChange={e => setF(p => ({ ...p, confirm: e.target.value }))}
+          />
+        </div>
+
+        <button
+          className="btn btn-primary"
+          style={{ 
+            width: '100%', 
+            justifyContent: 'center', 
+            background: '#4A4644', 
+            border: 'none',
+            padding: '14px',
+            fontSize: 16,
+            fontWeight: 500,
+            borderRadius: '8px'
+          }}
+          onClick={submit}
+          disabled={loading}
+        >
+          {loading ? 'Actualizando...' : 'Confirmar nueva contraseña'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function AuthPage({ onLogin }) {
   const [tab, setTab] = useState('login')
+
+  if (tab === 'forgot-password') {
+    return (
+      <div style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        background: 'var(--color-bg)'
+      }}>
+        <div className="card" style={{ width: '100%', maxWidth: 440 }}>
+          <ForgotPasswordForm onBack={() => setTab('login')} />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div style={{
@@ -318,7 +538,7 @@ export default function AuthPage({ onLogin }) {
         </p>
 
         {tab === 'login'
-          ? <LoginForm onLogin={onLogin} />
+          ? <LoginForm onLogin={onLogin} onForgotPassword={() => setTab('forgot-password')} />
           : <SignupForm onLogin={onLogin} />
         }
       </div>

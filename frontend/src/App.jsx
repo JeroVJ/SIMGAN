@@ -9,7 +9,6 @@ import { Sidebar, MobileHeader } from './components'
 import FarmsPage         from './pages/FarmsPage'
 import CreateFarmPage    from './pages/CreateFarmPage'
 import CreateTerrainPage from './pages/CreateTerrainPage'
-import EditParcelPage    from './pages/EditParcelPage'
 import FarmDashboardPage from './pages/FarmDashboardPage'
 import ParcelsPage       from './pages/ParcelsPage'
 import SensorPage        from './pages/SensorPage'
@@ -19,11 +18,10 @@ import NdviDashboardPage from './pages/NdviDashboardPage'
 import CalibrationNdviOptimPage from './pages/CalibrationNdviOptimPage'
 import CalibrationNdviAlertPage from './pages/CalibrationNdviAlertPage'
 import CalibrationBiomassPage from './pages/CalibrationBiomassPage'
-import ReportesPage      from './pages/ReportesPage'
-import AlertasPage       from './pages/AlertasPage'
 import LotesPage         from './pages/LotesPage'
 import LoteDetailPage    from './pages/LoteDetailPage'
-import AuthPage          from './pages/AuthPages'
+import MenuPrincipalPage from './pages/MenuPrincipalPage'
+import AuthPage, { ResetPasswordPage } from './pages/AuthPages'
 
 
 // Inyectar token en cada request
@@ -129,7 +127,10 @@ export default function App() {
     return (
       <>
         <Toaster position="top-right" />
-        <AuthPage onLogin={handleLogin} />
+        <Routes>
+          <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
+          <Route path="*" element={<AuthPage onLogin={handleLogin} />} />
+        </Routes>
       </>
     )
   }
@@ -161,6 +162,8 @@ export default function App() {
 
               <Route path="/" element={<Navigate to="/farms" replace />} />
 
+              <Route path="/menu-principal" element={<MenuPrincipalPage />} />
+
               <Route path="/farms" element={<FarmsPage />} />
 
               <Route path="/farms/new" element={<CreateFarmPage />} />
@@ -169,11 +172,7 @@ export default function App() {
 
               <Route path="/farms/:farmId/terrain/new" element={<CreateTerrainPage />} />
 
-              <Route path="/terrains/:terrainId/edit" element={<CreateTerrainPage />} />
-
               <Route path="/terrains/:terrainId/parcels" element={<ParcelsPage />} />
-
-              <Route path="/parcels/:parcelId/edit" element={<EditParcelPage />} />
 
               <Route path="/parcels/:parcelId/sensors" element={<SensorPage />} />
 
@@ -182,11 +181,7 @@ export default function App() {
               <Route path="/terrains/:terrainId/rotation" element={<RotationPage />} />
 
               <Route path="/terrains/:terrainId/ndvi" element={<NdviDashboardPage />} />
-  <Route path="/reportes" element={<ReportesPage />} />
 
-              <Route path="/alertas" element={<AlertasPage />} />
-
-            
               <Route path="/terrains/:terrainId/ndvi/calibration-optim" element={<CalibrationNdviOptimPage />} />
 
               <Route path="/terrains/:terrainId/ndvi/calibration-alert" element={<CalibrationNdviAlertPage />} />

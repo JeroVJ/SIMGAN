@@ -51,4 +51,8 @@ public class Terrain {
     @OneToMany(mappedBy = "terrain", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<Parcel> parcels = new ArrayList<>();
+
+    @OneToMany(mappedBy = "terrain", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<Lote> lotes = new ArrayList<>();
 }

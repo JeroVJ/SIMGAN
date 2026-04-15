@@ -77,6 +77,114 @@ public class EmailAlertService {
         }
     }
 
+    @Async
+    public void sendPasswordResetEmail(com.simgan.entity.Ganadero ganadero, String token) {
+        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
+        if (mailSender == null) {
+            log.warn("SMTP not configured. Skipping password reset email for ganaderoId={}", ganadero.getId());
+            return;
+        }
+
+        String resetUrl = String.format("%s/reset-password/%s", appBaseUrl, token);
+
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            helper.setFrom(fromAddress);
+            helper.setTo(ganadero.getCorreo());
+            helper.setSubject("[SIMGAN] Recuperación de contraseña");
+            helper.setText(buildPasswordResetHtmlBody(ganadero, resetUrl), true);
+
+            mailSender.send(message);
+            log.info("Password reset email sent to {} for ganaderoId={}", ganadero.getCorreo(), ganadero.getId());
+
+        } catch (Exception e) {
+            log.error("Failed to send password reset email to {}: {}", ganadero.getCorreo(), e.getMessage());
+        }
+    }
+
+    private String buildPasswordResetHtmlBody(com.simgan.entity.Ganadero ganadero, String resetUrl) {
+        return """
+                <!DOCTYPE html>
+                <html lang="es">
+                <head>
+                  <meta charset="UTF-8"/>
+                  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+                  <title>Recuperar Contraseña SIMGAN</title>
+                </head>
+                <body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+                  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:24px 0;">
+                    <tr><td align="center">
+                      <table width="600" cellpadding="0" cellspacing="0"
+                             style="background:#ffffff;border-radius:12px;overflow:hidden;
+                                    box-shadow:0 2px 8px rgba(0,0,0,0.12);">
+
+                        <!-- Header -->
+                        <tr>
+                          <td style="background:#15532e;padding:28px 32px;">
+                            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;
+                                       letter-spacing:1px;">SIMGAN</h1>
+                            <p style="margin:4px 0 0;color:#86efac;font-size:13px;">
+                              Sistema Inteligente de Monitoreo Ganadero
+                            </p>
+                          </td>
+                        </tr>
+
+                        <!-- Body -->
+                        <tr>
+                          <td style="padding:28px 32px;">
+
+                            <h2 style="margin:0 0 16px;color:#111827;font-size:20px;">
+                              Hola %s,
+                            </h2>
+                            <p style="margin:0 0 20px;color:#374151;font-size:14px;line-height:1.6;">
+                              Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en SIMGAN.
+                              Si no realizaste esta solicitud, puedes ignorar este correo con seguridad.
+                            </p>
+
+                            <p style="margin:0 0 24px;color:#374151;font-size:14px;line-height:1.6;">
+                              Para continuar con el proceso, haz clic en el siguiente botón:
+                            </p>
+
+                            <!-- CTA button -->
+                            <div style="text-align: center; margin-bottom: 24px;">
+                                <a href="%s"
+                                   style="display:inline-block;background:#15532e;color:#ffffff;
+                                          text-decoration:none;padding:12px 28px;border-radius:8px;
+                                          font-size:14px;font-weight:600;">
+                                  Restablecer Contraseña →
+                                </a>
+                            </div>
+
+                            <p style="color:#9ca3af;font-size:12px;margin-bottom:24px;">
+                              Este enlace expirará en 24 horas.
+                            </p>
+
+                          </td>
+                        </tr>
+
+                        <!-- Footer -->
+                        <tr>
+                          <td style="background:#f9fafb;padding:16px 32px;
+                                     border-top:1px solid #e5e7eb;">
+                            <p style="margin:0;color:#9ca3af;font-size:11px;text-align:center;">
+                              Este es un mensaje automático de SIMGAN. No responder a este correo.
+                            </p>
+                          </td>
+                        </tr>
+
+                      </table>
+                    </td></tr>
+                  </table>
+                </body>
+                </html>
+                """.formatted(
+                    ganadero.getNombreCompleto(),
+                    resetUrl
+                );
+    }
+
     private String resolveRecipientEmail(Alert alert) {
       if (alert == null || alert.getParcel() == null) {
         return null;

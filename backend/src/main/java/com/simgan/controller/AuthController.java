@@ -152,4 +152,37 @@ public class AuthController {
         authTokenService.revokeAllTokens(ganadero.getId());
         return ResponseEntity.ok(Map.of("message", "Todas las sesiones han sido cerradas"));
     }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> request) {
+        String email = request.get("email");
+        if (email == null || email.isBlank()) {
+            return ResponseEntity.status(400).body(Map.of("message", "El correo es requerido"));
+        }
+
+        Optional<Ganadero> ganadero = ganaderoService.buscarPorCorreo(email);
+        if (ganadero.isEmpty()) {
+            return ResponseEntity.status(404).body(Map.of("message", "No existe la cuenta asociada al correo electrónico ingresado"));
+        }
+
+        ganaderoService.initiatePasswordReset(email);
+        return ResponseEntity.ok(Map.of("message", "Se ha enviado un correo con instrucciones para restablecer su contraseña"));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> request) {
+        String token = request.get("token");
+        String password = request.get("password");
+
+        if (token == null || password == null) {
+            return ResponseEntity.status(400).body(Map.of("message", "Token y contraseña son requeridos"));
+        }
+
+        boolean success = ganaderoService.resetPassword(token, password);
+        if (success) {
+            return ResponseEntity.ok(Map.of("message", "Contraseña actualizada exitosamente"));
+        } else {
+            return ResponseEntity.status(400).body(Map.of("message", "El enlace es inválido o ha expirado"));
+        }
+    }
 }

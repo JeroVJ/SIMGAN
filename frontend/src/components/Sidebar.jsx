@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom'
-import { LayoutGrid, Plus, Satellite, X, LogOut, FileText, Bell } from 'lucide-react'
+import { LayoutGrid, Plus, Satellite, X, LogOut, FileText, Bell, Home } from 'lucide-react'
 
 /**
  * Sidebar
@@ -15,6 +15,12 @@ import { LayoutGrid, Plus, Satellite, X, LogOut, FileText, Bell } from 'lucide-r
  */
 
 const NAV_ITEMS = [
+  {
+    to: '/menu-principal',
+    end: true,
+    label: 'Menú Principal',
+    Icon: Home,
+  },
   {
     to: '/farms',
     end: true,

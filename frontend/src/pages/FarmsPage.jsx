@@ -74,14 +74,6 @@ export default function FarmsPage() {
         <EmptyState
           title="Sin fincas registradas"
           description="Crea tu primera finca para comenzar a gestionar tus terrenos y potreros."
-          action={
-            <button
-              className="action-btn action-btn--primary"
-              onClick={() => navigate('/farms/new')}
-            >
-              Crear Finca
-            </button>
-          }
         />
       ) : (
         <div className="farms-grid">

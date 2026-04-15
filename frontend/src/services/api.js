@@ -34,7 +34,9 @@ export const authApi = {
   me: () => api.get('/auth/me').then(r => r.data),
   logout: () => api.post('/auth/logout').then(r => r.data),
   getSessions: () => api.get('/auth/sessions').then(r => r.data),
-  revokeAll: () => api.post('/auth/revoke-all').then(r => r.data)
+  revokeAll: () => api.post('/auth/revoke-all').then(r => r.data),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }).then(r => r.data),
+  resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }).then(r => r.data)
 }
 
 // ===== FARMS =====
@@ -167,6 +169,11 @@ export const reportApi = {
 // ===== ALERTS =====
 export const alertApi = {
   getByTerrain: (terrainId) => api.get(`/alerts/terrain/${terrainId}`).then(r => r.data),
+}
+
+// ===== DASHBOARD =====
+export const dashboardApi = {
+  getSummary: (farmId) => api.get('/dashboard/summary', { params: { farmId } }).then(r => r.data),
 }
 
 // ===== SENSORES =====
