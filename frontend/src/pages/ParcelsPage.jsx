@@ -8,6 +8,8 @@ import toast from 'react-hot-toast'
 
 import Spinner from '../components/Spinner'
 import ConfirmDialog from '../components/ConfirmDialog'
+import TerrainTabs from '../components/TerrainTabs'
+import { Trash2, Cpu, CheckCircle2, Loader2, Info } from 'lucide-react'
 
 import { useTerrain } from '../hooks'
 import api from '../services/api'
@@ -71,6 +73,7 @@ export default function ParcelsPage() {
   const [parcelName, setParcelName] = useState('')
   const [drawnParcel, setDrawnParcel] = useState(null)
   const [drawnArea, setDrawnArea] = useState({ sqm: 0, ha: 0 })
+  const [drawnInside, setDrawnInside] = useState(true)
   const [confirm, setConfirm] = useState(null)
   const [farm, setFarm] = useState(null)
   const [soilType, setSoilType] = useState('')
@@ -106,19 +109,22 @@ export default function ParcelsPage() {
 
     const area = turf.area(geoJson)
 
+    let inside = true
     if (terrain) {
       try {
         const terrainGeo = JSON.parse(terrain.geoJson)
-        const inside = turf.booleanContains(terrainGeo, geoJson)
+        inside = turf.booleanContains(terrainGeo, geoJson)
 
         if (!inside) {
-          toast(' El potrero no está completamente dentro del terreno')
+          toast.error('El potrero debe estar completamente dentro del terreno')
         }
-
-      } catch {}
+      } catch {
+        inside = false
+      }
     }
 
     setDrawnParcel(geoJson)
+    setDrawnInside(inside)
     setDrawnArea({
       sqm: area,
       ha: area / 10000
@@ -127,6 +133,7 @@ export default function ParcelsPage() {
 
   function handleDeleted() {
     setDrawnParcel(null)
+    setDrawnInside(true)
     setDrawnArea({ sqm: 0, ha: 0 })
   }
 
@@ -134,6 +141,11 @@ export default function ParcelsPage() {
 
     if (!drawnParcel) {
       toast.error('Dibuja un potrero primero')
+      return
+    }
+
+    if (!drawnInside) {
+      toast.error('No puedes guardar: el potrero se sale del terreno')
       return
     }
 
@@ -170,6 +182,7 @@ export default function ParcelsPage() {
       await addParcel(parcelData)
 
       setDrawnParcel(null)
+      setDrawnInside(true)
       setDrawnArea({ sqm: 0, ha: 0 })
       setParcelName('')
       setSoilType('')
@@ -250,35 +263,13 @@ export default function ParcelsPage() {
         onCancel={() => setConfirm(null)}
       />
 
-      <div className="page-header">
-
-        <div className="breadcrumb">
-
-          <Link to="/farms">Fincas</Link>
-
-          <span>›</span>
-
-          <Link to={`/farms/${terrain?.farmId}`}>
-            {terrain?.farmName}
-          </Link>
-
-          <span>›</span>
-
-          <span>{terrain?.name}</span>
-
-          <span>›</span>
-
-          <span>Potreros</span>
-
-        </div>
-
-        <h2>Potreros del Terreno</h2>
-
-        <p>
-          {terrain?.name} — {terrain?.areaHectares?.toFixed(2)} ha
-        </p>
-
-      </div>
+      <TerrainTabs
+        terrainId={terrainId}
+        farmId={terrain?.farmId}
+        farmName={terrain?.farmName}
+        terrainName={terrain?.name}
+        areaHa={terrain?.areaHectares}
+      />
 
 
       <div className="two-col">
@@ -465,23 +456,58 @@ export default function ParcelsPage() {
                     {drawnArea.sqm.toLocaleString('es-CO', { maximumFractionDigits: 0 })} m²
                   </div>
                 </div>
+
+                {!drawnInside && (
+                  <div style={{
+                    padding: '10px 14px',
+                    background: 'rgba(239, 68, 68, 0.08)',
+                    border: '1px solid rgba(239, 68, 68, 0.35)',
+                    borderRadius: 'var(--radius-sm)',
+                    marginBottom: 12,
+                    color: 'var(--color-danger)',
+                    fontSize: 12.5,
+                    lineHeight: 1.5,
+                    display: 'flex',
+                    gap: 8,
+                  }}>
+                    <Info size={14} strokeWidth={2} style={{ flexShrink: 0, marginTop: 2 }} />
+                    <span>
+                      El potrero se sale del terreno. Dibuja de nuevo para poder guardarlo.
+                    </span>
+                  </div>
+                )}
+
                 <button
-                  className="action-btn action-btn--primary"
-                  style={{ width: '100%' }}
+                  className="comp-btn comp-btn--primary"
+                  style={{ width: '100%', justifyContent: 'center' }}
                   onClick={handleSaveParcel}
-                  disabled={saving}
+                  disabled={saving || !drawnInside}
                 >
-                  {saving ? <><span className="spinner" /> Guardando...</> : '✓ Guardar Potrero'}
+                  {saving
+                    ? <><Loader2 size={14} className="oh-spin" style={{ animation: 'oh-spin 0.7s linear infinite' }} /> Guardando...</>
+                    : <><CheckCircle2 size={14} strokeWidth={1.9} /> Guardar potrero</>}
                 </button>
               </>
             )}
             {!drawnParcel && (
-              <div style={{ padding: '12px 16px', background: 'var(--color-bg)', borderRadius: 'var(--radius-sm)', fontSize: 13, color: 'var(--color-text-secondary)' }}>
-                <strong style={{ color: 'var(--color-text)' }}>Instrucciones:</strong><br />
-                1. Usa el icono de polígono en el mapa<br />
-                2. Haz clic para definir vértices<br />
-                3. Cierra el polígono haciendo clic en el primer punto<br />
-                4. El área se calcula automáticamente
+              <div style={{
+                padding: '14px 16px',
+                background: 'var(--color-bg)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-sm)',
+                fontSize: 12.5,
+                color: 'var(--color-text-secondary)',
+                lineHeight: 1.65,
+                display: 'flex',
+                gap: 10,
+              }}>
+                <Info size={15} strokeWidth={1.9} style={{ color: 'var(--color-primary)', flexShrink: 0, marginTop: 2 }} />
+                <div>
+                  <strong style={{ color: 'var(--color-text)', display: 'block', marginBottom: 4 }}>
+                    Cómo dibujar un potrero
+                  </strong>
+                  Usa el icono de polígono en el mapa, haz clic para definir vértices y cierra el polígono tocando el primer punto. El área se calcula automáticamente.
+                </div>
               </div>
             )}
           </div>
@@ -521,6 +547,7 @@ export default function ParcelsPage() {
                     <option value="EN_DESCANSO">En Descanso</option>
                   </select>
                   <button
+                    className="comp-btn comp-btn--sm comp-btn--outline"
                     onClick={(e) => {
                       e.stopPropagation()
                       if (!farm?.iotEnabled) {
@@ -529,27 +556,23 @@ export default function ParcelsPage() {
                       }
                       navigate(`/parcels/${p.id}/sensors`)
                     }}
-                    style={{
-                      background: farm?.iotEnabled ? '#3b82f6' : '#9ca3af',
-                      color: 'white',
-                      border: 'none',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      cursor: farm?.iotEnabled ? 'pointer' : 'not-allowed',
-                      fontSize: 11,
-                      fontWeight: 500
-                    }}
+                    disabled={!farm?.iotEnabled}
+                    title={farm?.iotEnabled ? 'Ver sensores' : 'IoT deshabilitado'}
                   >
-                     {farm?.iotEnabled ? 'Sensores' : 'IoT OFF'}
+                    <Cpu size={12} strokeWidth={1.9} />
+                    {farm?.iotEnabled ? 'Sensores' : 'IoT off'}
                   </button>
                   <button
+                    className="comp-btn comp-btn--sm comp-btn--icon-only"
                     onClick={(e) => {
                       e.stopPropagation()
                       handleDeleteParcel(p.id)
                     }}
-                    style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: 16 }}
+                    title="Eliminar potrero"
+                    aria-label="Eliminar potrero"
+                    style={{ color: 'var(--color-danger)' }}
                   >
-                    🗑️
+                    <Trash2 size={13} strokeWidth={1.9} />
                   </button>
                 </div>
               ))}

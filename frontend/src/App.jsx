@@ -23,6 +23,7 @@ import AlertasPage       from './pages/AlertasPage'
 import LotesPage         from './pages/LotesPage'
 import LoteDetailPage    from './pages/LoteDetailPage'
 import AuthPage          from './pages/AuthPages'
+import ResetPasswordPage from './pages/ResetPasswordPage'
 
 
 // Inyectar token en cada request
@@ -108,8 +109,11 @@ export default function App() {
   }, [sidebarOpen])
 
 
-  // Verificando token
-  if (user === undefined) {
+  // Rutas públicas que viven por fuera del shell autenticado
+  const isPublicRoute = location.pathname === '/reset-password'
+
+  // Verificando token (pero las rutas públicas no dependen de sesión)
+  if (user === undefined && !isPublicRoute) {
     return (
       <div style={{
         minHeight: '100vh',
@@ -122,6 +126,16 @@ export default function App() {
     )
   }
 
+  if (isPublicRoute) {
+    return (
+      <>
+        <Toaster position="top-right" />
+        <Routes>
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+        </Routes>
+      </>
+    )
+  }
 
   // Sin sesión
   if (!user) {

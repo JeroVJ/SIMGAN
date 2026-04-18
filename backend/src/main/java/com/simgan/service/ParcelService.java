@@ -4,6 +4,9 @@ import com.simgan.dto.ParcelDto;
 import com.simgan.entity.*;
 import com.simgan.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.locationtech.jts.geom.Geometry;
+import org.locationtech.jts.io.geojson.GeoJsonReader;
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
@@ -14,6 +17,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ParcelService {
 
     private final ParcelRepository parcelRepository;
@@ -28,6 +32,8 @@ public class ParcelService {
         Terrain terrain = terrainRepository.findById(request.getTerrainId())
                 .orElseThrow(() -> new RuntimeException("Terreno no encontrado con id: " + request.getTerrainId()));
 
+        ensureParcelInsideTerrain(request.getGeoJson(), terrain.getGeoJson());
+
         Parcel parcel = Parcel.builder()
                 .name(request.getName())
                 .geoJson(request.getGeoJson())
@@ -40,6 +46,40 @@ public class ParcelService {
 
         parcel = parcelRepository.save(parcel);
         return toResponse(parcel);
+    }
+
+    /**
+     * Rejects parcel geometries that fall (even partially) outside the terrain
+     * polygon. We use JTS's covers() with a small negative buffer tolerance so
+     * vertices sitting exactly on the terrain boundary still pass.
+     */
+    private void ensureParcelInsideTerrain(String parcelGeoJson, String terrainGeoJson) {
+        if (parcelGeoJson == null || parcelGeoJson.isBlank()) {
+            throw new IllegalArgumentException("La geometría del potrero es obligatoria");
+        }
+        if (terrainGeoJson == null || terrainGeoJson.isBlank()) {
+            throw new IllegalArgumentException("El terreno no tiene geometría definida");
+        }
+
+        try {
+            GeoJsonReader reader = new GeoJsonReader();
+            Geometry terrainGeom = reader.read(terrainGeoJson);
+            Geometry parcelGeom = reader.read(parcelGeoJson);
+
+            // ~1.1 m tolerance (1e-5 deg); accommodates Leaflet vertex snapping
+            // while still rejecting parcels drawn clearly outside the terrain.
+            Geometry terrainWithTolerance = terrainGeom.buffer(1e-5);
+
+            if (!terrainWithTolerance.covers(parcelGeom)) {
+                throw new IllegalArgumentException(
+                        "El potrero debe estar completamente dentro del terreno");
+            }
+        } catch (IllegalArgumentException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("Unable to validate parcel-in-terrain containment: {}", e.getMessage());
+            throw new IllegalArgumentException("Geometría inválida: " + e.getMessage());
+        }
     }
 
     public List<ParcelDto.Response> findByTerrainId(Long terrainId) {

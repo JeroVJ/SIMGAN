@@ -1,8 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import Spinner from '../components/Spinner'
 import OperationProgress from '../components/OperationProgress'
 import EmptyState from '../components/EmptyState'
+import TerrainTabs from '../components/TerrainTabs'
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
@@ -112,22 +113,16 @@ export default function NdviDashboardPage() {
 
   return (
     <div className="page-container">
-      {/* Header */}
-      <div className="page-header">
-        <div className="breadcrumb">
-          <Link to="/farms">Fincas</Link>
-          <span>›</span>
-          <span>{dashboard?.farmName}</span>
-          <span>›</span>
-          <Link to={`/terrains/${terrainId}/parcels`}>{dashboard?.terrainName}</Link>
-          <span>›</span>
-          <span>NDVI Analytics</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <div>
-            <h2> Analíticas NDVI</h2>
-            <p>{dashboard?.terrainName} — {dashboard?.terrainAreaHa?.toFixed(2)} ha · {dashboard?.parcels?.length} potreros</p>
-          </div>
+      <TerrainTabs
+        terrainId={terrainId}
+        farmId={dashboard?.farmId}
+        farmName={dashboard?.farmName}
+        terrainName={dashboard?.terrainName}
+        areaHa={dashboard?.terrainAreaHa}
+      />
+
+      {/* Analysis controls */}
+      <div className="ndvi-controls-panel">
           <div className="ndvi-controls-stack">
             <div className="ndvi-analysis-controls">
               <div className="ndvi-date-field">
@@ -202,7 +197,6 @@ export default function NdviDashboardPage() {
               </button>
             </div>
           </div>
-        </div>
         <p className="ndvi-analysis-steps">1) Fecha inicial &amp; final · 2) Método biomasa · 3) <strong>Ejecutar Análisis</strong></p>
         <OperationProgress
           active={analyzing}

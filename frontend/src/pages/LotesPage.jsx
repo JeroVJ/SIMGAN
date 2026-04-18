@@ -1,13 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, GeoJSON, useMap, Tooltip, Marker } from 'react-leaflet'
 import * as turf from '@turf/turf'
 import L from 'leaflet'
+import { Plus, X } from 'lucide-react'
 import { useTerrain } from '../hooks'
 import { getBiomassColor, getBiomassLabel, getDailyConsumption } from '../utils/grazing'
 import { parcelApi, loteApi } from '../services/api'
 import Spinner from '../components/Spinner'
 import ConfirmDialog from '../components/ConfirmDialog'
+import TerrainTabs from '../components/TerrainTabs'
 
 function FitBounds({ geoJson }) {
   const map = useMap()
@@ -302,11 +304,13 @@ export default function LotesPage() {
         onCancel={() => setConfirm(null)}
       />
 
-      <div className="breadcrumb">
-        <Link to="/farms">Fincas</Link><span className="sep">/</span>
-        {terrain && <Link to={`/terrains/${terrainId}/parcels`}>{terrain.name}</Link>}
-        <span className="sep">/</span><span>Lotes</span>
-      </div>
+      <TerrainTabs
+        terrainId={terrainId}
+        farmId={terrain?.farmId}
+        farmName={terrain?.farmName}
+        terrainName={terrain?.name}
+        areaHa={terrain?.areaHectares}
+      />
 
       {grazingAlerts.length > 0 && (
         <div className="grazing-alerts" style={{ marginBottom: 16 }}>
@@ -449,19 +453,15 @@ export default function LotesPage() {
             </MapContainer>
           </div>
 
-          <div className="side-nav-buttons" style={{ marginTop: 10, flexDirection: 'row' }}>
-            <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/parcels`)}>Potreros</button>
-            <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/ndvi`)}>NDVI</button>
-            <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/rotation`)}>Pastoreo</button>
-          </div>
         </div>
 
         {/* RIGHT: Lotes */}
         <div className="lotes-list-panel">
           <div className="panel-header">
             <h3>Lotes Activos ({activeLotes.length})</h3>
-            <button className="action-btn action-btn--primary" onClick={() => setShowCreate(!showCreate)}>
-              + Nuevo Lote
+            <button className="comp-btn comp-btn--primary comp-btn--sm" onClick={() => setShowCreate(!showCreate)}>
+              {showCreate ? <X size={13} strokeWidth={2} /> : <Plus size={13} strokeWidth={2} />}
+              {showCreate ? 'Cancelar' : 'Nuevo Lote'}
             </button>
           </div>
 

@@ -4,6 +4,8 @@ import { useEffect } from 'react'
 import L from 'leaflet'
 
 import Spinner from '../components/Spinner'
+import TerrainTabs from '../components/TerrainTabs'
+import { CircleDot, Leaf, Moon } from 'lucide-react'
 
 import { useTerrain } from '../hooks'
 import { getBiomassColor, getBiomassLabel } from '../utils/grazing'
@@ -26,9 +28,9 @@ function FitBounds({ geoJson }) {
 }
 
 const STATUS_CONFIG = {
-  DISPONIBLE: { label: 'Disponible', color: '#4ade80', bgAlpha: 0.35 },
-  EN_USO: { label: 'En uso', color: '#f59e0b', bgAlpha: 0.45 },
-  EN_DESCANSO: { label: 'En descanso', color: '#3b82f6', bgAlpha: 0.3}
+  DISPONIBLE:  { label: 'Disponible',  color: '#4ade80', bgAlpha: 0.35, Icon: CircleDot },
+  EN_USO:      { label: 'En uso',      color: '#f59e0b', bgAlpha: 0.45, Icon: Leaf },
+  EN_DESCANSO: { label: 'En descanso', color: '#3b82f6', bgAlpha: 0.3,  Icon: Moon },
 }
 
 export default function RotationPage() {
@@ -69,86 +71,74 @@ export default function RotationPage() {
 
     <div className="page-container">
 
-      <div className="page-header">
-
-        <div className="breadcrumb">
-
-          <Link to="/farms">Fincas</Link>
-
-          <span>›</span>
-
-          <Link to={`/terrains/${terrainId}/parcels`}>
-            {terrain?.name || 'Terreno'}
-          </Link>
-
-          <span>›</span>
-
-          <span>Terrenos</span>
-
-        </div>
-
-        <h2>Pastoreo</h2>
-
-        <p>
-          Gestiona el estado de cada potrero para el manejo del ganado
-        </p>
-
-      </div>
-
+      <TerrainTabs
+        terrainId={terrainId}
+        farmId={terrain?.farmId}
+        farmName={terrain?.farmName}
+        terrainName={terrain?.name}
+        areaHa={terrain?.areaHectares}
+      />
 
       {/* Status summary */}
-
-      <div style={{ display: 'flex', gap: 16, marginBottom: 24 }}>
-
-        {Object.entries(STATUS_CONFIG).map(([key, config]) => (
-
-          <div
-            key={key}
-            style={{
-              flex: 1,
-              padding: '16px 20px',
-              background: 'var(--color-surface)',
-              border: `1px solid ${config.color}33`,
-              borderRadius: 'var(--radius)',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12
-            }}
-          >
-
-            <span style={{ fontSize: 28 }}>
-              {config.icon}
-            </span>
-
-            <div>
-
-              <div
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 24 }}>
+        {Object.entries(STATUS_CONFIG).map(([key, config]) => {
+          const Icon = config.Icon
+          return (
+            <div
+              key={key}
+              style={{
+                padding: '16px 18px',
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 14,
+                transition: 'all 0.2s',
+              }}
+            >
+              <span
                 style={{
-                  fontSize: 11,
-                  color: 'var(--color-text-muted)',
-                  textTransform: 'uppercase',
-                  letterSpacing: 1
+                  width: 38,
+                  height: 38,
+                  borderRadius: 10,
+                  background: `${config.color}1a`,
+                  color: config.color,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
                 }}
               >
-                {config.label}
+                <Icon size={18} strokeWidth={1.9} />
+              </span>
+              <div>
+                <div
+                  style={{
+                    fontSize: 11,
+                    color: 'var(--color-text-muted)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    fontWeight: 500,
+                  }}
+                >
+                  {config.label}
+                </div>
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 700,
+                    color: 'var(--color-text)',
+                    letterSpacing: '-0.02em',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {statusCounts[key]}
+                </div>
               </div>
-
-              <div
-                style={{
-                  fontSize: 28,
-                  fontFamily: 'var(--font-display)',
-                  color: config.color
-                }}
-              >
-                {statusCounts[key]}
-              </div>
-
             </div>
-
-          </div>
-
-        ))}
-
+          )
+        })}
       </div>
 
 

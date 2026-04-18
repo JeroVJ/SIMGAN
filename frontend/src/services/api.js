@@ -1,7 +1,12 @@
 import axios from 'axios'
 
+// In dev: use the relative '/api' path (vite proxies to backend).
+// In prod: set VITE_API_URL to your backend base URL, e.g.
+//   https://simgan-api.onrender.com/api
+const baseURL = import.meta.env.VITE_API_URL || '/api'
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL,
   headers: { 'Content-Type': 'application/json' }
 })
 
@@ -34,7 +39,9 @@ export const authApi = {
   me: () => api.get('/auth/me').then(r => r.data),
   logout: () => api.post('/auth/logout').then(r => r.data),
   getSessions: () => api.get('/auth/sessions').then(r => r.data),
-  revokeAll: () => api.post('/auth/revoke-all').then(r => r.data)
+  revokeAll: () => api.post('/auth/revoke-all').then(r => r.data),
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }).then(r => r.data),
+  resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }).then(r => r.data),
 }
 
 // ===== FARMS =====

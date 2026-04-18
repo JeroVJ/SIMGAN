@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { farmApi, terrainApi } from '../services/api'
+import {
+  Plus, Trash2, MapPin, Layers, ArrowRight, ChevronDown, ChevronUp,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
+import { farmApi, terrainApi } from '../services/api'
 import Spinner from '../components/Spinner'
 import EmptyState from '../components/EmptyState'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -14,15 +17,12 @@ export default function FarmsPage() {
   const [expandedFarmId, setExpandedFarmId] = useState(null)
   const navigate = useNavigate()
 
-  useEffect(() => {
-    loadFarms()
-  }, [])
+  useEffect(() => { loadFarms() }, [])
 
   async function loadFarms() {
     try {
       const data = await farmApi.getAll()
       setFarms(data)
-
       const terrainsMap = {}
       for (const farm of data) {
         try {
@@ -32,14 +32,14 @@ export default function FarmsPage() {
         }
       }
       setTerrainsByFarm(terrainsMap)
-    } catch (err) {
+    } catch {
       toast.error('Error cargando fincas')
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleDelete(e, id) {
+  function handleDelete(e, id) {
     e.stopPropagation()
     setConfirm({
       title: 'Eliminar finca',
@@ -58,28 +58,41 @@ export default function FarmsPage() {
   }
 
   function toggleFarmDetails(id) {
-    setExpandedFarmId((currentId) => (currentId === id ? null : id))
+    setExpandedFarmId(current => (current === id ? null : id))
   }
 
   if (loading) return <Spinner page label="Cargando fincas..." />
 
   return (
     <div className="page-container">
-      <div className="page-header">
-        <h2>Mis Fincas</h2>
-        <p>Gestiona tus fincas ganaderas y sus Terrenos</p>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+        <div>
+          <h2>Mis Fincas</h2>
+          <p>Gestiona tus fincas ganaderas, terrenos y potreros desde un solo lugar.</p>
+        </div>
+        {farms.length > 0 && (
+          <button
+            className="comp-btn comp-btn--primary"
+            onClick={() => navigate('/farms/new')}
+          >
+            <Plus size={15} strokeWidth={2} />
+            Nueva finca
+          </button>
+        )}
       </div>
 
       {farms.length === 0 ? (
         <EmptyState
+          icon={<Layers size={24} strokeWidth={1.75} />}
           title="Sin fincas registradas"
-          description="Crea tu primera finca para comenzar a gestionar tus terrenos y potreros."
+          description="Crea tu primera finca para comenzar a gestionar terrenos, potreros y ganado."
           action={
             <button
-              className="action-btn action-btn--primary"
+              className="comp-btn comp-btn--primary"
               onClick={() => navigate('/farms/new')}
             >
-              Crear Finca
+              <Plus size={15} strokeWidth={2} />
+              Crear primera finca
             </button>
           }
         />
@@ -88,80 +101,51 @@ export default function FarmsPage() {
           {farms.map(farm => {
             const terrains = terrainsByFarm[farm.id] || []
             const isExpanded = expandedFarmId === farm.id
+            const totalHa = terrains.reduce((s, t) => s + (t.areaHectares || 0), 0)
 
             return (
               <div
                 key={farm.id}
                 className="farm-card"
-                onClick={() => toggleFarmDetails(farm.id)}
+                onClick={() => navigate(`/farms/${farm.id}`)}
+                role="button"
+                tabIndex={0}
               >
                 <div className="farm-card__header">
                   <div className="farm-card__initial">
-                    {farm.name?.[0] || '?'}
+                    {(farm.name?.[0] || '?').toUpperCase()}
                   </div>
-
                   <h3>{farm.name || 'Finca sin nombre'}</h3>
-
                   <button
-                    className="action-btn action-btn--danger action-btn--icon"
+                    className="comp-btn comp-btn--ghost comp-btn--sm comp-btn--icon-only"
                     onClick={(e) => handleDelete(e, farm.id)}
                     title="Eliminar finca"
+                    aria-label="Eliminar finca"
                   >
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                      <path
-                        d="M3 4h10M5.5 4V3a1 1 0 011-1h3a1 1 0 011 1v1M6.5 7v4M9.5 7v4M4.5 4l.5 8a1 1 0 001 1h4a1 1 0 001-1l.5-8"
-                        stroke="currentColor"
-                        strokeWidth="1.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+                    <Trash2 size={14} strokeWidth={1.9} />
                   </button>
                 </div>
 
-                <div className="farm-card__meta">
-                  <span>{isExpanded ? 'Toca para ocultar detalles' : 'Toca para ver detalles'}</span>
-                </div>
-
-                {isExpanded && (
-                  <div className="farm-card__terrains" onClick={e => e.stopPropagation()}>
-                    <div className="farm-terrain-row">
-                      <span>Municipio</span>
-                      <span className="ftr-area">{farm.municipality || 'No registrado'}</span>
-                    </div>
-                    <div className="farm-terrain-row">
-                      <span>Departamento</span>
-                      <span className="ftr-area">{farm.department || 'No registrado'}</span>
-                    </div>
-                    <div className="farm-terrain-row">
-                      <span>Finca homogénea</span>
-                      <span className="ftr-area">{farm.isHomogeneous ? 'Sí' : 'No'}</span>
-                    </div>
-                    {farm.isHomogeneous && (
-                      <>
-                        <div className="farm-terrain-row">
-                          <span>Tipo de suelo</span>
-                          <span className="ftr-area">{farm.soilType || 'No registrado'}</span>
-                        </div>
-                        <div className="farm-terrain-row">
-                          <span>Tipo de pasto</span>
-                          <span className="ftr-area">{farm.pastureType || 'No registrado'}</span>
-                        </div>
-                      </>
-                    )}
+                {(farm.municipality || farm.department) && (
+                  <div className="farm-card__meta">
+                    <MapPin size={12} strokeWidth={1.9} />
+                    {[farm.municipality, farm.department].filter(Boolean).join(', ')}
                   </div>
                 )}
 
                 <div className="farm-card__stat">
                   <span className="fcs-val">{terrains.length}</span>
-                  <span className="fcs-lbl">
-                    Terreno{terrains.length !== 1 ? 's' : ''}
+                  <span className="fcs-lbl" style={{ marginLeft: 6, color: 'var(--color-text-secondary)' }}>
+                    {terrains.length === 1 ? 'Terreno' : 'Terrenos'}
+                  </span>
+                  <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--color-text-muted)' }}>
+                    {totalHa.toFixed(1)} ha
                   </span>
                 </div>
 
                 {terrains.length > 0 && (
                   <div className="farm-card__terrains">
-                    {terrains.map(t => (
+                    {terrains.slice(0, isExpanded ? terrains.length : 3).map(t => (
                       <div
                         key={t.id}
                         className="farm-terrain-row"
@@ -176,6 +160,36 @@ export default function FarmsPage() {
                         </span>
                       </div>
                     ))}
+                    {terrains.length > 3 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          toggleFarmDetails(farm.id)
+                        }}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: 'var(--color-text-muted)',
+                          fontSize: 12,
+                          cursor: 'pointer',
+                          padding: '4px 0',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          fontFamily: 'inherit',
+                        }}
+                      >
+                        {isExpanded ? (
+                          <>
+                            <ChevronUp size={12} /> Mostrar menos
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown size={12} /> Ver {terrains.length - 3} más
+                          </>
+                        )}
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -184,17 +198,19 @@ export default function FarmsPage() {
                   onClick={e => e.stopPropagation()}
                 >
                   <button
-                    className="action-btn action-btn--small"
+                    className="comp-btn comp-btn--sm"
                     onClick={() => navigate(`/farms/${farm.id}`)}
+                    style={{ flex: 1 }}
                   >
                     Dashboard
+                    <ArrowRight size={12} strokeWidth={2} />
                   </button>
-
                   <button
-                    className="action-btn action-btn--small action-btn--outline"
+                    className="comp-btn comp-btn--sm comp-btn--outline"
                     onClick={() => navigate(`/farms/${farm.id}/terrain/new`)}
                   >
-                    + Terreno
+                    <Plus size={12} strokeWidth={2} />
+                    Terreno
                   </button>
                 </div>
               </div>
