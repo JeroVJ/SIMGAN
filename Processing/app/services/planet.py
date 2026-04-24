@@ -12,7 +12,7 @@ from rasterio.errors import RasterioIOError
 from shapely.geometry import Point
 from shapely.ops import transform as shapely_transform
 
-from app.config import settings
+from app.Config import settings
 from app.models import PlanetProcessRequest, PlanetProcessResponse, ProcessedParcelNdviResponse
 from app.services.common import build_empty_result, build_result, load_request, parse_geometry, save_upload
 

@@ -177,7 +177,7 @@ export default function LoteDetailPage() {
 
       {/* Tabs */}
       <div className="ndvi-tabs" style={{ marginBottom: 20 }}>
-        {[{ key: 'ganado', label: 'Ganado' }, { key: 'historial', label: '🔄 Historial Terrenos' }].map(tab => (
+        {[{ key: 'ganado', label: 'Ganado' }, { key: 'historial', label: ' Historial Terrenos' }].map(tab => (
           <button
             key={tab.key}
             className={`ndvi-tab${activeTab === tab.key ? ' ndvi-tab--active' : ''}`}

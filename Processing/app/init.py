@@ -4,7 +4,7 @@ import sys
 from fastapi import FastAPI
 
 from app.api.routes import router
-from app.config import settings
+from app.Config import settings
 
 
 def _configure_logging() -> logging.Logger:

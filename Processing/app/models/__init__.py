@@ -87,8 +87,6 @@ class PlanetProcessResponse(BaseModel):
     parcelResults: list[ProcessedParcelNdviResponse]
 
 
-# ===== BIOMASS CALIBRATION POINT NDVI =====
-
 class PointNdviInput(BaseModel):
     pointIndex: int
     latitude: float

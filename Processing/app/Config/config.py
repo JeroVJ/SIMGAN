@@ -19,6 +19,7 @@ class Settings:
     planet_api_key: str
     copernicus_username: str
     copernicus_password: str
+    redis_url: str
 
 
 def _build_settings() -> Settings:
@@ -31,6 +32,7 @@ def _build_settings() -> Settings:
     planet_api_key = os.getenv("PLANET_API_KEY", "")
     copernicus_username = os.getenv("COPERNICUS_USERNAME", "")
     copernicus_password = os.getenv("COPERNICUS_PASSWORD", "")
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
     gdal_temp_dir.mkdir(parents=True, exist_ok=True)
     return Settings(
         api_prefix=api_prefix,
@@ -40,6 +42,7 @@ def _build_settings() -> Settings:
         planet_api_key=planet_api_key,
         copernicus_username=copernicus_username,
         copernicus_password=copernicus_password,
+        redis_url=redis_url,
     )
 
 

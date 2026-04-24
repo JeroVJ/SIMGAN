@@ -12,6 +12,68 @@ services:
       - simgan_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
 
+  # ---------------------------------------------------------------------------
+  # Redis — broker + result backend for Celery
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: simgan-redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Processing API — Uvicorn/FastAPI gateway that enqueues jobs to Redis
+  # ---------------------------------------------------------------------------
+  processing-api:
+    build: ./Processing
+    container_name: simgan-processing-api
+    environment:
+      SERVICE_MODE: api
+      SERVER_PORT: 8082
+      SERVER_CONTEXT_PATH: /api
+      REDIS_URL: redis://redis:6379/0
+      PLANET_API_KEY: ${PLANET_API_KEY:-}
+      COPERNICUS_USERNAME: ${COPERNICUS_USERNAME:-}
+      COPERNICUS_PASSWORD: ${COPERNICUS_PASSWORD:-}
+      PROCESSING_LOG_LEVEL: ${PROCESSING_LOG_LEVEL:-INFO}
+      PROCESSING_GDAL_TEMP_DIR: /tmp/simgan-procesamiento
+    ports:
+      - "8082:8082"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - processing_tmp:/tmp/simgan-procesamiento
+
+  # ---------------------------------------------------------------------------
+  # Processing Worker — Celery workers that consume jobs from the ndvi queue
+  # Scale up by increasing WORKER_CONCURRENCY or deploying multiple replicas.
+  # ---------------------------------------------------------------------------
+  processing-worker:
+    build: ./Processing
+    container_name: simgan-processing-worker
+    environment:
+      SERVICE_MODE: worker
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      REDIS_URL: redis://redis:6379/0
+      PLANET_API_KEY: ${PLANET_API_KEY:-}
+      COPERNICUS_USERNAME: ${COPERNICUS_USERNAME:-}
+      COPERNICUS_PASSWORD: ${COPERNICUS_PASSWORD:-}
+      PROCESSING_LOG_LEVEL: ${PROCESSING_LOG_LEVEL:-INFO}
+      PROCESSING_GDAL_TEMP_DIR: /tmp/simgan-procesamiento
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    volumes:
+      - processing_tmp:/tmp/simgan-procesamiento
 
   # rabbitmq:
   #   image: rabbitmq:3-management
@@ -23,3 +85,4 @@ services:
 
 volumes:
   simgan_data:
+  processing_tmp:
