@@ -102,8 +102,22 @@ export function useLote(loteId) {
     [reload]
   )
 
+  const closeLote = useCallback(
+    async (data) => {
+      try {
+        await loteApi.close(loteId, data)
+        toast.success('Lote cerrado')
+        await reload()
+      } catch (err) {
+        toast.error(err.response?.data?.message || 'Error cerrando lote')
+        throw err
+      }
+    },
+    [loteId, reload]
+  )
+
   return {
     lote, loading, error, reload,
-    addGanado, addGanadoBatch, updateGanado, deleteGanado,
+    addGanado, addGanadoBatch, updateGanado, deleteGanado, closeLote,
   }
 }

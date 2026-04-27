@@ -43,6 +43,13 @@ public class LoteDto {
     @Getter @Setter @NoArgsConstructor @AllArgsConstructor
     public static class CloseLoteRequest {
         private String fechaSalida; // yyyy-MM-dd
+        private List<CloseLoteGanadoRequest> ganados;
+    }
+
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor
+    public static class CloseLoteGanadoRequest {
+        private Long ganadoId;
+        private Double pesoActual;
     }
 
     // ===== ROTATION ASSIGNMENT =====

@@ -12,6 +12,7 @@ export default function OperationProgress({
   active,
   title = 'Procesando...',
   expectedSeconds = 30,
+  expectedRangeSeconds = null,
   hint = null,
 }) {
   const [startedAt, setStartedAt] = useState(null)
@@ -37,24 +38,37 @@ export default function OperationProgress({
     return () => window.clearInterval(id)
   }, [active, startedAt])
 
-  const { progress, remainingSeconds, elapsedSeconds } = useMemo(() => {
-    if (!active) return { progress: 0, remainingSeconds: 0, elapsedSeconds: 0 }
-    const safeExpected = Math.max(5, Number(expectedSeconds) || 30)
-    const expectedMs = safeExpected * 1000
+  const { progress, remainingSeconds, elapsedSeconds, remainingRangeSeconds } = useMemo(() => {
+    if (!active) return { progress: 0, remainingSeconds: 0, elapsedSeconds: 0, remainingRangeSeconds: null }
+    const minExpected = expectedRangeSeconds?.min ?? expectedSeconds
+    const maxExpected = expectedRangeSeconds?.max ?? expectedSeconds
+    const safeMinExpected = Math.max(5, Number(minExpected) || 30)
+    const safeMaxExpected = Math.max(safeMinExpected, Number(maxExpected) || safeMinExpected)
+    const expectedMs = safeMaxExpected * 1000
     const elapsed = Math.max(0, elapsedMs)
     const boundedProgress = Math.min(95, (elapsed / expectedMs) * 95)
     return {
       progress: Math.round(boundedProgress),
       remainingSeconds: Math.max(0, Math.ceil((expectedMs - elapsed) / 1000)),
       elapsedSeconds: Math.floor(elapsed / 1000),
+      remainingRangeSeconds: expectedRangeSeconds
+        ? {
+            min: Math.max(0, Math.ceil((safeMinExpected * 1000 - elapsed) / 1000)),
+            max: Math.max(0, Math.ceil((safeMaxExpected * 1000 - elapsed) / 1000)),
+          }
+        : null,
     }
-  }, [active, elapsedMs, expectedSeconds])
+  }, [active, elapsedMs, expectedRangeSeconds, expectedSeconds])
 
   if (!active) return null
 
-  const remainingLabel = remainingSeconds > 0
-    ? `Tiempo restante: ~${fmtTime(remainingSeconds)}`
-    : 'Finalizando...'
+  const remainingLabel = remainingRangeSeconds
+    ? (remainingRangeSeconds.max > 0
+        ? `Tiempo restante: ~${fmtTime(remainingRangeSeconds.min)} a ${fmtTime(remainingRangeSeconds.max)}`
+        : 'Finalizando...')
+    : (remainingSeconds > 0
+        ? `Tiempo restante: ~${fmtTime(remainingSeconds)}`
+        : 'Finalizando...')
 
   return (
     <div className="comp-op-progress" role="status" aria-live="polite">

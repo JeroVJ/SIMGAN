@@ -58,7 +58,8 @@ export default function CalibrationNdviAlertPage() {
           active={searchingScenes || calibrating}
           title={searchingScenes ? 'Buscando imagenes satelitales' : 'Calibracion umbral de alerta en curso'}
           expectedSeconds={searchingScenes ? 18 : 180}
-          hint={!searchingScenes ? 'La calibracion procesa una imagen Sentinel. Puede tardar entre 2 y 4 minutos.' : undefined}
+          expectedRangeSeconds={!searchingScenes ? { min: 240, max: 480 } : null}
+          hint={!searchingScenes ? 'La calibracion procesa una imagen Sentinel. Puede tardar entre 4 y 8 minutos.' : undefined}
         />
       </div>
 

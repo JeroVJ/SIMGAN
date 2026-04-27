@@ -80,12 +80,16 @@ psql -U postgres -d simgan_db -f database/init.sql
 
 1. Abre la carpeta `backend/` como proyecto Maven en IntelliJ
 2. IntelliJ detectará el `pom.xml` → importa dependencias
-3. Verifica las credenciales en `src/main/resources/application.properties`:
+3. Las credenciales locales por defecto en `src/main/resources/application.properties`
+   ya coinciden con las del `docker-compose.yml`:
    ```properties
    spring.datasource.url=jdbc:postgresql://localhost:5432/simgan_db
-   spring.datasource.username=postgres
-   spring.datasource.password=postgres
+   spring.datasource.username=simgan
+   spring.datasource.password=simgan123
    ```
+   No necesitas crear ningún `.env` para correr localmente. El envío de correo
+   está **desactivado por defecto** en local (`MAIL_ENABLED=false`); para
+   probarlo ver `backend/.env.example`.
 4. Ejecuta `SimganDemoApplication.java` (clic derecho → Run)
 5. El backend corre en `http://localhost:8080`
 
@@ -428,6 +432,13 @@ simgan-demo/
 
 3. **El mapa usa Esri World Imagery** (gratuito, no necesita API key)
 
+
+## Despliegue
+
+Ver [`DEPLOYMENT.md`](DEPLOYMENT.md) para la guía completa de despliegue en
+**Railway** (backend + Postgres) y **Vercel** (frontend).
+
+---
 
 ## Diagrama de clase v4 
 

@@ -3,15 +3,11 @@ package com.simgan.service;
 import com.simgan.dto.ParcelDto;
 import com.simgan.entity.*;
 import com.simgan.repository.*;
-<<<<<<< HEAD
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.geojson.GeoJsonReader;
-=======
 import com.simgan.util.GeoJsonUtils;
-import lombok.RequiredArgsConstructor;
->>>>>>> origin/procesamiento
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
@@ -22,16 +18,14 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-<<<<<<< HEAD
 @Slf4j
-=======
->>>>>>> origin/procesamiento
 public class ParcelService {
 
     private final ParcelRepository parcelRepository;
     private final TerrainRepository terrainRepository;
     private final RotationHistoryRepository rotationHistoryRepository;
     private final NdviRecordRepository ndviRecordRepository;
+    private final BiomassCalibrationModelRepository biomassModelRepository;
     private final LoteRepository loteRepository;
     private final SensorRepository sensorRepository;
     private final ClasificacionSensorRepository clasificacionSensorRepository;
@@ -108,19 +102,19 @@ public class ParcelService {
         return toResponse(parcel);
     }
 
-    public ParcelDto.Response updateStatus(Long id, Parcel.ParcelStatus newStatus) {
+        public ParcelDto.Response updateStatus(Long id, Parcel.ParcelStatus newStatus) {
         Parcel parcel = parcelRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Parcela no encontrada con id: " + id));
+            .orElseThrow(() -> new RuntimeException("Parcela no encontrada con id: " + id));
 
         // Block status change if parcel is in use by an active lote
         List<Lote> occupyingLotes = loteRepository.findByCurrentParcelId(id);
         List<Lote> activeLotes = occupyingLotes.stream()
-                .filter(l -> l.getFechaSalida() == null)
-                .collect(Collectors.toList());
+            .filter(l -> l.getFechaSalida() == null)
+            .collect(Collectors.toList());
         if (!activeLotes.isEmpty()) {
             throw new RuntimeException("No se puede cambiar el estado de la parcela '"
-                    + parcel.getName() + "' porque está en uso por el lote '"
-                    + activeLotes.get(0).getName() + "'. Primero retire el lote de la parcela.");
+                + parcel.getName() + "' porque está en uso por el lote '"
+                + activeLotes.get(0).getName() + "'. Primero retire el lote de la parcela.");
         }
 
         Parcel.ParcelStatus previousStatus = parcel.getStatus();
@@ -129,15 +123,15 @@ public class ParcelService {
         if (previousStatus != newStatus) {
             // Get latest NDVI for context
             Optional<NdviRecord> latestNdvi = ndviRecordRepository
-                    .findFirstByParcelIdOrderByCaptureDateDesc(id);
+                .findFirstByParcelIdOrderByCaptureDateDesc(id);
 
             RotationHistory history = RotationHistory.builder()
-                    .parcel(parcel)
-                    .previousStatus(previousStatus)
-                    .newStatus(newStatus)
-                    .ndviAtChange(latestNdvi.map(NdviRecord::getMeanNdvi).orElse(null))
-                    .biomassAtChange(latestNdvi.map(NdviRecord::getBiomassKgPerHa).orElse(null))
-                    .build();
+                .parcel(parcel)
+                .previousStatus(previousStatus)
+                .newStatus(newStatus)
+                .ndviAtChange(latestNdvi.map(NdviRecord::getMeanNdvi).orElse(null))
+                .biomassAtChange(latestNdvi.map(NdviRecord::getBiomassKgPerHa).orElse(null))
+                .build();
 
             rotationHistoryRepository.save(history);
         }
@@ -145,7 +139,7 @@ public class ParcelService {
         parcel.setStatus(newStatus);
         parcel = parcelRepository.save(parcel);
         return toResponse(parcel);
-    }
+        }
 
     public void delete(Long id) {
         parcelRepository.deleteById(id);
@@ -158,15 +152,15 @@ public class ParcelService {
      * the given lote.
      *
      * Formulas:
-     *   forrajeDisponible = biomassKgPerHa × areaHa × 0.80
+    *   forrajeDisponible = biomassKgPerHa × areaHa × 0.80
      *   consumoIndividual  = sum(peso_i × rate_i) / cabezas         (per animal/day)
      *   cargaAnimal        = forrajeDisponible / consumoIndividual
      *   UGG base weight: Novillo=450 kg (1 UGG), Novilla=360 kg (0.8), Vaca=540 kg (1.2), Toro=810 kg (1.8)
      *   consumoIndividual  = uggWeight × forageRate%
      *   ofertaFV           = consumoIndividual × 1.5
-     *   DO (raw)           = biomasaTotal / (numeroAnimales × ofertaFV)
+    *   DO (raw)           = forrajeDisponible / (numeroAnimales × ofertaFV)
      *   DO (adjusted)      = DO_raw × edaphicFactor
-     *   cargaAnimal        = biomasaTotal / (consumoIndividual × DO)
+    *   cargaAnimal        = forrajeDisponible / (consumoIndividual × DO)
      *   DD                 = (totalParcels − 1) × DO
      */
     public List<ParcelDto.RotationPlanEntry> getRotationPlan(
@@ -181,13 +175,17 @@ public class ParcelService {
         double consumoIndividual = uggWeight * forageRate;        // kg/day per animal
         double ofertaFV = consumoIndividual * 1.5;                // oferta forrajera deseada
 
+        log.info("[RotationPlan] terrainId={} loteId={} tipoAnimal={} numeroAnimales={} totalParcels={} uggWeight={} forageRate={} consumoIndividual={} ofertaFV={}",
+            terrainId, loteId, tipoAnimal, numeroAnimales, totalParcels,
+            uggWeight, forageRate, consumoIndividual, ofertaFV);
+
         List<ParcelDto.RotationPlanEntry> result = new ArrayList<>();
 
         for (Parcel parcel : parcels) {
             // NDVI / biomass
             Optional<NdviRecord> latestNdvi =
                     ndviRecordRepository.findFirstByParcelIdOrderByCaptureDateDesc(parcel.getId());
-            Double biomassKgPerHa = latestNdvi.map(NdviRecord::getBiomassKgPerHa).orElse(null);
+            Double biomassKgPerHa = resolveCurrentBiomassKgPerHa(parcel, latestNdvi);
 
             // Sensor + last classification
             List<Sensor> sensors = sensorRepository.findByParcelId(parcel.getId());
@@ -210,11 +208,12 @@ public class ParcelService {
                     && parcel.getAreaHectares() > 0 && numeroAnimales > 0) {
                 double areaHa = parcel.getAreaHectares();
                 double biomasaTotal = biomassKgPerHa * areaHa;
+                double biomasaDisponible = biomasaTotal * 0.80;
 
-                forrajeDisponible = Math.round(biomasaTotal);
+                forrajeDisponible = Math.round(biomasaDisponible);
 
                 // 1) DO base (sin ajuste edafico)
-                double doRaw = biomasaTotal / ((double) numeroAnimales * ofertaFV);
+                double doRaw = biomasaDisponible / ((double) numeroAnimales * ofertaFV);
 
                 // 2) Ajuste edafico sobre DO y recalculo de DD
                 String soilType = firstNonBlank(
@@ -231,12 +230,13 @@ public class ParcelService {
                 );
 
                 double factor = edaphicFactor(soilType, pastureType, estadoEdafico);
-                double doAdjusted = Math.max(0.0, doRaw * factor);
-                double ddAdjusted = Math.max(0.0, (totalParcels - 1) * doAdjusted);
+                double doAdjusted = Math.max(1.0, doRaw * factor);
+                double doEffective = Math.max(1.0, Math.round(doAdjusted * 10.0) / 10.0);
+                double ddAdjusted = Math.max(1.0, (totalParcels - 1) * doEffective);
 
-                // 3) Carga usando DO ajustado (con factor edafico)
-                if (doAdjusted > 0) {
-                    double carga = biomasaTotal / (consumoIndividual * doAdjusted);
+                // 3) Carga usando el mismo DO final que se expone, con minimo 1 dia.
+                if (doEffective > 0) {
+                    double carga = biomasaDisponible / (consumoIndividual * doEffective);
                     cargaAnimal = Math.round(carga);
                     cargaPerHa = Math.round((carga / areaHa) * 10.0) / 10.0;
                 } else {
@@ -244,8 +244,16 @@ public class ParcelService {
                     cargaPerHa = 0.0;
                 }
 
-                diasOcupacion = Math.round(doAdjusted * 10.0) / 10.0;
+                diasOcupacion = doEffective;
                 diasDescanso = Math.round(ddAdjusted * 10.0) / 10.0;
+
+                log.info("[RotationPlan] parcelId={} parcelName={} areaHa={} biomassKgPerHa={} biomasaTotal={} biomasaDisponible={} soilType={} pastureType={} estadoEdafico={} factor={} doRaw={} doAdjusted={} doEffective={} ddAdjusted={} cargaAnimal={} cargaPerHa={}",
+                    parcel.getId(), parcel.getName(), areaHa, biomassKgPerHa,
+                    biomasaTotal, biomasaDisponible, soilType, pastureType, estadoEdafico,
+                    factor, doRaw, doAdjusted, doEffective, ddAdjusted, cargaAnimal, cargaPerHa);
+                } else {
+                log.info("[RotationPlan] parcelId={} parcelName={} skipped: biomassKgPerHa={} areaHa={} numeroAnimales={}",
+                    parcel.getId(), parcel.getName(), biomassKgPerHa, parcel.getAreaHectares(), numeroAnimales);
             }
 
             // Persist DO/DD in parcels table so latest rotation values are stored in DB.
@@ -332,6 +340,20 @@ public class ParcelService {
             case "ENCHARCADO"  -> 0.55;
             default            -> 1.0;
         };
+    }
+
+    private Double resolveCurrentBiomassKgPerHa(Parcel parcel, Optional<NdviRecord> latestNdviOpt) {
+        if (latestNdviOpt.isEmpty()) return null;
+
+        NdviRecord latestNdvi = latestNdviOpt.get();
+        Optional<BiomassCalibrationModel> calibModel = biomassModelRepository.findByParcelId(parcel.getId());
+
+        if (calibModel.isPresent() && calibModel.get().getCoefficientA() != null && latestNdvi.getMeanNdvi() != null) {
+            double biomass = Math.max(0.0, calibModel.get().getCoefficientA() * latestNdvi.getMeanNdvi());
+            return Math.round(biomass * 100.0) / 100.0;
+        }
+
+        return latestNdvi.getBiomassKgPerHa();
     }
 
     private ParcelDto.Response toResponse(Parcel parcel) {

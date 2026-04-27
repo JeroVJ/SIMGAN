@@ -22,16 +22,6 @@ public class TerrainController {
         return ResponseEntity.status(HttpStatus.CREATED).body(terrainService.create(request));
     }
 
-<<<<<<< HEAD
-=======
-    @PutMapping("/{id}")
-    public ResponseEntity<TerrainDto.Response> update(
-            @PathVariable Long id,
-            @Valid @RequestBody TerrainDto.UpdateRequest request) {
-        return ResponseEntity.ok(terrainService.update(id, request));
-    }
-
->>>>>>> origin/procesamiento
     @GetMapping("/farm/{farmId}")
     public ResponseEntity<List<TerrainDto.Response>> findByFarmId(@PathVariable Long farmId) {
         return ResponseEntity.ok(terrainService.findByFarmId(farmId));

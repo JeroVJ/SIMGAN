@@ -26,12 +26,12 @@ public class FarmService {
             throw new IllegalArgumentException("El nombre de la finca es obligatorio");
         }
 
-        if (farmRepository.existsByNormalizedName(normalizedName)) {
-            throw new IllegalArgumentException("La finca ya existe");
-        }
-
         Ganadero ganadero = ganaderoRepository.findById(request.getGanaderoId())
                 .orElseThrow(() -> new RuntimeException("Ganadero no encontrado con id: " + request.getGanaderoId()));
+
+        if (farmRepository.existsByNormalizedNameAndGanaderoId(normalizedName, ganadero.getId())) {
+            throw new IllegalArgumentException("La finca ya existe");
+        }
 
         Farm farm = Farm.builder()
                 .name(normalizedName)

@@ -596,7 +596,7 @@ export default function SensorSessionPage() {
           {isMonitoring && sensorData.length === 0 && (
             <div className="card">
               <div style={{ padding: '24px', textAlign: 'center', color: 'var(--color-text-secondary)' }}>
-                <div style={{ fontSize: 32, marginBottom: 8 }}>⏳</div>
+                <div style={{ fontSize: 32, marginBottom: 8 }}></div>
                 <div style={{ fontWeight: 600, marginBottom: 8 }}>Esperando datos...</div>
                 <div style={{ fontSize: 12 }}>
                   El backend se está conectando a EMQX<br />

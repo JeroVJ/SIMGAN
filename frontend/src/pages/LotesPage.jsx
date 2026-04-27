@@ -1,25 +1,15 @@
 import { useState, useEffect, useMemo } from 'react'
-<<<<<<< HEAD
 import { useParams, useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, GeoJSON, useMap, Tooltip, Marker } from 'react-leaflet'
 import * as turf from '@turf/turf'
 import L from 'leaflet'
 import { Plus, X } from 'lucide-react'
-=======
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import { MapContainer, TileLayer, GeoJSON, useMap, Tooltip, Marker } from 'react-leaflet'
-import * as turf from '@turf/turf'
-import L from 'leaflet'
->>>>>>> origin/procesamiento
 import { useTerrain } from '../hooks'
 import { getBiomassColor, getBiomassLabel, getDailyConsumption } from '../utils/grazing'
 import { parcelApi, loteApi } from '../services/api'
 import Spinner from '../components/Spinner'
 import ConfirmDialog from '../components/ConfirmDialog'
-<<<<<<< HEAD
 import TerrainTabs from '../components/TerrainTabs'
-=======
->>>>>>> origin/procesamiento
 
 function FitBounds({ geoJson }) {
   const map = useMap()
@@ -61,7 +51,7 @@ export default function LotesPage() {
   const navigate = useNavigate()
   const {
     terrain, parcels, lotes, parcelInfo, grazingAlerts, loading,
-    createLote, assignParcel, unassignParcel, closeLote, deleteLote,
+    createLote, assignParcel, unassignParcel, deleteLote, reload,
   } = useTerrain(terrainId)
 
   const [showCreate, setShowCreate] = useState(false)
@@ -223,6 +213,7 @@ export default function LotesPage() {
         rotationOrder: Number(r.orden)
       }))
       await loteApi.saveRotationAssignment(showRotaAssignModal.id, entries)
+      await reload()
       setShowRotaAssignModal(null)
       setRotaAssignRows([])
     } catch { /* toast shown in hook */ }
@@ -279,9 +270,14 @@ export default function LotesPage() {
 
   async function confirmClose() {
     if (!closingLote) return
-    try { await closeLote(closingLote, { fechaSalida: closeFecha }) }
-    catch { /* toast shown in hook */ }
-    finally { setClosingLote(null) }
+    navigate(`/lotes/${closingLote}`, {
+      state: {
+        closeDraft: {
+          fechaSalida: closeFecha,
+        },
+      },
+    })
+    setClosingLote(null)
   }
 
   function handleDelete(loteId, name) {
@@ -314,7 +310,6 @@ export default function LotesPage() {
         onCancel={() => setConfirm(null)}
       />
 
-<<<<<<< HEAD
       <TerrainTabs
         terrainId={terrainId}
         farmId={terrain?.farmId}
@@ -322,13 +317,6 @@ export default function LotesPage() {
         terrainName={terrain?.name}
         areaHa={terrain?.areaHectares}
       />
-=======
-      <div className="breadcrumb">
-        <Link to="/farms">Fincas</Link><span className="sep">/</span>
-        {terrain && <Link to={`/terrains/${terrainId}/parcels`}>{terrain.name}</Link>}
-        <span className="sep">/</span><span>Lotes</span>
-      </div>
->>>>>>> origin/procesamiento
 
       {grazingAlerts.length > 0 && (
         <div className="grazing-alerts" style={{ marginBottom: 16 }}>
@@ -471,28 +459,15 @@ export default function LotesPage() {
             </MapContainer>
           </div>
 
-<<<<<<< HEAD
-=======
-          <div className="side-nav-buttons" style={{ marginTop: 10, flexDirection: 'row' }}>
-            <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/parcels`)}>Potreros</button>
-            <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/ndvi`)}>NDVI</button>
-            <button className="action-btn action-btn--nav" style={{ flex: 1 }} onClick={() => navigate(`/terrains/${terrainId}/rotation`)}>Pastoreo</button>
-          </div>
->>>>>>> origin/procesamiento
         </div>
 
         {/* RIGHT: Lotes */}
         <div className="lotes-list-panel">
           <div className="panel-header">
             <h3>Lotes Activos ({activeLotes.length})</h3>
-<<<<<<< HEAD
             <button className="comp-btn comp-btn--primary comp-btn--sm" onClick={() => setShowCreate(!showCreate)}>
               {showCreate ? <X size={13} strokeWidth={2} /> : <Plus size={13} strokeWidth={2} />}
               {showCreate ? 'Cancelar' : 'Nuevo Lote'}
-=======
-            <button className="action-btn action-btn--primary" onClick={() => setShowCreate(!showCreate)}>
-              + Nuevo Lote
->>>>>>> origin/procesamiento
             </button>
           </div>
 
@@ -621,7 +596,7 @@ export default function LotesPage() {
                     <button className="action-btn action-btn--nav-sm action-btn--warning"
                       onClick={() => handleUnassign(lote.id)}>Mover</button>
                   )}
-                  <button className="action-btn action-btn--nav-sm action-btn--ghost" onClick={() => handleClose(lote.id)}>Cerrar</button>
+                  <button className="action-btn action-btn--nav-sm action-btn--ghost" onClick={() => handleClose(lote.id)}>Salida</button>
                 </div>
 
                 {closingLote === lote.id && (
@@ -640,7 +615,6 @@ export default function LotesPage() {
                   </div>
                 )}
 
-                {/* ── Assign-mode choice menu ─────────────────────────────── */}
                 {assignMenuLote === lote.id && !lote.currentParcelId && (
                   <div style={{
                     marginTop: 8, borderRadius: 8, overflow: 'hidden',
@@ -648,7 +622,6 @@ export default function LotesPage() {
                     background: 'var(--color-surface)',
                     boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
                   }}>
-                    {/* Option 1 */}
                     <button
                       onClick={() => { setShowAssign(lote.id); setAssignMenuLote(null) }}
                       style={{
@@ -667,7 +640,6 @@ export default function LotesPage() {
                         Elige un potrero disponible y el lote se traslada ahí directamente
                       </span>
                     </button>
-                    {/* Option 2 */}
                     <button
                       onClick={() => openRotaAssignModal(lote)}
                       style={{
@@ -1015,213 +987,6 @@ export default function LotesPage() {
               </div>
             </div>
 
-          </div>
-        </div>
-      )}
-
-      {/* Rotation Planning Modal */}
-      {rotationLote && (
-        <div
-          onClick={e => { if (e.target === e.currentTarget) setRotationLote(null) }}
-          style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.65)', zIndex: 1000,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
-          }}
-        >
-          <div style={{
-            background: 'var(--color-surface)', borderRadius: 12, width: '100%',
-            maxWidth: 960, maxHeight: '92vh', overflow: 'auto',
-            boxShadow: '0 8px 40px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column',
-            border: '1px solid var(--color-border)',
-          }}>
-            {/* Modal header */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              padding: '18px 24px 14px', borderBottom: '1px solid var(--color-border)',
-            }}>
-              <div>
-                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: 'var(--color-text)' }}>Programar Rotación</h3>
-                <div style={{ fontSize: 13, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                  Lote: <strong style={{ color: 'var(--color-primary)' }}>{rotationLote.name}</strong>
-                </div>
-              </div>
-              <button onClick={() => setRotationLote(null)}
-                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1 }}>
-                ×
-              </button>
-            </div>
-
-            {/* Input form */}
-            <div style={{
-              padding: '16px 24px', borderBottom: '1px solid var(--color-border)',
-              background: 'var(--color-surface-2)',
-              display: 'flex', alignItems: 'flex-end', gap: 16, flexWrap: 'wrap',
-            }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  Tipo de animal
-                </label>
-                <select
-                  value={rotationTipoAnimal}
-                  onChange={e => setRotationTipoAnimal(e.target.value)}
-                  className="input-field"
-                  style={{ minWidth: 160, paddingTop: 8, paddingBottom: 8 }}
-                >
-                  <option value="NOVILLO">Novillo (1 UGG · 450 kg)</option>
-                  <option value="NOVILLA">Novilla (0.8 UGG · 360 kg)</option>
-                  <option value="VACA">Vaca (1.2 UGG · 540 kg)</option>
-                  <option value="TORO">Toro (1.8 UGG · 810 kg)</option>
-                </select>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <label style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                  N° de animales
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={rotationNumAnimales}
-                  onChange={e => setRotationNumAnimales(e.target.value)}
-                  placeholder="ej. 50"
-                  className="input-field"
-                  style={{ width: 120, paddingTop: 8, paddingBottom: 8 }}
-                />
-              </div>
-              <button
-                onClick={handleCalculateRotation}
-                disabled={!rotationNumAnimales || parseInt(rotationNumAnimales) <= 0 || rotationLoading}
-                className="action-btn action-btn--primary"
-                style={{ paddingTop: 10, paddingBottom: 10, minWidth: 120 }}
-              >
-                {rotationLoading ? 'Calculando…' : 'Calcular'}
-              </button>
-              {rotationRows.length > 0 && !rotationLoading && (
-                <div style={{ fontSize: 12, color: 'var(--color-text-muted)', alignSelf: 'center' }}>
-                  Consumo diario:{' '}
-                  <strong style={{ color: 'var(--color-text)' }}>
-                    {rotationTipoAnimal === 'NOVILLO' ? '58.5'
-                      : rotationTipoAnimal === 'NOVILLA' ? '43.2'
-                      : rotationTipoAnimal === 'VACA' ? '54.0'
-                      : '89.1'} kg/animal/día
-                  </strong>
-                </div>
-              )}
-            </div>
-
-            {/* Modal body */}
-            <div style={{ padding: '16px 24px 24px', overflow: 'auto' }}>
-              {rotationLoading ? (
-                <div style={{ textAlign: 'center', padding: 32, color: 'var(--color-text-muted)' }}>
-                  Calculando plan de rotación…
-                </div>
-              ) : rotationRows.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: 40, color: 'var(--color-text-muted)', fontSize: 14 }}>
-                  Ingresa el tipo y número de animales y haz clic en <strong>Calcular</strong>.
-                </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-                    <thead>
-                      <tr style={{ background: 'var(--color-surface-2)' }}>
-                        {['Potrero', 'Biomasa total', 'Estado edáfico', 'Carga animal', 'DO (días)', 'DD (días)'].map(h => (
-                          <th key={h} style={{
-                            padding: '10px 12px', textAlign: 'left', fontWeight: 600, fontSize: 12,
-                            borderBottom: '2px solid var(--color-border)',
-                            color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: 0.5,
-                          }}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rotationRows.map((row, idx) => (
-                        <tr key={row.parcelId} style={{
-                          background: idx % 2 === 0 ? 'transparent' : 'var(--color-surface-2)',
-                          borderBottom: '1px solid var(--color-border)',
-                        }}>
-                          {/* Potrero */}
-                          <td style={{ padding: '10px 12px', fontWeight: 600, color: 'var(--color-text)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                              <span style={{ width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                                background: STATUS_COLORS_HEX[row.parcelStatus] || '#888', display: 'inline-block' }} />
-                              {row.parcelName}
-                            </div>
-                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                              {row.areaHectares?.toFixed(2)} ha
-                            </div>
-                          </td>
-
-                          {/* Biomasa */}
-                          <td style={{ padding: '10px 12px' }}>
-                            {row.biomassKgPerHa != null ? (
-                              <>
-                                <span style={{ fontWeight: 600, color: getBiomassColor(row.biomassKgPerHa) }}>
-                                  {Math.round(row.biomassKgPerHa).toLocaleString()} kg/ha
-                                </span>
-                                {row.forrajeDisponible != null && (
-                                  <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                                    Total: {row.forrajeDisponible.toLocaleString()} kg
-                                  </div>
-                                )}
-                              </>
-                            ) : (
-                              <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>Sin datos NDVI</span>
-                            )}
-                          </td>
-
-                          {/* Estado edáfico */}
-                          <td style={{ padding: '10px 12px' }}>
-                            <span style={{ fontWeight: 600, color: estadoEdaficoColor(row.estadoEdafico, row.hasSensor) }}>
-                              {estadoEdaficoLabel(row.estadoEdafico, row.hasSensor)}
-                            </span>
-                          </td>
-
-                          {/* Carga animal */}
-                          <td style={{ padding: '10px 12px' }}>
-                            {row.cargaAnimal != null ? (
-                              <>
-                                <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{row.cargaAnimal.toLocaleString()} animales</span>
-                                <div style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 2 }}>
-                                  {row.cargaPerHa?.toLocaleString()} animales/ha
-                                </div>
-                              </>
-                            ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
-                          </td>
-
-                          {/* DO */}
-                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                            {row.diasOcupacion != null ? (
-                              <span style={{
-                                fontWeight: 700,
-                                color: row.diasOcupacion <= 3 ? 'var(--color-danger)'
-                                  : row.diasOcupacion <= 7 ? 'var(--color-warning)'
-                                  : 'var(--color-primary)',
-                              }}>
-                                {row.diasOcupacion}
-                              </span>
-                            ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
-                          </td>
-
-                          {/* DD */}
-                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                            {row.diasDescanso != null ? (
-                              <span style={{ fontWeight: 700, color: 'var(--color-text)' }}>{row.diasDescanso}</span>
-                            ) : <span style={{ color: 'var(--color-text-muted)' }}>—</span>}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-
-                  <div style={{ marginTop: 14, fontSize: 12, color: 'var(--color-text-muted)', lineHeight: 1.7, borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>
-                    <strong style={{ color: 'var(--color-text-secondary)' }}>Fórmulas:</strong>
-                    {' '}DO = Biomasa total ÷ (N° animales × Oferta FV deseada), donde Oferta FV = Consumo diario × 1.5.
-                    {' '}Carga = Biomasa total ÷ (Consumo diario × DO).
-                    {' '}DD = (N° potreros − 1) × DO.
-                    {' '}Ajuste edáfico: Franco‑arcilloso + Brachiaria humidicola → Seco −30 %, Encharcado −45 %.
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}

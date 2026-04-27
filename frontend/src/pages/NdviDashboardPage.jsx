@@ -1,16 +1,9 @@
 import { useState, useEffect, useMemo } from 'react'
-<<<<<<< HEAD
 import { useParams, useNavigate } from 'react-router-dom'
 import Spinner from '../components/Spinner'
 import OperationProgress from '../components/OperationProgress'
 import EmptyState from '../components/EmptyState'
 import TerrainTabs from '../components/TerrainTabs'
-=======
-import { useParams, useNavigate, Link } from 'react-router-dom'
-import Spinner from '../components/Spinner'
-import OperationProgress from '../components/OperationProgress'
-import EmptyState from '../components/EmptyState'
->>>>>>> origin/procesamiento
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine,
@@ -120,7 +113,6 @@ export default function NdviDashboardPage() {
 
   return (
     <div className="page-container">
-<<<<<<< HEAD
       <TerrainTabs
         terrainId={terrainId}
         farmId={dashboard?.farmId}
@@ -131,24 +123,6 @@ export default function NdviDashboardPage() {
 
       {/* Analysis controls */}
       <div className="ndvi-controls-panel">
-=======
-      {/* Header */}
-      <div className="page-header">
-        <div className="breadcrumb">
-          <Link to="/farms">Fincas</Link>
-          <span>›</span>
-          <span>{dashboard?.farmName}</span>
-          <span>›</span>
-          <Link to={`/terrains/${terrainId}/parcels`}>{dashboard?.terrainName}</Link>
-          <span>›</span>
-          <span>NDVI Analytics</span>
-        </div>
-        <div className="flex justify-between items-center">
-          <div>
-            <h2> Analíticas NDVI</h2>
-            <p>{dashboard?.terrainName} — {dashboard?.terrainAreaHa?.toFixed(2)} ha · {dashboard?.parcels?.length} potreros</p>
-          </div>
->>>>>>> origin/procesamiento
           <div className="ndvi-controls-stack">
             <div className="ndvi-analysis-controls">
               <div className="ndvi-date-field">
@@ -185,7 +159,7 @@ export default function NdviDashboardPage() {
                   onChange={(e) => setBiomassMethod(e.target.value)}
                   disabled={analyzing}
                 >
-                  <option value="DEFAULT">Por defecto (fórmula)</option>
+                  
                   <option value="SAMPLING">Por muestreo (calibración biomasa)</option>
                 </select>
               </div>
@@ -223,22 +197,19 @@ export default function NdviDashboardPage() {
               </button>
             </div>
           </div>
-<<<<<<< HEAD
-=======
-        </div>
->>>>>>> origin/procesamiento
         <p className="ndvi-analysis-steps">1) Fecha inicial &amp; final · 2) Método biomasa · 3) <strong>Ejecutar Análisis</strong></p>
         <OperationProgress
           active={analyzing}
           title="Analisis NDVI en curso"
-          expectedSeconds={180}
-          hint="Cada imagen Sentinel tarda entre 2 y 4 minutos en descargarse y procesarse."
+          expectedSeconds={480}
+          expectedRangeSeconds={{ min: 240, max: 480 }}
+          hint="Cada imagen Sentinel o planet lab tarda entre 4 y 8 minutos en descargarse y procesarse."
         />
       </div>
 
       {!hasData ? (
         <EmptyState
-          icon="🛰️"
+          icon=""
           title="Sin datos NDVI"
           description="Ejecuta un análisis para generar datos satelitales de este terreno."
         />
@@ -483,7 +454,7 @@ export default function NdviDashboardPage() {
                 <div className="card mb-24">
                   <div className="card-header">
                     <h3> Biomasa por Potrero</h3>
-                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>kg de materia seca / hectárea</span>
+                    <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>kg de forraje verde / hectárea</span>
                   </div>
                   <ResponsiveContainer width="100%" height={350}>
                     <BarChart data={comparison} layout="vertical">
@@ -499,37 +470,7 @@ export default function NdviDashboardPage() {
                   </ResponsiveContainer>
                 </div>
 
-                <div className="card">
-                  <h3 style={{ fontFamily: 'var(--font-display)', fontSize: 20, marginBottom: 16 }}>
-                    Interpretación de Biomasa
-                  </h3>
-                  <div className="ndvi-biomass-guide">
-                    <div className="guide-row">
-                      <span className="guide-bar" style={{ background: '#ef4444', width: '15%' }} />
-                      <span className="guide-label">{'< 1,000 kg/ha'}</span>
-                      <span className="guide-desc">Pasto degradado. Descanso urgente.</span>
-                    </div>
-                    <div className="guide-row">
-                      <span className="guide-bar" style={{ background: '#f59e0b', width: '30%' }} />
-                      <span className="guide-label">1,000 - 2,500 kg/ha</span>
-                      <span className="guide-desc">Pasto bajo. Pastoreo ligero o descanso.</span>
-                    </div>
-                    <div className="guide-row">
-                      <span className="guide-bar" style={{ background: '#84cc16', width: '55%' }} />
-                      <span className="guide-label">2,500 - 5,000 kg/ha</span>
-                      <span className="guide-desc">Buen estado. Apto para pastoreo.</span>
-                    </div>
-                    <div className="guide-row">
-                      <span className="guide-bar" style={{ background: '#4ade80', width: '80%' }} />
-                      <span className="guide-label">{'>5,000 kg/ha'}</span>
-                      <span className="guide-desc">Excelente. Alta capacidad de carga.</span>
-                    </div>
-                  </div>
-                  <p style={{ fontSize: 12, color: 'var(--color-text-muted)', marginTop: 16 }}>
-                    Modelo: biomasa (kg MS/ha) = max(0, (NDVI - 0.1) × 12,000). Basado en literatura de pasturas
-                    tropicales Brachiaria/Estrella en el trópico colombiano.
-                  </p>
-                </div>
+                
               </div>
             )}
           </div>

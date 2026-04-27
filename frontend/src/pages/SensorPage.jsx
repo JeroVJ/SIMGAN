@@ -355,7 +355,8 @@ export default function SensorPage() {
                   <button
                     onClick={handleClearMarker}
                     style={{
-                      background: 'var(--color-bg-secondary)',
+                      background: '#ef4444', 
+                      color: 'white',
                       border: '1px solid var(--color-border)',
                       padding: '6px 12px',
                       borderRadius: 'var(--radius-sm)',
@@ -440,7 +441,7 @@ export default function SensorPage() {
                         fontSize: 16
                       }}
                     >
-                      🗑️
+                      Eliminar
                     </button>
                   </div>
                 </div>

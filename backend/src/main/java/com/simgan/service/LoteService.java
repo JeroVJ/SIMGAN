@@ -63,6 +63,30 @@ public class LoteService {
         Lote lote = loteRepository.findById(loteId)
                 .orElseThrow(() -> new RuntimeException("Lote no encontrado"));
 
+        if (req.getGanados() != null && !req.getGanados().isEmpty()) {
+            Map<Long, Double> pesosPorGanado = req.getGanados().stream()
+                    .filter(item -> item.getGanadoId() != null)
+                    .collect(Collectors.toMap(
+                            LoteDto.CloseLoteGanadoRequest::getGanadoId,
+                            LoteDto.CloseLoteGanadoRequest::getPesoActual,
+                            (left, right) -> right,
+                            LinkedHashMap::new
+                    ));
+
+            List<Ganado> ganados = ganadoRepository.findByLoteIdOrderByNumeracion(loteId);
+            boolean pesosActualizados = false;
+            for (Ganado ganado : ganados) {
+                if (!pesosPorGanado.containsKey(ganado.getId())) continue;
+                Double pesoActual = pesosPorGanado.get(ganado.getId());
+                if (pesoActual == null) continue;
+                ganado.setPesoActual(pesoActual);
+                pesosActualizados = true;
+            }
+            if (pesosActualizados) {
+                ganadoRepository.saveAll(ganados);
+            }
+        }
+
         // Unassign from current parcel
         if (lote.getCurrentParcel() != null) {
             unassignFromCurrentParcel(lote);

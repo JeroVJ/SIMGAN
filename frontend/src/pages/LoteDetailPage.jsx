@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import toast from 'react-hot-toast'
+import { useLocation, useParams, useNavigate, Link } from 'react-router-dom'
 import { useLote } from '../hooks'
 import Spinner from '../components/Spinner'
 import EmptyState from '../components/EmptyState'
@@ -16,19 +17,21 @@ const TIPO_COLORS = {
 export default function LoteDetailPage() {
   const { loteId } = useParams()
   const navigate = useNavigate()
-  const { lote, loading, addGanado, addGanadoBatch, updateGanado, deleteGanado } = useLote(loteId)
+  const location = useLocation()
+  const { lote, loading, addGanado, addGanadoBatch, updateGanado, deleteGanado, closeLote } = useLote(loteId)
 
   const [activeTab, setActiveTab]         = useState('ganado')
   const [showAddForm, setShowAddForm]     = useState(false)
   const [showBatchForm, setShowBatchForm] = useState(false)
   const [editingId, setEditingId]         = useState(null)
-  const [editPeso, setEditPeso]           = useState('')
   const [editNumeracion, setEditNumeracion] = useState('')
   const [editTipo, setEditTipo]           = useState('')
   const [confirm, setConfirm]             = useState(null)
+  const [closePesos, setClosePesos]       = useState({})
+  const [closing, setClosing]             = useState(false)
 
   const [addForm, setAddForm] = useState({
-    numeracion: '', tipo: 'NOVILLO', pesoInicial: '', pesoActual: '',
+    numeracion: '', tipo: 'NOVILLO', pesoInicial: '',
   })
   const [batchForm, setBatchForm] = useState({
     tipo: 'NOVILLO', prefix: '', startNum: 1, count: 5, pesoInicial: '',
@@ -42,9 +45,9 @@ export default function LoteDetailPage() {
         numeracion: addForm.numeracion,
         tipo: addForm.tipo,
         pesoInicial: Number(addForm.pesoInicial),
-        pesoActual: addForm.pesoActual ? Number(addForm.pesoActual) : Number(addForm.pesoInicial),
+        pesoActual: Number(addForm.pesoInicial),
       })
-      setAddForm({ numeracion: '', tipo: 'NOVILLO', pesoInicial: '', pesoActual: '' })
+      setAddForm({ numeracion: '', tipo: 'NOVILLO', pesoInicial: '' })
       setShowAddForm(false)
     } catch { /* toast shown in hook */ }
   }
@@ -66,16 +69,39 @@ export default function LoteDetailPage() {
 
   function startEdit(g) {
     setEditingId(g.id)
-    setEditPeso(String(g.pesoActual))
     setEditNumeracion(g.numeracion)
     setEditTipo(g.tipo)
   }
 
   async function handleSaveEdit(ganadoId) {
     try {
-      await updateGanado(ganadoId, { numeracion: editNumeracion, tipo: editTipo, pesoActual: Number(editPeso) })
+      await updateGanado(ganadoId, { numeracion: editNumeracion, tipo: editTipo })
       setEditingId(null)
     } catch { /* toast shown in hook */ }
+  }
+
+  async function handleConfirmClose() {
+    const invalidPeso = ganados.some(g => {
+      const value = closePesos[g.id]
+      return value == null || value === '' || Number.isNaN(Number(value))
+    })
+    if (invalidPeso) {
+      toast.error('Ingresa el peso actual de todos los animales antes de cerrar el lote')
+      return
+    }
+
+    setClosing(true)
+    try {
+      await closeLote({
+        fechaSalida: closeDraft.fechaSalida,
+        ganados: ganados.map(g => ({
+          ganadoId: g.id,
+          pesoActual: Number(closePesos[g.id]),
+        })),
+      })
+      navigate(`/terrains/${lote.terrainId}/lotes`)
+    } catch { /* toast shown in hook */ }
+    finally { setClosing(false) }
   }
 
   function handleDeleteGanado(g) {
@@ -89,17 +115,31 @@ export default function LoteDetailPage() {
     })
   }
 
-  if (loading) return <Spinner page label="Cargando lote..." />
-  if (!lote) { navigate(-1); return null }
+  const ganados = lote?.ganados || []
+  const isClosed = !!lote?.fechaSalida
+  const closeDraft = useMemo(() => {
+    const state = location.state
+    return !isClosed && state?.closeDraft?.fechaSalida ? state.closeDraft : null
+  }, [isClosed, location.state])
+  const isCloseMode = !!closeDraft
 
-  const ganados = lote.ganados || []
-  const isClosed = !!lote.fechaSalida
+  useEffect(() => {
+    if (!isCloseMode) return
+    setClosePesos(Object.fromEntries(ganados.map(g => [g.id, g.pesoActual != null ? String(g.pesoActual) : ''])))
+    setActiveTab('ganado')
+    setShowAddForm(false)
+    setShowBatchForm(false)
+    setEditingId(null)
+  }, [isCloseMode, ganados])
 
   const tipoCount = {}
   TIPOS.forEach(t => { tipoCount[t] = ganados.filter(g => g.tipo === t).length })
   const totalPesoInicial = ganados.reduce((s, g) => s + (g.pesoInicial || 0), 0)
   const totalPesoActual = ganados.reduce((s, g) => s + (g.pesoActual || 0), 0)
   const totalGanancia = totalPesoActual - totalPesoInicial
+
+  if (loading) return <Spinner page label="Cargando lote..." />
+  if (!lote) { navigate(-1); return null }
 
   return (
     <div className="page-container">
@@ -140,6 +180,27 @@ export default function LoteDetailPage() {
         </button>
       </div>
 
+      {isCloseMode && (
+        <div className="card" style={{ marginBottom: 20, borderColor: 'var(--color-warning)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={{ margin: '0 0 6px', color: 'var(--color-warning)' }}>Registrar peso actual para salida</h3>
+              <p style={{ margin: 0, color: 'var(--color-text-secondary)', fontSize: 13 }}>
+                Fecha de salida: <strong style={{ color: 'var(--color-text)' }}>{closeDraft.fechaSalida}</strong>. Completa los pesos actuales y luego confirma el cierre.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="action-btn action-btn--primary" onClick={handleConfirmClose} disabled={closing || ganados.length === 0}>
+                {closing ? 'Cerrando...' : 'Guardar pesos y cerrar lote'}
+              </button>
+              <button className="action-btn" onClick={() => navigate(`/terrains/${lote.terrainId}/lotes`)} disabled={closing}>
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Summary Cards */}
       <div className="lote-summary-grid">
         <div className="summary-card">
@@ -177,7 +238,7 @@ export default function LoteDetailPage() {
 
       {/* Tabs */}
       <div className="ndvi-tabs" style={{ marginBottom: 20 }}>
-        {[{ key: 'ganado', label: 'Ganado' }, { key: 'historial', label: '🔄 Historial Terrenos' }].map(tab => (
+        {[{ key: 'ganado', label: 'Ganado' }, { key: 'historial', label: ' Historial Terrenos' }].map(tab => (
           <button
             key={tab.key}
             className={`ndvi-tab${activeTab === tab.key ? ' ndvi-tab--active' : ''}`}
@@ -191,7 +252,7 @@ export default function LoteDetailPage() {
       {/* TAB: Ganado */}
       {activeTab === 'ganado' && (
         <div>
-          {!isClosed && (
+          {!isClosed && !isCloseMode && (
             <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
               <button className="action-btn action-btn--primary action-btn--small"
                 onClick={() => { setShowAddForm(!showAddForm); setShowBatchForm(false) }}>
@@ -226,12 +287,6 @@ export default function LoteDetailPage() {
                   <input className="input-field" type="number" step="0.1" value={addForm.pesoInicial}
                     onChange={e => setAddForm({ ...addForm, pesoInicial: e.target.value })}
                     placeholder="350" style={{ width: 110 }} />
-                </div>
-                <div>
-                  <label className="field-label">Peso Actual (kg)</label>
-                  <input className="input-field" type="number" step="0.1" value={addForm.pesoActual}
-                    onChange={e => setAddForm({ ...addForm, pesoActual: e.target.value })}
-                    placeholder="Igual al inicial" style={{ width: 130 }} />
                 </div>
                 <button type="submit" className="action-btn action-btn--primary action-btn--small">Agregar</button>
                 <button type="button" className="action-btn action-btn--small" onClick={() => setShowAddForm(false)}>Cancelar</button>
@@ -315,15 +370,12 @@ export default function LoteDetailPage() {
                             </select>
                           </td>
                           <td>{g.pesoInicial}</td>
-                          <td>
-                            <input className="input-field input-sm" type="number" step="0.1"
-                              value={editPeso} onChange={e => setEditPeso(e.target.value)} style={{ width: 90 }} />
-                          </td>
-                          <td style={{ color: (Number(editPeso) - g.pesoInicial) >= 0 ? 'var(--color-positive)' : 'var(--color-negative)' }}>
-                            {(Number(editPeso) - g.pesoInicial).toFixed(1)}
+                          <td style={{ fontWeight: 600 }}>{g.pesoActual}</td>
+                          <td style={{ color: g.gananciaPeso > 0 ? 'var(--color-positive)' : g.gananciaPeso < 0 ? 'var(--color-negative)' : 'var(--color-text-secondary)' }}>
+                            {g.gananciaPeso > 0 ? '+' : ''}{g.gananciaPeso?.toFixed(1)}
                           </td>
                           <td>
-                            <button className="action-btn action-btn--primary action-btn--small" onClick={() => handleSaveEdit(g.id)}>💾</button>
+                            <button className="action-btn action-btn--primary action-btn--small" onClick={() => handleSaveEdit(g.id)}>Guardar</button>
                             <button className="action-btn action-btn--small" onClick={() => setEditingId(null)} style={{ marginLeft: 4 }}>✕</button>
                           </td>
                         </>
@@ -334,15 +386,33 @@ export default function LoteDetailPage() {
                             <span style={{ color: TIPO_COLORS[g.tipo] }}>{g.tipo}</span>
                           </td>
                           <td>{g.pesoInicial}</td>
-                          <td style={{ fontWeight: 600 }}>{g.pesoActual}</td>
-                          <td style={{ color: g.gananciaPeso > 0 ? 'var(--color-positive)' : g.gananciaPeso < 0 ? 'var(--color-negative)' : 'var(--color-text-secondary)', fontWeight: 500 }}>
-                            {g.gananciaPeso > 0 ? '+' : ''}{g.gananciaPeso?.toFixed(1)}
+                          <td>
+                            {isCloseMode ? (
+                              <input
+                                className="input-field input-sm"
+                                type="number"
+                                step="0.1"
+                                value={closePesos[g.id] ?? ''}
+                                onChange={e => setClosePesos(prev => ({ ...prev, [g.id]: e.target.value }))}
+                                style={{ width: 100 }}
+                              />
+                            ) : (
+                              <span style={{ fontWeight: 600 }}>{g.pesoActual}</span>
+                            )}
+                          </td>
+                          <td style={{ color: ((isCloseMode ? Number(closePesos[g.id] ?? g.pesoActual) : g.gananciaPeso) > 0) ? 'var(--color-positive)' : ((isCloseMode ? Number(closePesos[g.id] ?? g.pesoActual) - g.pesoInicial : g.gananciaPeso) < 0 ? 'var(--color-negative)' : 'var(--color-text-secondary)'), fontWeight: 500 }}>
+                            {(() => {
+                              const ganancia = isCloseMode
+                                ? Number(closePesos[g.id] ?? g.pesoActual) - g.pesoInicial
+                                : g.gananciaPeso
+                              return `${ganancia > 0 ? '+' : ''}${ganancia?.toFixed(1)}`
+                            })()}
                           </td>
                           <td>
-                            {!isClosed && (
+                            {!isClosed && !isCloseMode && (
                               <>
-                                <button className="action-btn action-btn--small" onClick={() => startEdit(g)}>✏️</button>
-                                <button className="action-btn action-btn--danger action-btn--small" onClick={() => handleDeleteGanado(g)} style={{ marginLeft: 4 }}>🗑️</button>
+                                <button className="action-btn action-btn--small" onClick={() => startEdit(g)}>Editar</button>
+                                <button className="action-btn action-btn--danger action-btn--small" onClick={() => handleDeleteGanado(g)} style={{ marginLeft: 4 }}>Eliminar</button>
                               </>
                             )}
                           </td>
@@ -355,9 +425,14 @@ export default function LoteDetailPage() {
                   <tr style={{ fontWeight: 600, borderTop: `2px solid var(--color-border)` }}>
                     <td colSpan={3} style={{ textAlign: 'right', color: 'var(--color-text-secondary)' }}>Totales ({ganados.length} cabezas):</td>
                     <td>{totalPesoInicial.toFixed(1)}</td>
-                    <td>{totalPesoActual.toFixed(1)}</td>
-                    <td style={{ color: totalGanancia >= 0 ? 'var(--color-positive)' : 'var(--color-negative)' }}>
-                      {totalGanancia >= 0 ? '+' : ''}{totalGanancia.toFixed(1)}
+                    <td>{(isCloseMode ? ganados.reduce((s, g) => s + Number(closePesos[g.id] ?? g.pesoActual ?? 0), 0) : totalPesoActual).toFixed(1)}</td>
+                    <td style={{ color: (isCloseMode ? ganados.reduce((s, g) => s + (Number(closePesos[g.id] ?? g.pesoActual ?? 0) - (g.pesoInicial || 0)), 0) : totalGanancia) >= 0 ? 'var(--color-positive)' : 'var(--color-negative)' }}>
+                      {(() => {
+                        const gananciaTotal = isCloseMode
+                          ? ganados.reduce((s, g) => s + (Number(closePesos[g.id] ?? g.pesoActual ?? 0) - (g.pesoInicial || 0)), 0)
+                          : totalGanancia
+                        return `${gananciaTotal >= 0 ? '+' : ''}${gananciaTotal.toFixed(1)}`
+                      })()}
                     </td>
                     <td></td>
                   </tr>
@@ -373,7 +448,7 @@ export default function LoteDetailPage() {
         <div>
           {(!lote.parcelHistory || lote.parcelHistory.length === 0) ? (
             <EmptyState
-              icon="🔄"
+              icon=""
               title="Sin historial de terrenos"
               description="Asigna un potrero al lote para comenzar el seguimiento."
               card={false}

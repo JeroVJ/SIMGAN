@@ -25,8 +25,6 @@ public class ParcelController {
         return ResponseEntity.status(HttpStatus.CREATED).body(parcelService.create(request));
     }
 
-<<<<<<< HEAD
-=======
     @PutMapping("/{id}")
     public ResponseEntity<ParcelDto.Response> update(
             @PathVariable Long id,
@@ -34,7 +32,6 @@ public class ParcelController {
         return ResponseEntity.ok(parcelService.update(id, request));
     }
 
->>>>>>> origin/procesamiento
     @GetMapping("/terrain/{terrainId}")
     public ResponseEntity<List<ParcelDto.Response>> findByTerrainId(@PathVariable Long terrainId) {
         return ResponseEntity.ok(parcelService.findByTerrainId(terrainId));

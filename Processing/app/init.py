@@ -4,11 +4,7 @@ import sys
 from fastapi import FastAPI
 
 from app.api.routes import router
-<<<<<<< HEAD
-from app.config import settings
-=======
 from app.Config import settings
->>>>>>> origin/procesamiento
 
 
 def _configure_logging() -> logging.Logger:

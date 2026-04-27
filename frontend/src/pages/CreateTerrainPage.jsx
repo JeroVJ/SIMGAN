@@ -7,10 +7,6 @@ import { farmApi, terrainApi } from '../services/api'
 import { useFarm } from '../hooks'
 import toast from 'react-hot-toast'
 import L from 'leaflet'
-<<<<<<< HEAD
-=======
-import Spinner from '../components/Spinner'
->>>>>>> origin/procesamiento
 
 // Fix Leaflet default marker icons
 delete L.Icon.Default.prototype._getIconUrl

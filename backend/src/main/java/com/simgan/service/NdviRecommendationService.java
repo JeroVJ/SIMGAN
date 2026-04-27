@@ -109,9 +109,6 @@ public class NdviRecommendationService {
         Optional<NdviRecord> latestOpt = ndviRecordRepository.findFirstByParcelIdOrderByCaptureDateDesc(parcel.getId());
         List<NdviRecord> history = ndviRecordRepository.findByParcelIdOrderByCaptureDate(parcel.getId());
 
-        // Use calibration model to compute biomass from NDVI if available
-        Optional<BiomassCalibrationModel> calibModel = biomassModelRepository.findByParcelId(parcel.getId());
-
         NdviDto.ParcelSummary.ParcelSummaryBuilder builder = NdviDto.ParcelSummary.builder()
                 .parcelId(parcel.getId())
                 .parcelName(parcel.getName())
@@ -123,13 +120,7 @@ public class NdviRecommendationService {
 
         if (latestOpt.isPresent()) {
             NdviRecord latest = latestOpt.get();
-            double biomass;
-            if (calibModel.isPresent() && calibModel.get().getCoefficientA() != null) {
-                biomass = Math.max(0.0, calibModel.get().getCoefficientA() * latest.getMeanNdvi());
-                biomass = Math.round(biomass * 100.0) / 100.0;
-            } else {
-                biomass = latest.getBiomassKgPerHa() != null ? latest.getBiomassKgPerHa() : Math.max(0, (latest.getMeanNdvi() - 0.1) * 12000);
-            }
+            double biomass = resolveCurrentBiomassKgPerHa(parcel, latest);
             latestBiomass = biomass;
             builder.latestNdvi(latest.getMeanNdvi())
                     .latestDate(latest.getCaptureDate().format(FMT))
@@ -207,13 +198,7 @@ public class NdviRecommendationService {
             if (latest.isEmpty()) continue;
 
             double ndvi = latest.get().getMeanNdvi();
-            double biomass;
-            Optional<BiomassCalibrationModel> cm = biomassModelRepository.findByParcelId(parcel.getId());
-            if (cm.isPresent() && cm.get().getCoefficientA() != null) {
-                biomass = Math.max(0.0, cm.get().getCoefficientA() * ndvi);
-            } else {
-                biomass = latest.get().getBiomassKgPerHa() != null ? latest.get().getBiomassKgPerHa() : 0;
-            }
+            double biomass = resolveCurrentBiomassKgPerHa(parcel, latest.get());
 
             double[] thresholds = getThresholds(parcel.getId(), terrainId);
             double parcelAlertThreshold = thresholds[1];
@@ -289,7 +274,7 @@ public class NdviRecommendationService {
         return records.stream().map(r -> NdviDto.TimelinePoint.builder()
                 .date(r.getCaptureDate().format(FMT))
                 .meanNdvi(r.getMeanNdvi())
-                .biomassKgPerHa(r.getBiomassKgPerHa())
+            .biomassKgPerHa(resolveCurrentBiomassKgPerHa(r.getParcel(), r))
                 .vegetationCoverPercent(r.getVegetationCoverPercent())
                 .parcelName(r.getParcel() != null ? r.getParcel().getName() : null)
                 .parcelId(r.getParcel() != null ? r.getParcel().getId() : null)
@@ -310,7 +295,7 @@ public class NdviRecommendationService {
         if (latest == null) return "Sin datos NDVI. Ejecutar análisis satelital.";
 
         double ndvi = latest.getMeanNdvi();
-        double biomass = latest.getBiomassKgPerHa() != null ? latest.getBiomassKgPerHa() : 0;
+        double biomass = resolveCurrentBiomassKgPerHa(parcel, latest);
 
         double[] thresholds = getThresholds(parcel.getId(), parcel.getTerrain().getId());
         double optim = thresholds[0];
@@ -338,6 +323,22 @@ public class NdviRecommendationService {
         return String.format(
                 " Pasto por debajo del umbral de alerta (%.2f < %.2f). El pasto está sobrepastoreado y degradado. Biomasa: %.0f kg/ha.",
                 ndvi, lower, biomass);
+    }
+
+    private double resolveCurrentBiomassKgPerHa(Parcel parcel, NdviRecord record) {
+        if (record == null) return 0.0;
+
+        Optional<BiomassCalibrationModel> calibModel = biomassModelRepository.findByParcelId(parcel.getId());
+        if (calibModel.isPresent() && calibModel.get().getCoefficientA() != null && record.getMeanNdvi() != null) {
+            double biomass = Math.max(0.0, calibModel.get().getCoefficientA() * record.getMeanNdvi());
+            return Math.round(biomass * 100.0) / 100.0;
+        }
+
+        if (record.getBiomassKgPerHa() != null) {
+            return record.getBiomassKgPerHa();
+        }
+
+        return record.getMeanNdvi() != null ? Math.max(0, (record.getMeanNdvi() - 0.1) * 12000) : 0.0;
     }
 
     /**

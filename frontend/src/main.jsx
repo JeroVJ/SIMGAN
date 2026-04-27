@@ -8,10 +8,7 @@ import './components/components.css'
 import './styles/phase4.css'
 import './styles/phase6.css'
 import './styles/phase7.css'
-<<<<<<< HEAD
 import './styles/overhaul.css'
-=======
->>>>>>> origin/procesamiento
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

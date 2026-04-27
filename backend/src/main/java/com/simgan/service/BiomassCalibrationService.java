@@ -20,6 +20,7 @@ public class BiomassCalibrationService {
 
     private final BiomassCalibrationPointRepository pointRepository;
     private final BiomassCalibrationModelRepository modelRepository;
+    private final NdviRecordRepository ndviRecordRepository;
     private final NdviCalibrationRepository ndviCalibrationRepository;
     private final TerrainRepository terrainRepository;
     private final ParcelRepository parcelRepository;
@@ -254,6 +255,7 @@ public class BiomassCalibrationService {
         model.setCalibrationDate(calibrationDate);
         model.setFormula(String.format("Biomasa = %.2f × NDVI", a));
         model = modelRepository.save(model);
+        backfillParcelNdviBiomass(parcelId, model);
 
         log.info("Calibración biomasa completada parcelId={} a={} R²={} muestras={}",
             parcelId, a, rSquared, pairs.size());
@@ -337,6 +339,31 @@ public class BiomassCalibrationService {
                 .calibrationDate(model.getCalibrationDate())
                 .formula(model.getFormula())
                 .build();
+    }
+
+    private void backfillParcelNdviBiomass(Long parcelId, BiomassCalibrationModel model) {
+        if (parcelId == null || model == null || model.getCoefficientA() == null) return;
+
+        List<NdviRecord> records = ndviRecordRepository.findByParcelIdOrderByCaptureDate(parcelId);
+        if (records.isEmpty()) return;
+
+        int updated = 0;
+        for (NdviRecord record : records) {
+            if (record.getMeanNdvi() == null) continue;
+
+            double biomass = Math.max(0.0, model.getCoefficientA() * record.getMeanNdvi());
+            double roundedBiomass = Math.round(biomass * 100.0) / 100.0;
+            if (!Objects.equals(record.getBiomassKgPerHa(), roundedBiomass)) {
+                record.setBiomassKgPerHa(roundedBiomass);
+                updated++;
+            }
+        }
+
+        if (updated > 0) {
+            ndviRecordRepository.saveAll(records);
+            log.info("Biomasa NDVI recalculada parcelId={} registrosActualizados={} coefficientA={}",
+                    parcelId, updated, model.getCoefficientA());
+        }
     }
 
 }

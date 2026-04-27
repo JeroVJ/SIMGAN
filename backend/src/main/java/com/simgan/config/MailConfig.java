@@ -15,18 +15,18 @@ public class MailConfig {
 
     @Bean
     @ConditionalOnMissingBean(JavaMailSender.class)
-    @ConditionalOnProperty(name = "MAIL_ENABLED", havingValue = "true")
+    @ConditionalOnProperty(name = "app.mail.enabled", havingValue = "true")
     public JavaMailSender javaMailSender(
-            @Value("${MAIL_HOST}") String host,
-            @Value("${MAIL_PORT:587}") int port,
-            @Value("${MAIL_USERNAME}") String username,
-            @Value("${MAIL_PASSWORD}") String password,
-            @Value("${MAIL_PROTOCOL:smtp}") String protocol,
-            @Value("${MAIL_SMTP_AUTH:true}") boolean smtpAuth,
-            @Value("${MAIL_SMTP_STARTTLS_ENABLE:true}") boolean startTls,
-            @Value("${MAIL_SMTP_CONNECTION_TIMEOUT:5000}") int connectionTimeout,
-            @Value("${MAIL_SMTP_TIMEOUT:5000}") int timeout,
-            @Value("${MAIL_SMTP_WRITE_TIMEOUT:5000}") int writeTimeout
+            @Value("${app.mail.host}") String host,
+            @Value("${app.mail.port}") int port,
+            @Value("${app.mail.username}") String username,
+            @Value("${app.mail.password}") String password,
+            @Value("${app.mail.protocol}") String protocol,
+            @Value("${app.mail.smtp.auth}") boolean smtpAuth,
+            @Value("${app.mail.smtp.starttls-enable}") boolean startTls,
+            @Value("${app.mail.smtp.connection-timeout}") int connectionTimeout,
+            @Value("${app.mail.smtp.timeout}") int timeout,
+            @Value("${app.mail.smtp.write-timeout}") int writeTimeout
     ) {
         JavaMailSenderImpl mailSender = new JavaMailSenderImpl();
         mailSender.setHost(host);
