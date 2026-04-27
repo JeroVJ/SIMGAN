@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS farms (
 -- Terrains
 CREATE TABLE IF NOT EXISTS terrains (
     id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(255),
+    name VARCHAR(255) NOT NULL,
     geo_json TEXT NOT NULL,
     area_sq_meters DOUBLE PRECISION,
     area_hectares DOUBLE PRECISION,
@@ -70,7 +70,7 @@ ALTER TABLE terrains
 -- Parcels
 CREATE TABLE IF NOT EXISTS parcels (
     id BIGSERIAL PRIMARY KEY,
-    name VARCHAR(255),
+    name VARCHAR(255) NOT NULL,
     geo_json TEXT NOT NULL,
     area_sq_meters DOUBLE PRECISION,
     area_hectares DOUBLE PRECISION,
@@ -86,6 +86,12 @@ ALTER TABLE IF EXISTS parcels
     ADD COLUMN IF NOT EXISTS dias_ocupacion DOUBLE PRECISION,
     ADD COLUMN IF NOT EXISTS dias_descanso DOUBLE PRECISION,
     ADD COLUMN IF NOT EXISTS rotation_order INTEGER;
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_terrains_farm_name_ci
+    ON terrains (farm_id, LOWER(TRIM(name)));
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_parcels_terrain_name_ci
+    ON parcels (terrain_id, LOWER(TRIM(name)));
 
 --Sensors
 

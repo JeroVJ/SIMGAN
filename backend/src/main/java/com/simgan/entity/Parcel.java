@@ -9,7 +9,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "parcels")
+@Table(
+    name = "parcels",
+    uniqueConstraints = {
+        @UniqueConstraint(name = "uk_parcel_terrain_name", columnNames = {"terrain_id", "name"})
+    }
+)
 @Getter @Setter
 @NoArgsConstructor @AllArgsConstructor
 @Builder
@@ -19,6 +24,7 @@ public class Parcel {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @Column(nullable = false)
     private String name;
 
     @Column(columnDefinition = "TEXT", nullable = false)

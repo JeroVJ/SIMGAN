@@ -26,11 +26,12 @@ public class FarmService {
             throw new IllegalArgumentException("El nombre de la finca es obligatorio");
         }
 
-        Ganadero ganadero = requireGanadero(email);
-
-        if (farmRepository.existsByNormalizedNameAndGanaderoId(normalizedName, ganadero.getId())) {
-            throw new IllegalArgumentException("Ya tienes una finca registrada con ese nombre");
+        if (farmRepository.existsByNormalizedName(normalizedName)) {
+            throw new IllegalArgumentException("La finca ya existe");
         }
+
+        Ganadero ganadero = ganaderoRepository.findById(request.getGanaderoId())
+                .orElseThrow(() -> new RuntimeException("Ganadero no encontrado con id: " + request.getGanaderoId()));
 
         Farm farm = Farm.builder()
                 .name(normalizedName)
@@ -42,7 +43,7 @@ public class FarmService {
                 .isHomogeneous(request.getIsHomogeneous() != null ? request.getIsHomogeneous() : false)
                 .soilType(request.getSoilType())
                 .pastureType(request.getPastureType())
-                .iotEnabled(request.getIotEnabled() != null ? request.getIotEnabled() : true)
+            .iotEnabled(request.getIotEnabled() != null ? request.getIotEnabled() : true)
                 .build();
 
         farm = farmRepository.save(farm);

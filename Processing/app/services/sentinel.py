@@ -13,7 +13,11 @@ from rasterio.errors import RasterioIOError
 from shapely.geometry import Point
 from shapely.ops import transform as shapely_transform
 
+<<<<<<< HEAD
 from app.config import settings
+=======
+from app.Config import settings
+>>>>>>> origin/procesamiento
 from app.models import ProcessedParcelNdviResponse, SentinelProcessRequest, SentinelProcessResponse, PointNdviRequest, PointNdviResponse, PointNdviResult
 from app.services.common import (
     build_empty_result,

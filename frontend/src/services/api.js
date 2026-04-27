@@ -1,5 +1,6 @@
 import axios from 'axios'
 
+<<<<<<< HEAD
 // In dev: use the relative '/api' path (vite proxies to backend).
 // In prod: set VITE_API_URL to your backend base URL, e.g.
 //   https://simgan-api.onrender.com/api
@@ -7,6 +8,10 @@ const baseURL = import.meta.env.VITE_API_URL || '/api'
 
 const api = axios.create({
   baseURL,
+=======
+const api = axios.create({
+  baseURL: '/api',
+>>>>>>> origin/procesamiento
   headers: { 'Content-Type': 'application/json' }
 })
 
@@ -39,9 +44,13 @@ export const authApi = {
   me: () => api.get('/auth/me').then(r => r.data),
   logout: () => api.post('/auth/logout').then(r => r.data),
   getSessions: () => api.get('/auth/sessions').then(r => r.data),
+<<<<<<< HEAD
   revokeAll: () => api.post('/auth/revoke-all').then(r => r.data),
   forgotPassword: (email) => api.post('/auth/forgot-password', { email }).then(r => r.data),
   resetPassword: (token, password) => api.post('/auth/reset-password', { token, password }).then(r => r.data),
+=======
+  revokeAll: () => api.post('/auth/revoke-all').then(r => r.data)
+>>>>>>> origin/procesamiento
 }
 
 // ===== FARMS =====
@@ -57,13 +66,24 @@ export const terrainApi = {
   getByFarm: (farmId) => api.get(`/terrains/farm/${farmId}`).then(r => r.data),
   getById: (id) => api.get(`/terrains/${id}`).then(r => r.data),
   create: (data) => api.post('/terrains', data).then(r => r.data),
+<<<<<<< HEAD
+=======
+  update: (id, data) => api.put(`/terrains/${id}`, data).then(r => r.data),
+>>>>>>> origin/procesamiento
   delete: (id) => api.delete(`/terrains/${id}`)
 }
 
 // ===== PARCELS =====
 export const parcelApi = {
+<<<<<<< HEAD
   getByTerrain: (terrainId) => api.get(`/parcels/terrain/${terrainId}`).then(r => r.data),
   create: (data) => api.post('/parcels', data).then(r => r.data),
+=======
+  getById: (id) => api.get(`/parcels/${id}`).then(r => r.data),
+  getByTerrain: (terrainId) => api.get(`/parcels/terrain/${terrainId}`).then(r => r.data),
+  create: (data) => api.post('/parcels', data).then(r => r.data),
+  update: (id, data) => api.put(`/parcels/${id}`, data).then(r => r.data),
+>>>>>>> origin/procesamiento
   updateStatus: (id, status) => api.patch(`/parcels/${id}/status`, { status }).then(r => r.data),
   delete: (id) => api.delete(`/parcels/${id}`),
   getRotationPlan: (terrainId, loteId, tipoAnimal, numeroAnimales) =>

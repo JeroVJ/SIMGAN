@@ -6,4 +6,7 @@ export { useCalibration } from './useCalibration'
 export { useBiomassCalibration } from './useBiomassCalibration'
 export { useLote }        from './useLote'
 export { useSensor }      from './useSensor'
+<<<<<<< HEAD
 export { useNavContext }  from './useNavContext'
+=======
+>>>>>>> origin/procesamiento

@@ -3,10 +3,15 @@ package com.simgan.service;
 import com.simgan.dto.ParcelDto;
 import com.simgan.entity.*;
 import com.simgan.repository.*;
+<<<<<<< HEAD
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.geojson.GeoJsonReader;
+=======
+import com.simgan.util.GeoJsonUtils;
+import lombok.RequiredArgsConstructor;
+>>>>>>> origin/procesamiento
 import org.springframework.stereotype.Service;
 
 import java.text.Normalizer;
@@ -17,7 +22,10 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+<<<<<<< HEAD
 @Slf4j
+=======
+>>>>>>> origin/procesamiento
 public class ParcelService {
 
     private final ParcelRepository parcelRepository;
@@ -28,14 +36,29 @@ public class ParcelService {
     private final SensorRepository sensorRepository;
     private final ClasificacionSensorRepository clasificacionSensorRepository;
 
+    private static String normalizeName(String name, String fieldLabel) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException(fieldLabel + " es obligatorio.");
+        }
+        return name.trim();
+    }
+
     public ParcelDto.Response create(ParcelDto.CreateRequest request) {
         Terrain terrain = terrainRepository.findById(request.getTerrainId())
                 .orElseThrow(() -> new RuntimeException("Terreno no encontrado con id: " + request.getTerrainId()));
 
-        ensureParcelInsideTerrain(request.getGeoJson(), terrain.getGeoJson());
+        String normalizedName = normalizeName(request.getName(), "El nombre del potrero");
+        if (parcelRepository.existsByTerrainIdAndNameIgnoreCase(terrain.getId(), normalizedName)) {
+            throw new IllegalArgumentException(
+                    "Ya existe un potrero con el nombre '" + normalizedName + "' en este terreno.");
+        }
+
+        if (!GeoJsonUtils.covers(terrain.getGeoJson(), request.getGeoJson())) {
+            throw new IllegalArgumentException("El potrero debe quedar completamente dentro del terreno.");
+        }
 
         Parcel parcel = Parcel.builder()
-                .name(request.getName())
+                .name(normalizedName)
                 .geoJson(request.getGeoJson())
                 .areaSqMeters(request.getAreaSqMeters())
                 .areaHectares(request.getAreaHectares())
@@ -48,38 +71,29 @@ public class ParcelService {
         return toResponse(parcel);
     }
 
-    /**
-     * Rejects parcel geometries that fall (even partially) outside the terrain
-     * polygon. We use JTS's covers() with a small negative buffer tolerance so
-     * vertices sitting exactly on the terrain boundary still pass.
-     */
-    private void ensureParcelInsideTerrain(String parcelGeoJson, String terrainGeoJson) {
-        if (parcelGeoJson == null || parcelGeoJson.isBlank()) {
-            throw new IllegalArgumentException("La geometría del potrero es obligatoria");
-        }
-        if (terrainGeoJson == null || terrainGeoJson.isBlank()) {
-            throw new IllegalArgumentException("El terreno no tiene geometría definida");
+    public ParcelDto.Response update(Long id, ParcelDto.UpdateRequest request) {
+        Parcel parcel = parcelRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Parcela no encontrada con id: " + id));
+
+        Terrain terrain = parcel.getTerrain();
+        String normalizedName = normalizeName(request.getName(), "El nombre del potrero");
+        if (parcelRepository.existsByTerrainIdAndNameIgnoreCaseAndIdNot(terrain.getId(), normalizedName, id)) {
+            throw new IllegalArgumentException(
+                    "Ya existe un potrero con el nombre '" + normalizedName + "' en este terreno.");
         }
 
-        try {
-            GeoJsonReader reader = new GeoJsonReader();
-            Geometry terrainGeom = reader.read(terrainGeoJson);
-            Geometry parcelGeom = reader.read(parcelGeoJson);
-
-            // ~1.1 m tolerance (1e-5 deg); accommodates Leaflet vertex snapping
-            // while still rejecting parcels drawn clearly outside the terrain.
-            Geometry terrainWithTolerance = terrainGeom.buffer(1e-5);
-
-            if (!terrainWithTolerance.covers(parcelGeom)) {
-                throw new IllegalArgumentException(
-                        "El potrero debe estar completamente dentro del terreno");
-            }
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("Unable to validate parcel-in-terrain containment: {}", e.getMessage());
-            throw new IllegalArgumentException("Geometría inválida: " + e.getMessage());
+        if (!GeoJsonUtils.covers(terrain.getGeoJson(), request.getGeoJson())) {
+            throw new IllegalArgumentException("El potrero debe quedar completamente dentro del terreno.");
         }
+
+        parcel.setName(normalizedName);
+        parcel.setGeoJson(request.getGeoJson());
+        parcel.setAreaSqMeters(request.getAreaSqMeters());
+        parcel.setAreaHectares(request.getAreaHectares());
+        parcel.setSoilType(request.getSoilType());
+        parcel.setPastureType(request.getPastureType());
+
+        return toResponse(parcelRepository.save(parcel));
     }
 
     public List<ParcelDto.Response> findByTerrainId(Long terrainId) {

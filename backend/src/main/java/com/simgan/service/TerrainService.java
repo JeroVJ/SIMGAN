@@ -2,13 +2,21 @@ package com.simgan.service;
 
 import com.simgan.dto.TerrainDto;
 import com.simgan.entity.Farm;
+import com.simgan.entity.Parcel;
 import com.simgan.entity.Terrain;
 import com.simgan.repository.FarmRepository;
+import com.simgan.repository.LoteRepository;
+import com.simgan.repository.NdviRecordRepository;
+import com.simgan.repository.ParcelRepository;
 import com.simgan.repository.TerrainRepository;
+import com.simgan.util.GeoJsonUtils;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -17,13 +25,29 @@ public class TerrainService {
 
     private final TerrainRepository terrainRepository;
     private final FarmRepository farmRepository;
+    private final ParcelRepository parcelRepository;
+    private final LoteRepository loteRepository;
+    private final NdviRecordRepository ndviRecordRepository;
+
+    private static String normalizeName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("El nombre del terreno es obligatorio.");
+        }
+        return name.trim();
+    }
 
     public TerrainDto.Response create(TerrainDto.CreateRequest request) {
         Farm farm = farmRepository.findById(request.getFarmId())
                 .orElseThrow(() -> new RuntimeException("Finca no encontrada con id: " + request.getFarmId()));
 
+        String normalizedName = normalizeName(request.getName());
+        if (terrainRepository.existsByFarmIdAndNameIgnoreCase(farm.getId(), normalizedName)) {
+            throw new IllegalArgumentException(
+                    "Ya existe un terreno con el nombre '" + normalizedName + "' en esta finca.");
+        }
+
         Terrain terrain = Terrain.builder()
-                .name(request.getName())
+                .name(normalizedName)
                 .geoJson(request.getGeoJson())
                 .areaSqMeters(request.getAreaSqMeters())
                 .areaHectares(request.getAreaHectares())
@@ -40,6 +64,38 @@ public class TerrainService {
                 .collect(Collectors.toList());
     }
 
+    public TerrainDto.Response update(Long id, TerrainDto.UpdateRequest request) {
+        Terrain terrain = terrainRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Terreno no encontrado con id: " + id));
+
+        String normalizedName = normalizeName(request.getName());
+        if (terrainRepository.existsByFarmIdAndNameIgnoreCaseAndIdNot(terrain.getFarm().getId(), normalizedName, id)) {
+            throw new IllegalArgumentException(
+                    "Ya existe un terreno con el nombre '" + normalizedName + "' en esta finca.");
+        }
+
+        boolean geometryChanged = !Objects.equals(terrain.getGeoJson(), request.getGeoJson());
+
+        terrain.setName(normalizedName);
+        terrain.setGeoJson(request.getGeoJson());
+        terrain.setAreaSqMeters(request.getAreaSqMeters());
+        terrain.setAreaHectares(request.getAreaHectares());
+
+        Terrain saved = terrainRepository.save(terrain);
+        TerrainDto.Response response = toResponse(saved);
+
+        if (geometryChanged) {
+            List<Parcel> outOfBoundsParcels = parcelRepository.findByTerrainId(saved.getId()).stream()
+                    .filter(parcel -> !GeoJsonUtils.covers(saved.getGeoJson(), parcel.getGeoJson()))
+                    .collect(Collectors.toList());
+
+            response.setOutOfBoundsParcelIds(outOfBoundsParcels.stream().map(Parcel::getId).toList());
+            response.setOutOfBoundsParcelNames(outOfBoundsParcels.stream().map(Parcel::getName).toList());
+        }
+
+        return response;
+    }
+
     public TerrainDto.Response findById(Long id) {
         Terrain terrain = terrainRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Terreno no encontrado con id: " + id));
@@ -47,7 +103,26 @@ public class TerrainService {
     }
 
     public void delete(Long id) {
-        terrainRepository.deleteById(id);
+        Terrain terrain = terrainRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Terreno no encontrado con id: " + id));
+
+        if (loteRepository.existsByTerrainId(id)) {
+            throw new IllegalArgumentException(
+                    "No se puede eliminar el terreno porque tiene lotes asociados. Elimina o cierra esos lotes primero.");
+        }
+
+        if (ndviRecordRepository.countByTerrainId(id) > 0) {
+            throw new IllegalArgumentException(
+                    "No se puede eliminar el terreno porque tiene historial NDVI asociado.");
+        }
+
+        try {
+            terrainRepository.delete(terrain);
+            terrainRepository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new IllegalArgumentException(
+                    "No se puede eliminar el terreno porque tiene datos históricos asociados.");
+        }
     }
 
     private TerrainDto.Response toResponse(Terrain terrain) {
@@ -61,6 +136,8 @@ public class TerrainService {
                 .areaHectares(terrain.getAreaHectares())
                 .createdAt(terrain.getCreatedAt() != null ? terrain.getCreatedAt().toString() : null)
                 .parcelCount(terrain.getParcels() != null ? terrain.getParcels().size() : 0)
+                .outOfBoundsParcelIds(Collections.emptyList())
+                .outOfBoundsParcelNames(Collections.emptyList())
                 .build();
     }
 }

@@ -38,16 +38,16 @@ public class MqttClientService {
         List<Sensor> activeSensors = sensorRepository.findByConnectedTrue();
 
         if (activeSensors.isEmpty()) {
-            log.info("ℹ️ No hay sensores MQTT activos para reconectar al iniciar");
+            log.info(" No hay sensores MQTT activos para reconectar al iniciar");
             return;
         }
 
-        log.info("🔄 Reconectando {} sensores MQTT activos al iniciar", activeSensors.size());
+        log.info(" Reconectando {} sensores MQTT activos al iniciar", activeSensors.size());
 
         for (Sensor sensor : activeSensors) {
             try {
                 if (sensor.getMqttBrokerUrl() == null || sensor.getMqttBrokerUrl().isBlank()) {
-                    log.warn("⚠️ Sensor {} marcado como conectado pero sin broker URL. Se marca desconectado.", sensor.getId());
+                    log.warn(" Sensor {} marcado como conectado pero sin broker URL. Se marca desconectado.", sensor.getId());
                     sensor.setConnected(false);
                     sensorRepository.save(sensor);
                     continue;
@@ -59,7 +59,7 @@ public class MqttClientService {
                         defaultMqttUsername,
                         defaultMqttPassword);
             } catch (Exception e) {
-                log.error("❌ No se pudo reconectar sensor {} al iniciar: {}", sensor.getId(), e.getMessage());
+                log.error(" No se pudo reconectar sensor {} al iniciar: {}", sensor.getId(), e.getMessage());
             }
         }
     }
@@ -98,9 +98,9 @@ public class MqttClientService {
             String brokerClean = brokerUrl.startsWith("ssl://") ? brokerUrl : "ssl://" + brokerUrl;
             MqttClient client = new MqttClient(brokerClean, clientId);
 
-            log.info("📡 Broker: {}", brokerClean);
-            log.info("👤 Client ID: {}", clientId);
-            log.info("📬 Topic: {}", topic);
+            log.info(" Broker: {}", brokerClean);
+            log.info(" Client ID: {}", clientId);
+            log.info("Topic: {}", topic);
 
             // Opciones de conexión
             MqttConnectOptions options = new MqttConnectOptions();
@@ -115,7 +115,7 @@ public class MqttClientService {
             client.setCallback(new MqttCallback() {
                 @Override
                 public void connectionLost(Throwable cause) {
-                    log.warn("⚠️ Conexión perdida con MQTT para sensor {}: {}", sensorId, cause.getMessage());
+                    log.warn(" Conexión perdida con MQTT para sensor {}: {}", sensorId, cause.getMessage());
                     sensor.setConnected(false);
                     sensorRepository.save(sensor);
                 }
@@ -130,7 +130,7 @@ public class MqttClientService {
                         // Procesar mensaje usando MqttSubscriber
                         mqttSubscriber.procesarMensajeMqtt(sensor, payload);
                     } catch (Exception e) {
-                        log.error("❌ Error procesando mensaje MQTT: {}", e.getMessage());
+                        log.error(" Error procesando mensaje MQTT: {}", e.getMessage());
                     }
                 }
 
@@ -158,7 +158,7 @@ public class MqttClientService {
             log.info("✓ Sensor {} ahora está monitoreando MQTT", sensorId);
 
         } catch (MqttException e) {
-            log.error("❌ Error conectando a MQTT: {}", e.getMessage());
+            log.error(" Error conectando a MQTT: {}", e.getMessage());
             throw new RuntimeException("Error conectando a MQTT: " + e.getMessage());
         }
     }
@@ -183,7 +183,7 @@ public class MqttClientService {
                 }
             }
         } catch (MqttException e) {
-            log.error("❌ Error desconectando MQTT: {}", e.getMessage());
+            log.error(" Error desconectando MQTT: {}", e.getMessage());
         }
     }  
 
