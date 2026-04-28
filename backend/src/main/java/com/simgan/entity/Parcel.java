@@ -53,7 +53,7 @@ public class Parcel {
     @Builder.Default
     private ParcelStatus status = ParcelStatus.DISPONIBLE;
 
-    @Column(name = "monitoring_enabled", nullable = false)
+    @Column(name = "monitoring_enabled", nullable = false, columnDefinition = "BOOLEAN NOT NULL DEFAULT FALSE")
     @Builder.Default
     private Boolean monitoringEnabled = false;
 
