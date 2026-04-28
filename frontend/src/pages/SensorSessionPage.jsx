@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 
 import Spinner from '../components/Spinner'
 import api, { sensorApi } from '../services/api'
+import { centroidOf } from '../utils/geo'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -360,7 +361,7 @@ export default function SensorSessionPage() {
       <div className="two-col">
         <div className="col-main">
           <div className="map-container">
-            <MapContainer center={[4.6, -74.1]} zoom={15} style={{ height: '100%', width: '100%' }}>
+            <MapContainer key={parcelGeoJson ? 'loaded' : 'pending'} center={centroidOf(parcelGeoJson) || [4.6, -74.1]} zoom={15} style={{ height: '100%', width: '100%' }}>
               <FitBoundsWithSensor parcelGeoJson={parcelGeoJson} sensorGeoJson={sensorGeoJson} />
 
               <TileLayer

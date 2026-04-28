@@ -9,6 +9,7 @@ import {
 import Spinner from '../components/Spinner'
 import OperationProgress from '../components/OperationProgress'
 import { useBiomassCalibration, useCalibration } from '../hooks'
+import { centroidOf } from '../utils/geo'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -624,11 +625,36 @@ export default function CalibrationBiomassPage() {
 
 /** Map component that shows one parcel boundary + markers */
 function ParcelMap({ parcel, points, onMapClick, placingPoints }) {
+  const [geoJson, setGeoJson] = useState(null)
+  const parcelId = parcel?.parcelId
+
+  useEffect(() => {
+    if (!parcelId) { setGeoJson(null); return }
+    let aborted = false
+    setGeoJson(null)
+    const token = localStorage.getItem('token')
+    fetch(`/api/parcels/${encodeURIComponent(parcelId)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => { if (!r.ok) throw new Error(); return r.json() })
+      .then(data => { if (!aborted && data.geoJson) setGeoJson(data.geoJson) })
+      .catch(() => {})
+    return () => { aborted = true }
+  }, [parcelId])
+
   if (!parcel) return null
+  const center = centroidOf(geoJson)
+  if (!center) {
+    return (
+      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--color-text-muted)', fontSize: 13 }}>
+        Cargando mapa del potrero...
+      </div>
+    )
+  }
 
   return (
     <MapContainer
-      center={[4.6, -74.1]}
+      center={center}
       zoom={15}
       style={{ height: '100%', width: '100%', cursor: placingPoints ? 'crosshair' : '' }}
     >
@@ -641,7 +667,7 @@ function ParcelMap({ parcel, points, onMapClick, placingPoints }) {
         maxZoom={19}
       />
       <MapClickHandler onMapClick={onMapClick} enabled={placingPoints} />
-      <ParcelGeoJsonLayer parcelId={parcel.parcelId} />
+      <ParcelGeoJsonLayer geoJson={geoJson} />
       {points.map((pt, idx) => (
         <Marker key={idx} position={[pt.lat, pt.lng]} icon={numberIcon(idx + 1)}>
           <Popup>
@@ -655,25 +681,9 @@ function ParcelMap({ parcel, points, onMapClick, placingPoints }) {
   )
 }
 
-/** Loads parcel GeoJSON via API and renders it */
-function ParcelGeoJsonLayer({ parcelId }) {
+/** Renders the parcel polygon on the map. GeoJSON is fetched by the parent. */
+function ParcelGeoJsonLayer({ geoJson }) {
   const map = useMap()
-  const [geoJson, setGeoJson] = useState(null)
-
-  useEffect(() => {
-    if (!parcelId) return
-    // Clear previous parcel immediately so the new one does not depend on a full page reload.
-    setGeoJson(null)
-    const token = localStorage.getItem('token')
-    fetch(`/api/parcels/${encodeURIComponent(parcelId)}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then(r => { if (!r.ok) throw new Error(); return r.json() })
-      .then(data => {
-        if (data.geoJson) setGeoJson(data.geoJson)
-      })
-      .catch(() => {})
-  }, [parcelId])
 
   useEffect(() => {
     if (!geoJson || !map) return

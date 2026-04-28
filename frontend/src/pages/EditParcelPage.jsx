@@ -8,6 +8,7 @@ import toast from 'react-hot-toast'
 
 import Spinner from '../components/Spinner'
 import api, { parcelApi, terrainApi } from '../services/api'
+import { centroidOf } from '../utils/geo'
 
 const SOIL_TYPES = ['Arenosa', 'Limosa', 'Arcillosa', 'Franco Arcillosa']
 const PASTURE_TYPES = ['Brachiaria humidicola']
@@ -248,7 +249,7 @@ export default function EditParcelPage() {
       <div className="two-col">
         <div className="col-main">
           <div className="map-container">
-            <MapContainer center={[4.6, -74.1]} zoom={15} style={{ height: '100%', width: '100%' }}>
+            <MapContainer key={terrainGeoJson ? 'loaded' : 'pending'} center={centroidOf(terrainGeoJson) || [4.6, -74.1]} zoom={15} style={{ height: '100%', width: '100%' }}>
               {terrainGeoJson && <FitBounds geoJson={terrainGeoJson} />}
               <TileLayer
                 url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"

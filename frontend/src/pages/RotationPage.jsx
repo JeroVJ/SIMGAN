@@ -10,6 +10,7 @@ import { CircleDot, Leaf, Moon } from 'lucide-react'
 import { useTerrain } from '../hooks'
 import { getBiomassColor, getBiomassLabel } from '../utils/grazing'
 import { getStatusClass } from '../utils/ndvi'
+import { centroidOf } from '../utils/geo'
 
 function FitBounds({ geoJson }) {
   const map = useMap()
@@ -152,7 +153,8 @@ export default function RotationPage() {
           <div className="map-container">
 
             <MapContainer
-              center={[4.6, -74.1]}
+              key={terrainGeoJson ? 'loaded' : 'pending'}
+              center={centroidOf(terrainGeoJson) || [4.6, -74.1]}
               zoom={15}
               style={{ height: '100%', width: '100%' }}
             >

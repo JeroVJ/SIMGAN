@@ -14,6 +14,7 @@ import { Trash2, Cpu, CheckCircle2, Loader2, Info } from 'lucide-react'
 import { useTerrain } from '../hooks'
 import api from '../services/api'
 import { getBiomassColor, getBiomassLabel } from '../utils/grazing'
+import { centroidOf } from '../utils/geo'
 
 const SOIL_TYPES = ['Arenosa', 'Limosa', 'Arcillosa', 'Franco Arcillosa']
 const PASTURE_TYPES = ['Brachiaria humidicola']
@@ -279,7 +280,8 @@ export default function ParcelsPage() {
           <div className="map-container">
 
             <MapContainer
-              center={[4.6, -74.1]}
+              key={terrainGeoJson ? 'loaded' : 'pending'}
+              center={centroidOf(terrainGeoJson) || [4.6, -74.1]}
               zoom={15}
               style={{ height: '100%', width: '100%' }}
             >

@@ -6,6 +6,7 @@ import L from 'leaflet'
 import { Plus, X } from 'lucide-react'
 import { useTerrain } from '../hooks'
 import { getBiomassColor, getBiomassLabel, getDailyConsumption } from '../utils/grazing'
+import { centroidOf } from '../utils/geo'
 import { parcelApi, loteApi } from '../services/api'
 import Spinner from '../components/Spinner'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -348,7 +349,7 @@ export default function LotesPage() {
           </div>
 
           <div className="map-wrapper" style={{ borderRadius: 10, overflow: 'hidden', border: '1px solid var(--color-border)' }}>
-            <MapContainer center={[4.6, -74.1]} zoom={15} style={{ height: '100%', width: '100%' }}>
+            <MapContainer key={terrain?.geoJson ? 'loaded' : 'pending'} center={centroidOf(terrain?.geoJson) || [4.6, -74.1]} zoom={15} style={{ height: '100%', width: '100%' }}>
               <TileLayer url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}" attribution="Esri" />
               {terrain?.geoJson && <FitBounds geoJson={terrain.geoJson} />}
               {terrain?.geoJson && (

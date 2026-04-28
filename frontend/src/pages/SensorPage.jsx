@@ -10,6 +10,7 @@ import ConfirmDialog from '../components/ConfirmDialog'
 
 import { useSensor } from '../hooks'
 import api from '../services/api'
+import { centroidOf } from '../utils/geo'
 
 delete L.Icon.Default.prototype._getIconUrl
 L.Icon.Default.mergeOptions({
@@ -241,7 +242,8 @@ export default function SensorPage() {
           <div className="map-container">
 
             <MapContainer
-              center={[4.6, -74.1]}
+              key={parcelGeoJson ? 'loaded' : 'pending'}
+              center={centroidOf(parcelGeoJson) || [4.6, -74.1]}
               zoom={15}
               style={{ height: '100%', width: '100%' }}
               ref={mapRef}
