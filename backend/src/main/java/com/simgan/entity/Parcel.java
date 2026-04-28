@@ -53,6 +53,10 @@ public class Parcel {
     @Builder.Default
     private ParcelStatus status = ParcelStatus.DISPONIBLE;
 
+    @Column(name = "monitoring_enabled", nullable = false)
+    @Builder.Default
+    private Boolean monitoringEnabled = false;
+
     @CreationTimestamp
     private LocalDateTime createdAt;
 

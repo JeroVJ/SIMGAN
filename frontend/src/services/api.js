@@ -127,6 +127,19 @@ export const calibrationApi = {
     api.post(`/ndvi/calibration/${terrainId}`, null, { params: { calibrationDate, type, ...(sceneId ? { sceneId } : {}) } }).then(r => r.data),
 }
 
+// ===== CALIBRACIÓN AUTOMÁTICA NDVI (12 meses) =====
+export const autoCalibrationApi = {
+  start: (terrainId) => api.post(`/ndvi/calibration/auto/${terrainId}`).then(r => r.data),
+  status: (terrainId) => api.get(`/ndvi/calibration/auto/${terrainId}/status`).then(r => r.data),
+}
+
+// ===== MONITOREO POR POTRERO =====
+export const monitoringApi = {
+  get: (parcelId) => api.get(`/ndvi/monitoring/${parcelId}`).then(r => r.data),
+  toggle: (parcelId, enabled) => api.put(`/ndvi/monitoring/${parcelId}`, { enabled }).then(r => r.data),
+  fetchNow: (parcelId) => api.post(`/ndvi/monitoring/${parcelId}/fetch-now`).then(r => r.data),
+}
+
 // ===== CALIBRACIÓN BIOMASA =====
 export const biomassCalibrationApi = {
   getStatus: (terrainId) =>

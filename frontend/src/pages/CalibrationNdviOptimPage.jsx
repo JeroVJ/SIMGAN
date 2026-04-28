@@ -45,6 +45,13 @@ export default function CalibrationNdviOptimPage() {
               Se promedia el NDVI de todos los potreros del terreno para obtener una sola referencia óptima.
             </p>
           </div>
+          <button
+            className="action-btn"
+            onClick={() => navigate(`/terrains/${terrainId}/ndvi/calibration-auto`)}
+            title="Procesa una imagen por semana del último año y deriva los umbrales p25/p75 automáticamente"
+          >
+            ⚡ Calibración Automática (12 meses)
+          </button>
         </div>
         <OperationProgress
           active={searchingScenes || calibrating}

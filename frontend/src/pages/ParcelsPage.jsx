@@ -565,6 +565,16 @@ export default function ParcelsPage() {
                     {farm?.iotEnabled ? 'Sensores' : 'IoT off'}
                   </button>
                   <button
+                    className="comp-btn comp-btn--sm comp-btn--outline"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigate(`/parcels/${p.id}/monitoring`)
+                    }}
+                    title="Monitoreo NDVI semanal"
+                  >
+                    Monitoreo
+                  </button>
+                  <button
                     className="comp-btn comp-btn--sm comp-btn--icon-only"
                     onClick={(e) => {
                       e.stopPropagation()
