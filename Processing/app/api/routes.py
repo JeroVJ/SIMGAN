@@ -6,14 +6,21 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from app.models import (
     PlanetProcessRequest,
     PlanetProcessResponse,
-    SentinelProcessRequest,
-    SentinelProcessResponse,
     PointNdviRequest,
     PointNdviResponse,
+    SentinelProcessRequest,
+    SentinelProcessResponse,
+    SentinelTerrainAnalyzeRequest,
+    SentinelTerrainAnalyzeResponse,
 )
 from app.services.planet import analyze_planet_request, process_planet_request
 from app.services.sentinel import analyze_sentinel_request, process_sentinel_request, compute_point_ndvi
-from app.workers.tasks import task_sentinel_analyze, task_planet_analyze, task_point_ndvi
+from app.workers.tasks import (
+    task_planet_analyze,
+    task_point_ndvi,
+    task_sentinel_analyze,
+    task_sentinel_analyze_terrain,
+)
 
 
 router = APIRouter(tags=["ndvi"])
@@ -56,6 +63,24 @@ async def analyze_sentinel(request: SentinelProcessRequest) -> SentinelProcessRe
         logger.error("Error en worker Sentinel sceneId=%s: %s", request.sceneId, exc)
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     return SentinelProcessResponse(**result_dict)
+
+
+@router.post("/ndvi/sentinel/analyze-terrain", response_model=SentinelTerrainAnalyzeResponse)
+async def analyze_sentinel_terrain(request: SentinelTerrainAnalyzeRequest) -> SentinelTerrainAnalyzeResponse:
+    """Aggregate NDVI over the whole terrain polygon — used by 12-month auto-calibration.
+    No parcels required; returns one mean NDVI per scene."""
+    logger.info(
+        "Encolando job Sentinel analyze-terrain sceneId=%s terrainId=%s",
+        request.sceneId,
+        request.terrainId,
+    )
+    task = task_sentinel_analyze_terrain.apply_async(args=[request.model_dump()], queue="ndvi")
+    try:
+        result_dict = await asyncio.to_thread(task.get, timeout=660, propagate=True)
+    except Exception as exc:
+        logger.error("Error en worker terrain Sentinel sceneId=%s: %s", request.sceneId, exc)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return SentinelTerrainAnalyzeResponse(**result_dict)
 
 
 @router.post("/ndvi/sentinel/point-ndvi", response_model=PointNdviResponse)

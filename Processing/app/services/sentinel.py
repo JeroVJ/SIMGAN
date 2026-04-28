@@ -5,6 +5,7 @@ import time
 import zipfile
 from pathlib import Path
 
+import numpy as np
 import rasterio
 import requests
 from fastapi import HTTPException, UploadFile
@@ -14,7 +15,16 @@ from shapely.geometry import Point
 from shapely.ops import transform as shapely_transform
 
 from app.Config import settings
-from app.models import ProcessedParcelNdviResponse, SentinelProcessRequest, SentinelProcessResponse, PointNdviRequest, PointNdviResponse, PointNdviResult
+from app.models import (
+    PointNdviRequest,
+    PointNdviResponse,
+    PointNdviResult,
+    ProcessedParcelNdviResponse,
+    SentinelProcessRequest,
+    SentinelProcessResponse,
+    SentinelTerrainAnalyzeRequest,
+    SentinelTerrainAnalyzeResponse,
+)
 from app.services.common import (
     build_empty_result,
     build_result,
@@ -203,27 +213,38 @@ def _download_with_auth(url: str, output: Path, token: str, max_retries: int = 5
             time.sleep(wait)
 
 
-def _download_and_extract_bands(payload: SentinelProcessRequest, work_dir: Path) -> tuple[Path, Path, int, float, float]:
+def _download_bands_for_scene(
+    scene_id: str,
+    download_url: str | None,
+    work_dir: Path,
+) -> tuple[Path, Path, int, float, float]:
+    """Resolve the OData download URL (if missing/STAC-only), fetch the SAFE ZIP,
+    and extract red/nir bands + UTM metadata. Shared by per-parcel and
+    terrain-level analyses."""
     token = _get_access_token()
-    download_url = payload.downloadUrl
+    resolved_url = download_url
 
-    if not download_url or "('S2" in download_url:
-        uuid = _find_product_uuid(payload.sceneId)
+    if not resolved_url or "('S2" in resolved_url:
+        uuid = _find_product_uuid(scene_id)
         if not uuid:
-            raise RuntimeError(f"No se encontró UUID OData para la escena Sentinel {payload.sceneId}.")
-        download_url = f"{ODATA_DOWNLOAD}/Products({uuid})/$value"
+            raise RuntimeError(f"No se encontró UUID OData para la escena Sentinel {scene_id}.")
+        resolved_url = f"{ODATA_DOWNLOAD}/Products({uuid})/$value"
 
     zip_path = work_dir / "product.zip"
     if zip_path.exists() and not _is_valid_zip(zip_path):
         _delete_quietly(zip_path)
 
     if not zip_path.exists():
-        _download_with_auth(download_url, zip_path, token)
+        _download_with_auth(resolved_url, zip_path, token)
 
     if not _is_valid_zip(zip_path):
-        raise RuntimeError(f"El ZIP descargado para Sentinel {payload.sceneId} es inválido.")
+        raise RuntimeError(f"El ZIP descargado para Sentinel {scene_id} es inválido.")
 
     return _extract_bands_from_zip(zip_path, work_dir)
+
+
+def _download_and_extract_bands(payload: SentinelProcessRequest, work_dir: Path) -> tuple[Path, Path, int, float, float]:
+    return _download_bands_for_scene(payload.sceneId, payload.downloadUrl, work_dir)
 
 
 def _process_sentinel_files(
@@ -531,6 +552,129 @@ async def compute_point_ndvi(payload: PointNdviRequest) -> PointNdviResponse:
     except Exception as exc:
         logger.exception("Error calculando NDVI en puntos sceneId=%s", payload.sceneId)
         raise HTTPException(status_code=500, detail=f"Error calculando NDVI en puntos: {exc}") from exc
+    finally:
+        try:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        except Exception:
+            logger.warning("No se pudo eliminar directorio temporal workDir=%s", work_dir)
+
+
+# ===== TERRAIN-LEVEL NDVI =====
+# Used by the 12-month auto-calibration. Aggregates NDVI over the whole
+# terrain polygon — no parcels required. The output feeds p25/p75 percentiles
+# that get applied as ALERT/OPTIM thresholds across all parcels of the terrain.
+
+def _process_sentinel_terrain_files(
+    payload: SentinelTerrainAnalyzeRequest,
+    red_path: Path,
+    nir_path: Path,
+    epsg: int,
+    ulx: float,
+    uly: float,
+    started: float,
+) -> SentinelTerrainAnalyzeResponse:
+    pixel_size = 10.0
+    red_tiff = red_path if red_path.suffix.lower() in {".tif", ".tiff"} else red_path.with_suffix(".tif")
+    nir_tiff = nir_path if nir_path.suffix.lower() in {".tif", ".tiff"} else nir_path.with_suffix(".tif")
+    if red_tiff != red_path:
+        convert_jp2_to_tiff(red_path, red_tiff)
+    if nir_tiff != nir_path:
+        convert_jp2_to_tiff(nir_path, nir_tiff)
+
+    transformer = Transformer.from_crs("EPSG:4326", f"EPSG:{epsg}", always_xy=True)
+    geometry = parse_geometry(payload.terrainGeoJson)
+    projected = shapely_transform(transformer.transform, geometry)
+    minx, miny, maxx, maxy = projected.bounds
+    ndvi_values: list[float] = []
+
+    with rasterio.open(red_tiff) as red_dataset, rasterio.open(nir_tiff) as nir_dataset:
+        logger.info(
+            "Procesando terrain Sentinel terrainId=%s sceneId=%s bounds=%s",
+            payload.terrainId, payload.sceneId, (minx, miny, maxx, maxy),
+        )
+        x = minx
+        while x <= maxx:
+            y = miny
+            while y <= maxy:
+                if projected.contains(Point(x, y)):
+                    px = int((x - ulx) / pixel_size)
+                    py = int((uly - y) / pixel_size)
+                    if 0 <= px < red_dataset.width and 0 <= py < red_dataset.height:
+                        red = float(red_dataset.read(1, window=((py, py + 1), (px, px + 1)))[0, 0])
+                        nir = float(nir_dataset.read(1, window=((py, py + 1), (px, px + 1)))[0, 0])
+                        if 0 < red < 65535 and 0 < nir < 65535:
+                            red_reflectance = red / 10000.0
+                            nir_reflectance = nir / 10000.0
+                            denominator = nir_reflectance + red_reflectance
+                            if denominator != 0:
+                                ndvi = (nir_reflectance - red_reflectance) / denominator
+                                if -1.0 <= ndvi <= 1.0:
+                                    ndvi_values.append(float(ndvi))
+                y += pixel_size
+            x += pixel_size
+
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    if not ndvi_values:
+        logger.warning(
+            "Sin pixeles NDVI válidos para terrain Sentinel terrainId=%s sceneId=%s",
+            payload.terrainId, payload.sceneId,
+        )
+        return SentinelTerrainAnalyzeResponse(
+            terrainId=payload.terrainId,
+            sceneId=payload.sceneId,
+            captureDate=payload.captureDate,
+            cloudCoverPercent=payload.cloudCoverPercent,
+            pixelCount=0,
+            processingDurationMs=elapsed_ms,
+            warning="No se encontraron pixeles NDVI válidos dentro del terreno.",
+        )
+
+    arr = np.array(sorted(ndvi_values), dtype=np.float64)
+    logger.info(
+        "Terrain Sentinel procesado terrainId=%s sceneId=%s pixelCount=%s meanNdvi=%.4f",
+        payload.terrainId, payload.sceneId, int(arr.size), float(arr.mean()),
+    )
+    return SentinelTerrainAnalyzeResponse(
+        terrainId=payload.terrainId,
+        sceneId=payload.sceneId,
+        captureDate=payload.captureDate,
+        cloudCoverPercent=payload.cloudCoverPercent,
+        meanNdvi=round(float(arr.mean()), 4),
+        minNdvi=round(float(arr.min()), 4),
+        maxNdvi=round(float(arr.max()), 4),
+        medianNdvi=round(float(np.median(arr)), 4),
+        stdNdvi=round(float(arr.std()), 4),
+        pixelCount=int(arr.size),
+        vegetationCoverPercent=round(float((arr > 0.2).sum() / arr.size * 100.0), 2),
+        processingDurationMs=elapsed_ms,
+    )
+
+
+async def analyze_sentinel_terrain_request(
+    payload: SentinelTerrainAnalyzeRequest,
+) -> SentinelTerrainAnalyzeResponse:
+    import shutil
+    work_dir = Path(tempfile.mkdtemp(prefix="sentinel-terrain-", dir=str(settings.gdal_temp_dir)))
+    started = time.perf_counter()
+    logger.info(
+        "Inicio análisis terrain Sentinel terrainId=%s sceneId=%s workDir=%s",
+        payload.terrainId, payload.sceneId, work_dir,
+    )
+
+    try:
+        red_path, nir_path, epsg, ulx, uly = _download_bands_for_scene(
+            payload.sceneId, payload.downloadUrl, work_dir,
+        )
+        return _process_sentinel_terrain_files(payload, red_path, nir_path, epsg, ulx, uly, started)
+    except requests.HTTPError as exc:
+        logger.exception("Error descargando Sentinel sceneId=%s", payload.sceneId)
+        raise HTTPException(status_code=502, detail=f"No fue posible descargar Sentinel: {exc}") from exc
+    except RasterioIOError as exc:
+        logger.exception("Error abriendo raster terrain Sentinel sceneId=%s", payload.sceneId)
+        raise HTTPException(status_code=500, detail=f"No fue posible leer raster Sentinel: {exc}") from exc
+    except Exception as exc:
+        logger.exception("Error procesando terrain Sentinel sceneId=%s", payload.sceneId)
+        raise HTTPException(status_code=500, detail=f"procesamientoImagen no pudo calcular NDVI: {exc}") from exc
     finally:
         try:
             shutil.rmtree(work_dir, ignore_errors=True)

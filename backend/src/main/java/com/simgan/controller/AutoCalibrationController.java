@@ -1,9 +1,9 @@
 package com.simgan.controller;
 
 import com.simgan.entity.NdviCalibrationJob;
-import com.simgan.entity.NdviRecord;
+import com.simgan.entity.NdviTerrainRecord;
 import com.simgan.repository.NdviCalibrationJobRepository;
-import com.simgan.repository.NdviRecordRepository;
+import com.simgan.repository.NdviTerrainRecordRepository;
 import com.simgan.service.NdviAutoCalibrationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,7 +24,7 @@ public class AutoCalibrationController {
 
     private final NdviAutoCalibrationService autoCalibrationService;
     private final NdviCalibrationJobRepository jobRepository;
-    private final NdviRecordRepository ndviRecordRepository;
+    private final NdviTerrainRecordRepository terrainRecordRepository;
 
     /** Start (or resume) a 12-month auto-calibration job. Returns immediately. */
     @PostMapping("/{terrainId}")
@@ -53,32 +53,20 @@ public class AutoCalibrationController {
         response.put("hasJob", true);
         response.putAll(toJobMap(job));
 
-        // Timeline: aggregate records by date (one mean NDVI value per scene
-        // across the parcels that had pixels) — that's what the chart needs.
-        if (job.getRangeStart() != null && job.getRangeEnd() != null) {
-            List<NdviRecord> records = ndviRecordRepository
-                    .findByTerrainIdAndCaptureDateBetweenOrderByCaptureDate(terrainId, job.getRangeStart(), job.getRangeEnd());
-
-            Map<String, double[]> byDate = new LinkedHashMap<>();
-            for (NdviRecord r : records) {
-                if (r.getMeanNdvi() == null) continue;
-                String key = r.getCaptureDate().format(DateTimeFormatter.ISO_LOCAL_DATE);
-                double[] acc = byDate.computeIfAbsent(key, k -> new double[]{0.0, 0.0});
-                acc[0] += r.getMeanNdvi();
-                acc[1] += 1.0;
-            }
-            List<Map<String, Object>> timeline = new ArrayList<>();
-            for (var entry : byDate.entrySet()) {
-                Map<String, Object> point = new LinkedHashMap<>();
-                point.put("date", entry.getKey());
-                point.put("meanNdvi", entry.getValue()[0] / entry.getValue()[1]);
-                timeline.add(point);
-            }
-            response.put("timeline", timeline);
-            response.put("recordCount", records.size());
-        } else {
-            response.put("timeline", List.of());
+        // Timeline comes from terrain-level records produced by the runner —
+        // one row per scene processed, already aggregated over the polygon.
+        List<NdviTerrainRecord> records = terrainRecordRepository.findByJobIdOrderByCaptureDate(job.getId());
+        List<Map<String, Object>> timeline = new ArrayList<>();
+        for (NdviTerrainRecord r : records) {
+            if (r.getMeanNdvi() == null) continue;
+            Map<String, Object> point = new LinkedHashMap<>();
+            point.put("date", r.getCaptureDate().format(DateTimeFormatter.ISO_LOCAL_DATE));
+            point.put("meanNdvi", r.getMeanNdvi());
+            point.put("sceneId", r.getSceneId());
+            timeline.add(point);
         }
+        response.put("timeline", timeline);
+        response.put("recordCount", records.size());
 
         return ResponseEntity.ok(response);
     }

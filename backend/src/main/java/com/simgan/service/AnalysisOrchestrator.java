@@ -50,7 +50,9 @@ public class AnalysisOrchestrator {
 
     List<Parcel> parcels = parcelRepository.findByTerrainId(terrainId);
     if (parcels.isEmpty()) {
-        result.put("error", "No hay parcelas definidas en este terreno.");
+        String msg = "El terreno no tiene potreros. Crea al menos uno antes de pedir un análisis NDVI.";
+        result.put("error", msg);
+        result.put("message", msg);
         return result;
     }
 

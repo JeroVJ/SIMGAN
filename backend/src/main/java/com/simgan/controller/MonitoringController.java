@@ -88,6 +88,9 @@ public class MonitoringController {
     @PostMapping("/{parcelId}/fetch-now")
     public ResponseEntity<Map<String, Object>> fetchNow(@PathVariable Long parcelId) {
         Map<String, Object> result = monitoringService.fetchCurrentWeek(parcelId);
+        if (result != null && result.get("error") != null) {
+            return ResponseEntity.badRequest().body(result);
+        }
         return ResponseEntity.ok(result);
     }
 }

@@ -5,6 +5,8 @@ import com.simgan.dto.PlanetImageProcessingRequest;
 import com.simgan.dto.PlanetImageProcessingResponse;
 import com.simgan.dto.SentinelImageProcessingRequest;
 import com.simgan.dto.SentinelImageProcessingResponse;
+import com.simgan.dto.SentinelTerrainAnalyzeRequest;
+import com.simgan.dto.SentinelTerrainAnalyzeResponse;
 import com.simgan.dto.PointNdviDto;
 import com.simgan.dto.ProcessedParcelNdviDto;
 import com.simgan.entity.NdviRecord;
@@ -96,6 +98,52 @@ public class ImageProcessingClientService {
             return responseBody;
         } catch (Exception e) {
             throw new RuntimeException("No se pudo procesar Sentinel con procesamientoImagen: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Aggregates NDVI over the whole terrain polygon for a single Sentinel scene.
+     * Used by 12-month auto-calibration; does not require parcels.
+     */
+    public SentinelTerrainAnalyzeResponse processTerrainScene(
+            Terrain terrain,
+            Map<String, Object> scene,
+            LocalDate captureDate,
+            String sceneId,
+            Double cloudCoverPercent) {
+
+        try {
+            RestTemplate restTemplate = restTemplateBuilder
+                    .setConnectTimeout(Duration.ofSeconds(10))
+                    .setReadTimeout(Duration.ofMinutes(10))
+                    .build();
+
+            SentinelTerrainAnalyzeRequest payload = SentinelTerrainAnalyzeRequest.builder()
+                    .terrainId(terrain.getId())
+                    .terrainName(terrain.getName())
+                    .terrainGeoJson(terrain.getGeoJson())
+                    .sceneId(sceneId)
+                    .captureDate(captureDate)
+                    .downloadUrl(scene == null ? null : (String) scene.get("downloadUrl"))
+                    .cloudCoverPercent(cloudCoverPercent)
+                    .build();
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            ResponseEntity<SentinelTerrainAnalyzeResponse> response = restTemplate.postForEntity(
+                    imageProcessingBaseUrl + "/ndvi/sentinel/analyze-terrain",
+                    new HttpEntity<>(payload, headers),
+                    SentinelTerrainAnalyzeResponse.class
+            );
+
+            SentinelTerrainAnalyzeResponse responseBody = response.getBody();
+            if (responseBody == null) {
+                throw new RuntimeException("procesamientoImagen respondió sin cuerpo en analyze-terrain.");
+            }
+            return responseBody;
+        } catch (Exception e) {
+            throw new RuntimeException("No se pudo procesar terrain Sentinel con procesamientoImagen: " + e.getMessage(), e);
         }
     }
 

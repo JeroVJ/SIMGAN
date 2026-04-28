@@ -115,3 +115,34 @@ class PointNdviResponse(BaseModel):
     sceneId: str
     processingDurationMs: int
     results: list[PointNdviResult]
+
+
+# ===== TERRAIN-LEVEL NDVI (auto-calibration) =====
+# The terrain endpoint computes a single NDVI aggregate over the whole terrain
+# polygon — used by the 12-month auto-calibration that derives p25/p75
+# thresholds without requiring the terrain to have parcels yet.
+
+class SentinelTerrainAnalyzeRequest(BaseModel):
+    terrainId: int
+    terrainName: str | None = None
+    terrainGeoJson: str
+    sceneId: str
+    captureDate: str
+    downloadUrl: str | None = None
+    cloudCoverPercent: float | None = None
+
+
+class SentinelTerrainAnalyzeResponse(BaseModel):
+    terrainId: int
+    sceneId: str
+    captureDate: str
+    cloudCoverPercent: float | None = None
+    meanNdvi: float | None = None
+    minNdvi: float | None = None
+    maxNdvi: float | None = None
+    medianNdvi: float | None = None
+    stdNdvi: float | None = None
+    pixelCount: int = 0
+    vegetationCoverPercent: float | None = None
+    processingDurationMs: int = 0
+    warning: str | None = None
