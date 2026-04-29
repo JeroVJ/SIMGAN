@@ -86,6 +86,7 @@ public class BiomassCalibrationService {
             parcelResponses.add(BiomassCalibrationDto.ParcelBiomassCalibrationResponse.builder()
                     .parcelId(parcel.getId())
                     .parcelName(parcel.getName())
+                    .geoJson(parcel.getGeoJson())
                     .calibrated(calibrated)
                     .points(points.stream().map(this::toPointResponse).collect(Collectors.toList()))
                     .model(model != null ? toModelResponse(model) : null)

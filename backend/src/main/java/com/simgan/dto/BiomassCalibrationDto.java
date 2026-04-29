@@ -58,6 +58,7 @@ public class BiomassCalibrationDto {
     public static class ParcelBiomassCalibrationResponse {
         private Long parcelId;
         private String parcelName;
+        private String geoJson;
         private boolean calibrated;
         private List<SamplePointResponse> points;
         private RegressionModelResponse model;

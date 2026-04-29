@@ -625,22 +625,7 @@ export default function CalibrationBiomassPage() {
 
 /** Map component that shows one parcel boundary + markers */
 function ParcelMap({ parcel, points, onMapClick, placingPoints }) {
-  const [geoJson, setGeoJson] = useState(null)
-  const parcelId = parcel?.parcelId
-
-  useEffect(() => {
-    if (!parcelId) { setGeoJson(null); return }
-    let aborted = false
-    setGeoJson(null)
-    const token = localStorage.getItem('token')
-    fetch(`/api/parcels/${encodeURIComponent(parcelId)}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then(r => { if (!r.ok) throw new Error(); return r.json() })
-      .then(data => { if (!aborted && data.geoJson) setGeoJson(data.geoJson) })
-      .catch(() => {})
-    return () => { aborted = true }
-  }, [parcelId])
+  const geoJson = parcel?.geoJson || null
 
   if (!parcel) return null
   const center = centroidOf(geoJson)
