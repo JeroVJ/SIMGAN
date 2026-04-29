@@ -58,6 +58,7 @@ public class NdviAutoCalibrationRunner {
     private final NdviTerrainRecordRepository terrainRecordRepository;
     private final SentinelApiService sentinelApi;
     private final ImageProcessingClientService imageProcessingClientService;
+    private final EmailAlertService emailAlertService;
 
     @Async
     public void runJob(Long jobId, Long terrainId, LocalDate rangeStart, LocalDate rangeEnd) {
@@ -194,6 +195,7 @@ public class NdviAutoCalibrationRunner {
             job.setFinishedAt(LocalDateTime.now());
             jobRepository.save(job);
             log.warn("Auto-calibración job={} falló: {}", jobId, msg);
+            emailAlertService.sendAutoCalibrationCompletedEmail(jobId);
             return;
         }
 
@@ -216,6 +218,7 @@ public class NdviAutoCalibrationRunner {
         jobRepository.save(job);
         log.info("Auto-calibración job={} completada. p25={} p75={} escenas={}",
                 jobId, p25, p75, values.size());
+        emailAlertService.sendAutoCalibrationCompletedEmail(jobId);
     }
 
     private void upsertCalibration(Terrain terrain, String type, double value, LocalDate date, int scenesProcessed) {
@@ -242,6 +245,7 @@ public class NdviAutoCalibrationRunner {
             job.setFinishedAt(LocalDateTime.now());
             jobRepository.save(job);
         });
+        emailAlertService.sendAutoCalibrationCompletedEmail(jobId);
     }
 
     private double extractCloudCover(Map<String, Object> scene) {

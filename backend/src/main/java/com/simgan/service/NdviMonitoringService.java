@@ -33,6 +33,7 @@ public class NdviMonitoringService {
 
     private final ParcelRepository parcelRepository;
     private final AnalysisOrchestrator analysisOrchestrator;
+    private final EmailAlertService emailAlertService;
 
     /**
      * Toggle monitoring for a single parcel. The terrain-level scheduler is
@@ -83,7 +84,8 @@ public class NdviMonitoringService {
             try {
                 log.info("Monitoreo NDVI semanal terreno={} ({}) rango={} -> {}",
                         terrainId, terrainNames.get(terrainId), weekStart, today);
-                analysisOrchestrator.runAnalysis(terrainId, weekStart, today, "DEFAULT");
+                Map<String, Object> result = analysisOrchestrator.runAnalysis(terrainId, weekStart, today, "DEFAULT");
+                emailAlertService.sendWeeklyNdviSummaryEmail(terrainId, result);
             } catch (Exception ex) {
                 log.warn("Error monitoreo NDVI terreno={}: {}", terrainId, ex.getMessage());
             }

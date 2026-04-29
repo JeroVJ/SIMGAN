@@ -1,8 +1,12 @@
 package com.simgan.service;
 
 import com.simgan.entity.Alert;
+import com.simgan.entity.NdviCalibrationJob;
+import com.simgan.entity.Terrain;
 import com.simgan.repository.AlertRepository;
 import com.simgan.repository.GanaderoRepository;
+import com.simgan.repository.NdviCalibrationJobRepository;
+import com.simgan.repository.TerrainRepository;
 import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +21,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -26,6 +31,8 @@ public class EmailAlertService {
   private final ObjectProvider<JavaMailSender> mailSenderProvider;
     private final GanaderoRepository ganaderoRepository;
   private final AlertRepository alertRepository;
+    private final NdviCalibrationJobRepository calibrationJobRepository;
+    private final TerrainRepository terrainRepository;
 
     @Value("${spring.mail.from:SIMGAN <no-reply@simgan.local>}")
     private String fromAddress;
@@ -284,4 +291,237 @@ public class EmailAlertService {
               case POTRERO_CON_ESTRES_HIDRICO -> "Potrero con estrés hídrico";
             };
           }
+
+    // ===========================================================================
+    // Notificaciones operativas (auto-calibración, monitoreo NDVI semanal)
+    // ===========================================================================
+
+    /**
+     * Notifies the farm owner when a 12-month auto-calibration job finishes
+     * (success or failure). Re-fetches the job with the full Terrain → Farm →
+     * Ganadero graph so this @Async thread can navigate lazy associations.
+     */
+    @Async
+    public void sendAutoCalibrationCompletedEmail(Long jobId) {
+        if (jobId == null) return;
+        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
+        if (mailSender == null) {
+            log.warn("SMTP not configured. Skipping auto-calibration email for jobId={}", jobId);
+            return;
+        }
+
+        NdviCalibrationJob job = calibrationJobRepository.findByIdWithFullGraph(jobId).orElse(null);
+        if (job == null) {
+            log.warn("Auto-calibration job {} not found. Skipping email.", jobId);
+            return;
+        }
+
+        Terrain terrain = job.getTerrain();
+        String recipient = (terrain != null && terrain.getFarm() != null && terrain.getFarm().getGanadero() != null)
+                ? terrain.getFarm().getGanadero().getCorreo() : null;
+        if (!StringUtils.hasText(recipient)) {
+            log.warn("Auto-calibration job {} has no recipient email. Skipping.", jobId);
+            return;
+        }
+
+        String subject = job.getStatus() == NdviCalibrationJob.Status.COMPLETED
+                ? String.format("[SIMGAN] ✅ Auto-calibración NDVI completada — %s", terrain.getName())
+                : String.format("[SIMGAN] ⚠ Auto-calibración NDVI falló — %s", terrain.getName());
+
+        sendHtml(mailSender, recipient.trim(), subject, buildAutoCalibrationHtml(job));
+    }
+
+    private String buildAutoCalibrationHtml(NdviCalibrationJob job) {
+        Terrain terrain = job.getTerrain();
+        String farmName = terrain.getFarm() != null ? terrain.getFarm().getName() : "—";
+        boolean ok = job.getStatus() == NdviCalibrationJob.Status.COMPLETED;
+
+        String headerColor = ok ? "#16a34a" : "#dc2626";
+        String headerLabel = ok ? "Auto-calibración completada" : "Auto-calibración fallida";
+        String range = (job.getRangeStart() != null && job.getRangeEnd() != null)
+                ? job.getRangeStart() + " a " + job.getRangeEnd() : "—";
+
+        String thresholds = ok && job.getThresholdLow() != null && job.getThresholdHigh() != null
+                ? String.format("Umbral ALERTA (p25): <strong>%.4f</strong> &nbsp;·&nbsp; Umbral ÓPTIMO (p75): <strong>%.4f</strong>",
+                        job.getThresholdLow(), job.getThresholdHigh())
+                : "—";
+
+        String details = ok
+                ? String.format("Se procesaron %d escenas Sentinel-2 en %d semanas. Los nuevos umbrales se aplicarán automáticamente a todos los potreros del terreno.",
+                        job.getScenesProcessed() == null ? 0 : job.getScenesProcessed(),
+                        job.getWeeksCompleted() == null ? 0 : job.getWeeksCompleted())
+                : ("No fue posible completar la calibración. Detalle: "
+                        + (job.getErrorMessage() != null ? job.getErrorMessage() : "error desconocido"));
+
+        String dashboardUrl = appBaseUrl + "/terrains/" + terrain.getId() + "/ndvi/calibration-auto";
+
+        return """
+                <!DOCTYPE html>
+                <html lang="es"><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+                  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:24px 0;">
+                    <tr><td align="center">
+                      <table width="600" cellpadding="0" cellspacing="0"
+                             style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.12);">
+                        <tr>
+                          <td style="background:#15532e;padding:28px 32px;">
+                            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:1px;">SIMGAN</h1>
+                            <p style="margin:4px 0 0;color:#86efac;font-size:13px;">Calibración automática NDVI</p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="background:%s;padding:12px 32px;">
+                            <p style="margin:0;color:#ffffff;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:1px;">%s</p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:28px 32px;color:#374151;font-size:14px;line-height:1.6;">
+                            <h2 style="margin:0 0 6px;color:#111827;font-size:20px;">Terreno: %s</h2>
+                            <p style="margin:0 0 16px;color:#6b7280;font-size:13px;">Finca: <strong>%s</strong> &nbsp;·&nbsp; Rango analizado: %s</p>
+                            <div style="background:#f9fafb;border-radius:8px;padding:16px;margin-bottom:20px;">
+                              <p style="margin:0 0 6px;color:#6b7280;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Resumen</p>
+                              <p style="margin:0;color:#374151;font-size:14px;">%s</p>
+                            </div>
+                            <p style="margin:0 0 24px;color:#374151;font-size:14px;">%s</p>
+                            <p style="margin:24px 0 0;text-align:center;">
+                              <a href="%s" style="display:inline-block;background:#15532e;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Ver detalles de la calibración →</a>
+                            </p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;">
+                            <p style="margin:0;color:#9ca3af;font-size:11px;text-align:center;">Mensaje automático de SIMGAN. No responder a este correo.</p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td></tr>
+                  </table>
+                </body></html>
+                """.formatted(headerColor, headerLabel, terrain.getName(), farmName, range, thresholds, details, dashboardUrl);
+    }
+
+    /**
+     * Notifies the farm owner that a weekly NDVI capture finished for one
+     * terrain. Skips silently if the run produced no records (so the owner
+     * isn't spammed when there were no usable Sentinel scenes that week).
+     */
+    @Async
+    public void sendWeeklyNdviSummaryEmail(Long terrainId, Map<String, Object> result) {
+        if (terrainId == null || result == null) return;
+
+        Object recordsObj = result.get("recordsProcessed");
+        int records = recordsObj instanceof Number n ? n.intValue() : 0;
+        if (records <= 0) {
+            log.info("Skipping weekly NDVI email for terrain {} — no records processed.", terrainId);
+            return;
+        }
+
+        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
+        if (mailSender == null) {
+            log.warn("SMTP not configured. Skipping weekly NDVI email for terrainId={}", terrainId);
+            return;
+        }
+
+        Terrain terrain = terrainRepository.findByIdWithFullGraph(terrainId).orElse(null);
+        if (terrain == null) {
+            log.warn("Terrain {} not found. Skipping weekly NDVI email.", terrainId);
+            return;
+        }
+
+        String recipient = (terrain.getFarm() != null && terrain.getFarm().getGanadero() != null)
+                ? terrain.getFarm().getGanadero().getCorreo() : null;
+        if (!StringUtils.hasText(recipient)) {
+            log.warn("Terrain {} has no recipient email. Skipping weekly NDVI email.", terrainId);
+            return;
+        }
+
+        String subject = String.format("[SIMGAN] 🛰 Análisis NDVI semanal — %s", terrain.getName());
+        sendHtml(mailSender, recipient.trim(), subject, buildWeeklyNdviHtml(terrain, result));
+    }
+
+    private String buildWeeklyNdviHtml(Terrain terrain, Map<String, Object> result) {
+        String farmName = terrain.getFarm() != null ? terrain.getFarm().getName() : "—";
+        String source = String.valueOf(result.getOrDefault("source", "—"));
+        int records = ((Number) result.getOrDefault("recordsProcessed", 0)).intValue();
+        int scenes = ((Number) result.getOrDefault("scenesProcessed", 0)).intValue();
+        int dates = ((Number) result.getOrDefault("datesProcessed", 0)).intValue();
+        String today = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        String dashboardUrl = appBaseUrl + "/terrains/" + terrain.getId() + "/ndvi";
+
+        return """
+                <!DOCTYPE html>
+                <html lang="es"><body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+                  <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:24px 0;">
+                    <tr><td align="center">
+                      <table width="600" cellpadding="0" cellspacing="0"
+                             style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.12);">
+                        <tr>
+                          <td style="background:#15532e;padding:28px 32px;">
+                            <h1 style="margin:0;color:#ffffff;font-size:24px;font-weight:700;letter-spacing:1px;">SIMGAN</h1>
+                            <p style="margin:4px 0 0;color:#86efac;font-size:13px;">Análisis NDVI semanal</p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="background:#2563eb;padding:12px 32px;">
+                            <p style="margin:0;color:#ffffff;font-weight:700;font-size:14px;text-transform:uppercase;letter-spacing:1px;">🛰 Nueva imagen procesada</p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:28px 32px;color:#374151;font-size:14px;line-height:1.6;">
+                            <h2 style="margin:0 0 6px;color:#111827;font-size:20px;">Terreno: %s</h2>
+                            <p style="margin:0 0 20px;color:#6b7280;font-size:13px;">Finca: <strong>%s</strong> &nbsp;·&nbsp; Captura: %s</p>
+                            <table width="100%%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:8px;padding:16px;margin-bottom:20px;">
+                              <tr>
+                                <td style="padding:8px 12px;text-align:center;">
+                                  <p style="margin:0;color:#6b7280;font-size:11px;">Potreros con NDVI</p>
+                                  <p style="margin:4px 0 0;font-size:18px;font-weight:700;color:#15532e;">%d</p>
+                                </td>
+                                <td style="padding:8px 12px;text-align:center;">
+                                  <p style="margin:0;color:#6b7280;font-size:11px;">Escenas usadas</p>
+                                  <p style="margin:4px 0 0;font-size:18px;font-weight:700;color:#15532e;">%d</p>
+                                </td>
+                                <td style="padding:8px 12px;text-align:center;">
+                                  <p style="margin:0;color:#6b7280;font-size:11px;">Fechas</p>
+                                  <p style="margin:4px 0 0;font-size:18px;font-weight:700;color:#15532e;">%d</p>
+                                </td>
+                                <td style="padding:8px 12px;text-align:center;">
+                                  <p style="margin:0;color:#6b7280;font-size:11px;">Fuente</p>
+                                  <p style="margin:4px 0 0;font-size:13px;font-weight:700;color:#15532e;">%s</p>
+                                </td>
+                              </tr>
+                            </table>
+                            <p style="margin:0 0 24px;color:#374151;font-size:14px;">
+                              Si algún potrero queda por debajo del umbral de alerta, recibirás un correo aparte. Revisa el dashboard para ver el NDVI y la biomasa por potrero.
+                            </p>
+                            <p style="margin:24px 0 0;text-align:center;">
+                              <a href="%s" style="display:inline-block;background:#15532e;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Ver dashboard NDVI →</a>
+                            </p>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="background:#f9fafb;padding:16px 32px;border-top:1px solid #e5e7eb;">
+                            <p style="margin:0;color:#9ca3af;font-size:11px;text-align:center;">Mensaje automático de SIMGAN. No responder a este correo.</p>
+                          </td>
+                        </tr>
+                      </table>
+                    </td></tr>
+                  </table>
+                </body></html>
+                """.formatted(terrain.getName(), farmName, today, records, scenes, dates, source, dashboardUrl);
+    }
+
+    /** Generic HTML mail sender shared by alert and notification methods. */
+    private void sendHtml(JavaMailSender mailSender, String to, String subject, String htmlBody) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+            helper.setFrom(fromAddress);
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(htmlBody, true);
+            mailSender.send(message);
+            log.info("Notification email sent to {} subject='{}'", to, subject);
+        } catch (Exception e) {
+            log.error("Failed to send notification email to {}: {}", to, e.getMessage());
+        }
+    }
 }
