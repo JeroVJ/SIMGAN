@@ -1,10 +1,10 @@
-#  SIMGA
+#  SIMGAn
 
 Demo funcional para registrar fincas, dibujar terrenos sobre imagen satelital, calcular áreas, subdividir en parcelas y gestionar rotación de pastoreo.
 
 ---
 
-## 📋 Qué hace el Demo
+##  Qué hace el Demo
 
 | Paso | Pantalla | Acción |
 |------|----------|--------|
