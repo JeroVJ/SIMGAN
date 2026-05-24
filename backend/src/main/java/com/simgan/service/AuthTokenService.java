@@ -12,6 +12,17 @@ import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * Servicio para manejar sesiones/autorización a través de tokens JWT persistidos.
+ *
+ * Idea:
+ * - Aunque el JWT es "stateless", aquí se persiste en BD para poder revocar sesiones.
+ *
+ * Valores:
+ * - expiresAt: fecha/hora de expiración del token (debe coincidir con la expiración del JWT).
+ * - isRevoked: marca que invalida el token aunque no haya expirado.
+ * - revokedAt: momento de revocación (auditoría).
+ */
 public class AuthTokenService {
 
     private final AuthTokenRepository authTokenRepository;

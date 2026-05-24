@@ -27,6 +27,20 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/sensors")
 @RequiredArgsConstructor
+/**
+ * Endpoints REST para Sensores IoT asociados a parcelas.
+ *
+ * Funcionalidades:
+ * - CRUD básico de sensores y consulta por parcela.
+ * - Consulta de clasificaciones (lecturas interpretadas) asociadas al sensor.
+ * - Gestión de estado de conexión y configuración MQTT (broker, topic, clientId, polling).
+ * - Consulta de última clasificación a nivel de parcela.
+ *
+ * Valores usados:
+ * - DEFAULT_POLLING_INTERVAL_MS: 3.600.000 ms (1 hora).
+ * - MIN_POLLING_INTERVAL_MS: 60.000 ms (1 minuto) para evitar intervalos demasiado agresivos.
+ * - IoT habilitado: se controla por finca (farm.iotEnabled). Si está deshabilitado, se retorna 403.
+ */
 public class SensorController {
 
     private static final int DEFAULT_POLLING_INTERVAL_MS = 3_600_000;
@@ -65,6 +79,14 @@ public class SensorController {
     }
 
     @PostMapping
+    /**
+     * Crea un sensor.
+     *
+     * Valores relevantes:
+     * - parcelId: si se asigna, la finca debe tener IoT habilitado (farm.iotEnabled=true).
+     * - mqttTopic/mqttBrokerUrl/clientId: parámetros para conexión MQTT.
+     * - pollingIntervalMs: intervalo de lectura/consulta (si no llega, usa DEFAULT_POLLING_INTERVAL_MS).
+     */
     public ResponseEntity<SensorDto> create(@RequestBody SensorCreateDto sensorCreateDto) {
         // Crear nueva entidad Sensor
         Sensor sensor = new Sensor();
@@ -95,6 +117,9 @@ public class SensorController {
     }
 
     @GetMapping("/parcel/{parcelId}")
+    /**
+     * Lista sensores asociados a una parcela.
+     */
     public ResponseEntity<List<SensorDto>> findByParcelId(@PathVariable Long parcelId) {
         Optional<Parcel> parcel = parcelRepository.findById(parcelId);
         if (parcel.isEmpty()) {
@@ -112,6 +137,9 @@ public class SensorController {
     }
 
     @GetMapping("/{id}")
+    /**
+     * Obtiene un sensor por id.
+     */
     public ResponseEntity<SensorDto> findById(@PathVariable Long id) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
@@ -124,6 +152,9 @@ public class SensorController {
     }
 
     @GetMapping("/{id}/classifications")
+    /**
+     * Retorna las clasificaciones (interpretaciones de humedad/estado) registradas para el sensor.
+     */
     public ResponseEntity<List<ClasificacionSensorDto>> getClassifications(@PathVariable Long id) {
         Optional<Sensor> sensor = sensorRepository.findById(id);
         if (sensor.isEmpty()) {
@@ -170,6 +201,9 @@ public class SensorController {
     }
 
     @DeleteMapping("/{id}")
+    /**
+     * Elimina un sensor por id.
+     */
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
@@ -183,6 +217,9 @@ public class SensorController {
     }
 
     @PostMapping("/{id}/connect")
+    /**
+     * Marca el sensor como conectado (estado lógico en BD).
+     */
     public ResponseEntity<SensorDto> connect(@PathVariable Long id) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
@@ -197,6 +234,9 @@ public class SensorController {
     }
 
     @PostMapping("/{id}/disconnect")
+    /**
+     * Marca el sensor como desconectado (estado lógico en BD).
+     */
     public ResponseEntity<SensorDto> disconnect(@PathVariable Long id) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
@@ -211,6 +251,9 @@ public class SensorController {
     }
 
     @GetMapping("/{id}/status")
+    /**
+     * Retorna un resumen de estado/configuración MQTT del sensor (para UI).
+     */
     public ResponseEntity<MqttConfigResponseDto> getStatus(@PathVariable Long id) {
         return sensorRepository.findById(id)
                 .map(sensor -> {
@@ -233,6 +276,9 @@ public class SensorController {
     }
 
     @GetMapping("/{id}/mqtt-config")
+    /**
+     * Obtiene la configuración MQTT persistida/gestionada para el sensor.
+     */
     public ResponseEntity<MqttConfigResponseDto> getMqttConfig(@PathVariable Long id) {
         try {
             Optional<Sensor> sensor = sensorRepository.findById(id);
@@ -250,6 +296,12 @@ public class SensorController {
     }
 
     @PostMapping("/{id}/mqtt-config")
+    /**
+     * Guarda configuración MQTT del sensor.
+     *
+     * Nota:
+     * - Si viene password, intenta conexión MQTT inmediatamente para verificar la config.
+     */
     public ResponseEntity<MqttConfigResponseDto> saveMqttConfig(
             @PathVariable Long id,
             @RequestBody MqttConfigUpdateDto request) {
@@ -283,6 +335,9 @@ public class SensorController {
     }
 
     @PostMapping("/{id}/mqtt-connect")
+    /**
+     * Intenta conectar el sensor vía MQTT usando la configuración guardada.
+     */
     public ResponseEntity<String> connectMqtt(@PathVariable Long id) {
         try {
             Sensor sensor = sensorRepository.findById(id)
@@ -305,6 +360,9 @@ public class SensorController {
     }
 
     @PostMapping("/{id}/mqtt-disconnect")
+    /**
+     * Desconecta el cliente MQTT asociado al sensor.
+     */
     public ResponseEntity<String> disconnectMqtt(@PathVariable Long id) {
         try {
             Optional<Sensor> sensor = sensorRepository.findById(id);
@@ -323,6 +381,9 @@ public class SensorController {
     }
 
     @GetMapping("/parcel/{parcelId}/last-classification")
+    /**
+     * Retorna la última clasificación disponible para una parcela (si hay sensores).
+     */
     public ResponseEntity<Map<String, Object>> getLastClassificationForParcel(@PathVariable Long parcelId) {
         List<Sensor> sensors = sensorRepository.findByParcelId(parcelId);
         Map<String, Object> result = new HashMap<>();
@@ -339,6 +400,12 @@ public class SensorController {
     }
 
     @PatchMapping("/{id}/config")
+    /**
+     * Actualiza parcialmente la configuración MQTT del sensor.
+     *
+     * Normalización:
+     * - pollingIntervalHours/pollingIntervalMs se limita a MIN_POLLING_INTERVAL_MS.
+     */
     public ResponseEntity<MqttConfigResponseDto> updateConfig(@PathVariable Long id, @RequestBody MqttConfigUpdateDto.UpdateRequest request) {
         return sensorRepository.findById(id)
                 .map(sensor -> {

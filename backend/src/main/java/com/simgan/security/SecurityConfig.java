@@ -16,6 +16,15 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
+/**
+ * Configuración de Spring Security.
+ *
+ * Funcionalidad:
+ * - API stateless (sin sesión): cada request debe traer JWT en Authorization: Bearer <token>.
+ * - Rutas públicas: login/registro y flujo de recuperación de contraseña.
+ * - Rutas privadas: todo lo demás.
+ * - Filtro JWT: valida el token y establece el usuario autenticado en el SecurityContext.
+ */
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;

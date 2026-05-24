@@ -16,6 +16,20 @@ import java.util.stream.Collectors;
 @Service
 @Slf4j
 @RequiredArgsConstructor
+/**
+ * Lógica de negocio para Lotes y Ganado.
+ *
+ * Conceptos:
+ * - Lote: grupo de animales que se mueve entre parcelas.
+ * - currentParcel: potrero actual donde está el lote (si está asignado).
+ * - LoteParcelHistory: historial de movimientos del lote (fecha de ingreso/salida por parcela).
+ *
+ * Funcionalidades:
+ * - Crear/cerrar/eliminar lotes.
+ * - Asignar/desasignar parcela al lote, actualizando el estado del potrero.
+ * - Guardar asignación de rotación (orden + DO/DD por parcela) y opcionalmente mover al orden 1.
+ * - CRUD de ganado dentro del lote (incluye actualización de peso).
+ */
 public class LoteService {
 
     private final LoteRepository loteRepository;
@@ -64,6 +78,7 @@ public class LoteService {
                 .orElseThrow(() -> new RuntimeException("Lote no encontrado"));
 
         if (req.getGanados() != null && !req.getGanados().isEmpty()) {
+            // Actualiza pesos de animales (si el request trae lista de ganados/pesos).
             Map<Long, Double> pesosPorGanado = req.getGanados().stream()
                     .filter(item -> item.getGanadoId() != null)
                     .collect(Collectors.toMap(
@@ -103,6 +118,7 @@ public class LoteService {
         Lote lote = loteRepository.findById(loteId)
                 .orElseThrow(() -> new RuntimeException("Lote no encontrado"));
 
+        // Si estaba en una parcela, deja la parcela como DISPONIBLE.
         if (lote.getCurrentParcel() != null) {
             Parcel parcel = lote.getCurrentParcel();
             parcel.setStatus(Parcel.ParcelStatus.DISPONIBLE);
@@ -123,38 +139,38 @@ public class LoteService {
         Parcel newParcel = parcelRepository.findById(req.getParcelId())
                 .orElseThrow(() -> new RuntimeException("Parcela no encontrada"));
 
-        // Check parcel belongs to same terrain
+        // revisar que la parcela debe pertenecer al mismo terreno del lote.
         if (!newParcel.getTerrain().getId().equals(lote.getTerrain().getId())) {
             throw new RuntimeException("La parcela no pertenece al mismo terreno del lote");
         }
 
-        // Check parcel is available
+        // revisar que la parcela este disponible.
         if (newParcel.getStatus() == Parcel.ParcelStatus.EN_USO) {
-            // Check if it's in use by another lote
+            // revisar si esta en uso en otro lote
             List<Lote> occupying = loteRepository.findByCurrentParcelId(newParcel.getId());
             if (!occupying.isEmpty() && occupying.stream().noneMatch(l -> l.getId().equals(loteId))) {
                 throw new RuntimeException("La parcela ya está ocupada por otro lote: " + occupying.get(0).getName());
             }
         }
 
-        // Idempotency: if lote is already in the requested parcel, do nothing
+        // Idempotencia: si ya está en la parcela solicitada, no hacer cambios.
         if (lote.getCurrentParcel() != null
                 && lote.getCurrentParcel().getId().equals(newParcel.getId())) {
             log.info("Lote {} ya está en la parcela {}, sin cambios.", lote.getName(), newParcel.getName());
             return toResponse(lote);
         }
 
-        // Unassign from previous parcel
+        // Si estaba en otra parcela, se desasigna antes de mover.
         if (lote.getCurrentParcel() != null) {
             unassignFromCurrentParcel(lote);
         }
 
-        // Assign to new parcel
+        // Asignar a la nueva parcela y marcarla en EN_USO.
         lote.setCurrentParcel(newParcel);
         newParcel.setStatus(Parcel.ParcelStatus.EN_USO);
         parcelRepository.save(newParcel);
 
-        // Create history entry — pre-calculate fechaSalida if DO is already configured
+        // Crear entrada de historial. Si DO ya está configurado, pre-calcula fechaSalida.
         LocalDate ingresoHoy = LocalDate.now();
         LocalDate salidaCalculada = (newParcel.getDiasOcupacion() != null)
                 ? ingresoHoy.plusDays(Math.round(newParcel.getDiasOcupacion()))
@@ -191,7 +207,7 @@ public class LoteService {
         prev.setStatus(Parcel.ParcelStatus.EN_DESCANSO);
         parcelRepository.save(prev);
 
-        // Close history entry — override fechaSalida to today (manual move)
+        // Cerrar entrada de historial: fija fechaSalida a hoy (movimiento manual).
         parcelHistoryRepository.findTopByLoteIdOrderByFechaIngresoDesc(lote.getId())
                 .ifPresent(h -> {
                     h.setFechaSalida(LocalDate.now());
@@ -228,9 +244,10 @@ public class LoteService {
             parcelRepository.save(parcel);
         }
 
-        // Assign lote to the first parcel in the rotation sequence ONLY if not already
-        // placed in one of the rotation parcels. This avoids creating a spurious 0-day
-        // history entry when the user updates DO/DD for a lote that is already assigned.
+        // Asigne el lote a la primera parcela en la secuencia de rotación ÚNICAMENTE 
+        // si no está ya ubicado en una de las parcelas de rotación. Esto evita crear 
+        // una entrada de historial de día 0 errónea cuando el usuario actualiza DO/DD para un lote que ya está asignado.
+    
         Set<Long> rotationParcelIds = req.getEntries().stream()
                 .map(LoteDto.RotationAssignmentEntry::getParcelId)
                 .collect(Collectors.toSet());

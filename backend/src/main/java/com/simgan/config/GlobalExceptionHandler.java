@@ -11,6 +11,18 @@ import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
+/**
+ * Manejador global de excepciones para el backend.
+ *
+ * Objetivo:
+ * - Convertir excepciones comunes del dominio/validación en respuestas HTTP consistentes.
+ *
+ * Convenciones usadas:
+ * - IllegalArgumentException -> 400 (errores de validación o reglas de negocio).
+ * - RuntimeException -> 404 (cuando se usa para "no encontrado" en los services).
+ * - MethodArgumentNotValidException -> 400 con errores por campo (Bean Validation).
+ * - DataIntegrityViolationException -> 400 para violaciones de integridad (ej: unique constraints).
+ */
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)

@@ -18,6 +18,23 @@ import java.util.stream.Collectors;
 @RequestMapping("/ndvi")
 @RequiredArgsConstructor
 @Slf4j
+/**
+ * Endpoints REST para analítica NDVI.
+ *
+ * Funcionalidades:
+ * - Dashboard y timeline NDVI (terreno y por parcela).
+ * - Ranking comparativo de parcelas.
+ * - Recomendaciones de rotación basadas en umbrales/calibración NDVI.
+ * - Ejecución manual de análisis NDVI por rango de fechas.
+ * - Configuración/consulta de programación de análisis automático.
+ * - Estado de conexiones satelitales (Planet/Sentinel) y metadatos de bandas.
+ * - Estimación de días de pastoreo por parcela con lote activo.
+ *
+ * Valores usados en este controller:
+ * - Fórmula NDVI: (NIR - Red) / (NIR + Red).
+ * - Estimación de biomasa disponible: se descuenta 30% residual del total.
+ * - Tasas de consumo diario (proporción del peso vivo): VACA=0.10, NOVILLA=0.12, NOVILLO=0.13, TORO=0.11.
+ */
 public class NdviController {
 
     private final NdviRecommendationService recommendationService;
@@ -99,13 +116,20 @@ public class NdviController {
     }
 
     @PostMapping("/analyze/{terrainId}")
+    /**
+     * Ejecuta un análisis NDVI manual para un terreno en un rango de fechas.
+     *
+     * Parámetros:
+     * - startDate/endDate: fechas ISO (YYYY-MM-DD).
+     * - biomassMethod: método de biomasa (string) consumido por el orquestador; "DEFAULT" por defecto.
+     */
     public ResponseEntity<Map<String, Object>> analyzeTerrain(
         @PathVariable Long terrainId,
         @RequestParam String startDate,
         @RequestParam String endDate,
         @RequestParam(required = false, defaultValue = "DEFAULT") String biomassMethod) {
 
-    // Parse directo (sin try/catch)
+    // Parse directo (sin try/catch): si el formato es inválido, el handler global devolverá 400.
     LocalDate start = LocalDate.parse(startDate);
     LocalDate end = LocalDate.parse(endDate);
     LocalDate today = LocalDate.now();
@@ -134,11 +158,17 @@ public class NdviController {
   }
 
     @GetMapping("/schedule/{terrainId}")
+    /**
+     * Consulta la programación de análisis automático NDVI del terreno.
+     */
     public ResponseEntity<Map<String, Object>> getAnalysisSchedule(@PathVariable Long terrainId) {
         return ResponseEntity.ok(ndviAnalysisScheduleService.getSchedule(terrainId));
     }
 
     @PostMapping("/schedule/{terrainId}")
+    /**
+     * Configura la programación de análisis automático NDVI (cada N días).
+     */
     public ResponseEntity<Map<String, Object>> configureAnalysisSchedule(
             @PathVariable Long terrainId,
             @RequestParam int days) {
@@ -245,7 +275,7 @@ public class NdviController {
                 entry.put("dailyConsumptionKg", Math.round(consumoDiarioMS * 10.0) / 10.0);
                 entry.put("estimatedDays", Math.max(0, estimatedDays));
 
-                // Generate alert if days <= 3
+                // Alerta simple: si quedan 3 días o menos de forraje, sugerir rotación.
                 boolean needsAlert = estimatedDays <= 3;
                 entry.put("alert", needsAlert);
                 entry.put("alertMessage", needsAlert

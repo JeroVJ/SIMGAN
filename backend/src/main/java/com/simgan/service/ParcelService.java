@@ -19,6 +19,21 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+/**
+ * Lógica de negocio para Parcelas/Potreros.
+ *
+ * Funcionalidades principales:
+ * - Crear/actualizar parcelas validando nombre (único por terreno) y geometría (dentro del terreno).
+ * - Consultar parcelas por terreno o por id.
+ * - Cambiar estado de parcela registrando historial de rotación (RotationHistory).
+ * - Calcular un plan de rotación (DO/DD/carga) usando biomasa NDVI, área y factores edáficos.
+ *
+ * Valores relevantes:
+ * - geoJson: geometría GeoJSON de la parcela; debe estar cubierta por el geoJson del terreno.
+ * - areaSqMeters / areaHectares: áreas (opcionales) en m² y ha.
+ * - status: DISPONIBLE / EN_USO / EN_DESCANSO.
+ * - diasOcupacion (DO) / diasDescanso (DD): métricas de rotación persistidas en la entidad Parcel.
+ */
 public class ParcelService {
 
     private final ParcelRepository parcelRepository;
@@ -38,15 +53,18 @@ public class ParcelService {
     }
 
     public ParcelDto.Response create(ParcelDto.CreateRequest request) {
+        // 1) Validación de existencia del terreno contenedor.
         Terrain terrain = terrainRepository.findById(request.getTerrainId())
                 .orElseThrow(() -> new RuntimeException("Terreno no encontrado con id: " + request.getTerrainId()));
 
+        // 2) Nombre único por terreno.
         String normalizedName = normalizeName(request.getName(), "El nombre del potrero");
         if (parcelRepository.existsByTerrainIdAndNameIgnoreCase(terrain.getId(), normalizedName)) {
             throw new IllegalArgumentException(
                     "Ya existe un potrero con el nombre '" + normalizedName + "' en este terreno.");
         }
 
+        // 3) Validación espacial: la parcela debe estar totalmente dentro del terreno.
         if (!GeoJsonUtils.covers(terrain.getGeoJson(), request.getGeoJson())) {
             throw new IllegalArgumentException("El potrero debe quedar completamente dentro del terreno.");
         }
@@ -76,6 +94,7 @@ public class ParcelService {
                     "Ya existe un potrero con el nombre '" + normalizedName + "' en este terreno.");
         }
 
+        // Se mantiene la regla de contención dentro del terreno al actualizar geometría.
         if (!GeoJsonUtils.covers(terrain.getGeoJson(), request.getGeoJson())) {
             throw new IllegalArgumentException("El potrero debe quedar completamente dentro del terreno.");
         }
@@ -106,7 +125,7 @@ public class ParcelService {
         Parcel parcel = parcelRepository.findById(id)
             .orElseThrow(() -> new RuntimeException("Parcela no encontrada con id: " + id));
 
-        // Block status change if parcel is in use by an active lote
+        // Regla: bloquear el cambio de estado si la parcela está ocupada por un lote activo.
         List<Lote> occupyingLotes = loteRepository.findByCurrentParcelId(id);
         List<Lote> activeLotes = occupyingLotes.stream()
             .filter(l -> l.getFechaSalida() == null)
@@ -119,9 +138,9 @@ public class ParcelService {
 
         Parcel.ParcelStatus previousStatus = parcel.getStatus();
 
-        // Only log if status actually changed
+        // Registrar historial sólo si el estado cambia realmente.
         if (previousStatus != newStatus) {
-            // Get latest NDVI for context
+            // Captura contexto del último NDVI.
             Optional<NdviRecord> latestNdvi = ndviRecordRepository
                 .findFirstByParcelIdOrderByCaptureDateDesc(id);
 
@@ -182,12 +201,12 @@ public class ParcelService {
         List<ParcelDto.RotationPlanEntry> result = new ArrayList<>();
 
         for (Parcel parcel : parcels) {
-            // NDVI / biomass
+            // NDVI/biomasa.
             Optional<NdviRecord> latestNdvi =
                     ndviRecordRepository.findFirstByParcelIdOrderByCaptureDateDesc(parcel.getId());
             Double biomassKgPerHa = resolveCurrentBiomassKgPerHa(parcel, latestNdvi);
 
-            // Sensor + last classification
+            // Sensores y última clasificación.
             List<Sensor> sensors = sensorRepository.findByParcelId(parcel.getId());
             boolean hasSensor = !sensors.isEmpty();
             String estadoEdafico = null;
@@ -197,7 +216,7 @@ public class ParcelService {
                 estadoEdafico = lastClasif.map(ClasificacionSensor::getEstado).orElse(null);
             }
 
-            // Compute metrics only when we have biomass + area
+            // Sólo calcula métricas si hay biomasa y área válidas.
             Long forrajeDisponible = null;
             Long cargaAnimal = null;
             Double cargaPerHa = null;
@@ -333,6 +352,7 @@ public class ParcelService {
     }
 
     private double edaphicFactor(String soilType, String pastureType, String estado) {
+        // Factor edáfico aplicado sólo a combinaciones específicas (ejemplo de regla de negocio).
         if (!isFrancoArcilloso(soilType) || !isBrachiariaHumidicola(pastureType)) return 1.0;
         if (estado == null) return 1.0;
         return switch (estado.toUpperCase()) {

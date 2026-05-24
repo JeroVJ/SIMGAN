@@ -48,7 +48,12 @@ public class NdviRecommendationService {
     private static final DateTimeFormatter FMT = DateTimeFormatter.ISO_LOCAL_DATE;
 
     /**
-     * Genera el dashboard completo de NDVI para un terreno
+     * Genera el dashboard completo de NDVI para un terreno.
+     *
+     * Devuelve:
+     * - Promedios NDVI del terreno (consolidado de parcelas con datos).
+     * - Biomasa total estimada (suma biomasaKgPerHa * área parcela).
+     * - Timeline con puntos por fecha.
      */
     public NdviDto.TerrainDashboard getDashboard(Long terrainId) {
         Terrain terrain = terrainRepository.findById(terrainId)
@@ -61,7 +66,7 @@ public class NdviRecommendationService {
                         s.getLatestNdvi() != null ? s.getLatestNdvi() : 0).reversed())
                 .collect(Collectors.toList());
 
-        // Aggregated stats
+        // Estadísticas agregadas (promedios/sumas).
         double avgNdvi = summaries.stream()
                 .filter(s -> s.getLatestNdvi() != null)
                 .mapToDouble(NdviDto.ParcelSummary::getLatestNdvi)
@@ -77,7 +82,7 @@ public class NdviRecommendationService {
                 .mapToDouble(NdviDto.ParcelSummary::getAreaHectares)
                 .sum();
 
-        // Timeline data (all parcels combined)
+        // Timeline data (todas las parcelas combinadas)
         List<NdviDto.TimelinePoint> timeline = getTerrainTimeline(terrainId);
 
         String lastDate = summaries.stream()
@@ -103,7 +108,11 @@ public class NdviRecommendationService {
     }
 
     /**
-     * Resumen NDVI de una parcela individual
+     * Resumen NDVI de una parcela individual:
+     * - último NDVI/fecha
+     * - promedios históricos y tendencia (pendiente)
+     * - estado de salud + color para UI
+     * - recomendación textual
      */
     public NdviDto.ParcelSummary getParcelSummary(Parcel parcel) {
         Optional<NdviRecord> latestOpt = ndviRecordRepository.findFirstByParcelIdOrderByCaptureDateDesc(parcel.getId());
@@ -138,13 +147,13 @@ public class NdviRecommendationService {
                     .trendSlope(calculateTrend(history));
         }
 
-        // Health classification using calibrated thresholds
+        // Clasificación de salud usando umbrales.
         double ndvi = latestOpt.map(NdviRecord::getMeanNdvi).orElse(0.0);
         double[] thresholds = getThresholds(parcel.getId(), parcel.getTerrain().getId());
         String[] health = classifyHealth(ndvi, thresholds[0], thresholds[1], latestBiomass);
         builder.healthStatus(health[0]).healthColor(health[1]);
 
-        // Recommendation
+        // Recomendación.
         builder.recommendation(generateRecommendation(parcel, latestOpt.orElse(null)));
 
         return builder.build();
@@ -174,7 +183,7 @@ public class NdviRecommendationService {
                     .build());
         }
 
-        // Sort by NDVI descending and assign ranks
+        // Orden por NDVI descendente y asignación de ranking.
         comparisons.sort(Comparator.comparingDouble((NdviDto.ParcelComparison c) ->
                 c.getLatestNdvi() != null ? c.getLatestNdvi() : 0).reversed());
 
@@ -186,7 +195,11 @@ public class NdviRecommendationService {
     }
 
     /**
-     * Genera recomendaciones de rotación para todas las parcelas
+     * Genera recomendaciones de rotación para todas las parcelas.
+     *
+     * Regla general:
+     * - Si el NDVI está por debajo del umbral de alerta, se sugiere descanso.
+     * - Si el NDVI está por encima del umbral óptimo y la parcela estaba en descanso, se sugiere disponible.
      */
     public List<NdviDto.RotationRecommendation> getRotationRecommendations(Long terrainId) {
         List<Parcel> parcels = parcelRepository.findByTerrainId(terrainId);
@@ -238,7 +251,7 @@ public class NdviRecommendationService {
             }
         }
 
-        // Sort by urgency
+        // Orden por urgencia.
         Map<String, Integer> urgencyOrder = Map.of("URGENTE", 0, "ALTA", 1, "MEDIA", 2, "BAJA", 3);
         recommendations.sort(Comparator.comparingInt(r -> urgencyOrder.getOrDefault(r.getUrgency(), 4)));
 
@@ -246,7 +259,7 @@ public class NdviRecommendationService {
     }
 
     /**
-     * Historial de rotación por terreno
+     * Historial de rotación por terreno.
      */
     public List<NdviDto.RotationHistoryEntry> getRotationHistory(Long terrainId) {
         return rotationHistoryRepository.findByParcelTerrainIdOrderByChangedAtDesc(terrainId)
@@ -346,13 +359,13 @@ public class NdviRecommendationService {
      * Expuesto como public para uso en reportes PDF.
      */
     public double[] getThresholds(Long parcelId, Long terrainId) {
-        // 1. Try parcel-level calibrations
+        // 1. Prueba las calibraciones a nivel de parcela.
         var optimParcel = calibrationRepository.findByParcelIdAndCalibrationType(parcelId, "OPTIM");
         double optim = optimParcel.map(NdviCalibration::getReferenceNdvi).orElse(-1.0);
         double alert = calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "ALERT")
             .map(NdviCalibration::getReferenceNdvi).orElse(alertThreshold);
 
-        // 2. Fallback to terrain-level calibrations
+        // 2. Recurrir a las calibraciones a nivel del terreno.
         if (optim < 0) {
             optim = calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "OPTIM")
                     .map(NdviCalibration::getReferenceNdvi).orElse(optimalThreshold);

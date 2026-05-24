@@ -16,6 +16,15 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 @Component
+/**
+ * Filtro JWT que se ejecuta una vez por request.
+ *
+ * Flujo:
+ * - Lee el header Authorization (Bearer <token>).
+ * - Extrae el username (subject) desde el JWT.
+ * - Valida el token contra la base de datos (revocado/expirado) y contra la firma del JWT.
+ * - Si es válido, crea Authentication y la guarda en SecurityContextHolder.
+ */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;

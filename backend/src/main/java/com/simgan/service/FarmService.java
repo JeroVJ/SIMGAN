@@ -14,6 +14,21 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+/**
+ * Lógica de negocio para Fincas.
+ *
+ * Funcionalidades:
+ * - Crear finca validando nombre y unicidad por ganadero.
+ * - Listar/consultar fincas del ganadero autenticado.
+ * - Eliminar finca con verificación de pertenencia (AccessDeniedException si no es dueño).
+ *
+ * Valores típicos:
+ * - department/municipality: ubicación administrativa.
+ * - centerLat/centerLng: punto central (para mapas/UX).
+ * - isHomogeneous: marca si la finca se considera homogénea (criterio del usuario).
+ * - soilType/pastureType: metadatos usados por cálculos/planes (rotación/edáficos).
+ * - iotEnabled: habilita endpoints/operación IoT (sensores) a nivel de finca.
+ */
 public class FarmService {
 
     private final FarmRepository farmRepository;

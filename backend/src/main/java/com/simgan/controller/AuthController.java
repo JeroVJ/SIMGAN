@@ -18,6 +18,19 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/auth")
+/**
+ * Endpoints de autenticación y sesiones.
+ *
+ * Funcionalidades:
+ * - Login: autentica con email/contraseña y emite un JWT.
+ * - Registro: crea el ganadero y realiza auto-login.
+ * - Sesión actual (me): devuelve los datos básicos del ganadero autenticado.
+ * - Logout y revocación: invalida tokens persistidos para cerrar sesión.
+ * - Recuperación de contraseña: inicia y confirma el reseteo vía token temporal.
+ *
+ * Convención:
+ * - El JWT se envía en el header Authorization: Bearer <token>.
+ */
 public class AuthController {
 
     private final AuthenticationManager authenticationManager;
@@ -37,6 +50,13 @@ public class AuthController {
     }
 
     @PostMapping("/login")
+    /**
+     * Autentica credenciales y retorna:
+     * - token: JWT firmado con expiración (24h).
+     * - ganadero: datos mínimos del usuario.
+     *
+     * También persiste el token en BD para permitir revocación de sesiones.
+     */
     public ResponseEntity<?> login(@RequestBody Map<String, String> loginRequest) {
         String email = safeTrim(loginRequest.get("email"));
         if (email != null) email = email.toLowerCase();
@@ -68,6 +88,18 @@ public class AuthController {
     }
 
     @PostMapping("/register")
+    /**
+     * Registra un ganadero.
+     *
+     * Validaciones:
+     * - firstName/lastName obligatorios
+     * - email con formato básico
+     * - password mínimo 8 caracteres
+     *
+     * Comportamiento:
+     * - Normaliza el email a minúsculas.
+     * - Luego realiza auto-login y entrega un JWT.
+     */
     public ResponseEntity<?> register(@RequestBody Map<String, String> registerRequest) {
         String firstName = safeTrim(registerRequest.get("firstName"));
         String lastName = safeTrim(registerRequest.get("lastName"));
@@ -129,6 +161,9 @@ public class AuthController {
     }
 
     @GetMapping("/me")
+    /**
+     * Retorna la información básica del ganadero autenticado (extraído del SecurityContext).
+     */
     public ResponseEntity<?> me(Authentication authentication) {
         String email = authentication.getName();
         Ganadero ganadero = ganaderoService.buscarPorCorreo(email).orElseThrow();
@@ -141,6 +176,9 @@ public class AuthController {
     }
 
     @PostMapping("/logout")
+    /**
+     * Revoca el token actual (cierre de sesión).
+     */
     public ResponseEntity<?> logout(@RequestHeader("Authorization") String authHeader) {
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             String token = authHeader.substring(7);
@@ -151,6 +189,9 @@ public class AuthController {
     }
 
     @GetMapping("/sessions")
+    /**
+     * Devuelve las sesiones activas (tokens no revocados) del ganadero autenticado.
+     */
     public ResponseEntity<?> getSessions(Authentication authentication) {
         String email = authentication.getName();
         Ganadero ganadero = ganaderoService.buscarPorCorreo(email).orElseThrow();
@@ -166,6 +207,9 @@ public class AuthController {
     }
 
     @PostMapping("/revoke-all")
+    /**
+     * Revoca todos los tokens del ganadero autenticado (cierre de sesión en todos los dispositivos).
+     */
     public ResponseEntity<?> revokeAll(Authentication authentication) {
         String email = authentication.getName();
         Ganadero ganadero = ganaderoService.buscarPorCorreo(email).orElseThrow();
@@ -174,10 +218,10 @@ public class AuthController {
     }
 
     /**
-     * Starts the password reset flow. Always returns 200 so attackers cannot
-     * enumerate which emails are registered. If the email exists, a reset link
-     * is emailed asynchronously (token valid 30 minutes).
-     */
+    * Inicia el proceso de restablecimiento de contraseña. Siempre devuelve 200 para que los atacantes no puedan
+    * enumerar qué correos electrónicos están registrados. Si el correo electrónico existe, se envía un enlace de restablecimiento
+    * por correo electrónico de forma asíncrona (el token es válido durante 30 minutos).
+    */
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody Map<String, String> body) {
         String email = safeTrim(body.get("email"));
@@ -185,7 +229,7 @@ public class AuthController {
             try {
                 passwordResetService.requestReset(email);
             } catch (Exception e) {
-                // Swallow any error so we always return the same neutral response
+                // Se omite el error para mantener una respuesta neutral.
             }
         }
         return ResponseEntity.ok(Map.of(
@@ -193,7 +237,9 @@ public class AuthController {
         ));
     }
 
-    /** Confirms the reset by validating the token and updating the password. */
+    /**
+     * Confirma el restablecimiento: valida el token y actualiza la contraseña.
+     */
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@RequestBody Map<String, String> body) {
         String token = body.get("token");

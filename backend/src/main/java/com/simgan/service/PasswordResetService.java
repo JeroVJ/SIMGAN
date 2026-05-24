@@ -23,6 +23,18 @@ import java.util.Optional;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+/**
+ * Servicio para restablecimiento de contraseña (forgot/reset).
+ *
+ * Flujo:
+ * - requestReset(email): crea un token temporal (TTL 30 min) y envía un enlace por correo.
+ * - confirmReset(token, newPassword): valida token, actualiza contraseña y revoca sesiones.
+ *
+ * Valores:
+ * - TOKEN_TTL_MINUTES: tiempo de vida del token en minutos.
+ * - app.base-url: base URL del frontend, usada para construir el enlace /reset-password?token=...
+ * - spring.mail.from: remitente del correo.
+ */
 public class PasswordResetService {
 
     private static final int TOKEN_TTL_MINUTES = 30;
@@ -40,9 +52,9 @@ public class PasswordResetService {
     private String appBaseUrl;
 
     /**
-     * Requests a password reset. Returns silently either way so the caller cannot
-     * enumerate registered accounts. If the email matches an account, a token is
-     * created and emailed; otherwise nothing happens.
+     * Solicita un restablecimiento de contraseña. Devuelve un resultado silencioso en ambos casos, por lo que quien realiza la llamada no puede
+     * enumerar las cuentas registradas. Si el correo electrónico coincide con una cuenta, se crea un token
+     * y se envía por correo electrónico; de lo contrario, no sucede nada.
      */
     @Transactional
     public void requestReset(String email) {
@@ -51,7 +63,7 @@ public class PasswordResetService {
 
         Optional<Ganadero> match = ganaderoRepository.findByCorreo(normalized);
         if (match.isEmpty()) {
-            // Also try with the original casing stored in DB
+            // intenta con el casing original por si la BD lo guardó sin normalizar.
             match = ganaderoRepository.findByCorreo(email.trim());
         }
         if (match.isEmpty()) {
@@ -74,8 +86,10 @@ public class PasswordResetService {
     }
 
     /**
-     * Validates the token and, if valid, updates the password. Also revokes all
-     * existing auth sessions for that ganadero so the old device is logged out.
+     * Confirma el restablecimiento validando el token y actualizando la contraseña.
+     *
+     * Regla de seguridad:
+     * - Revoca todas las sesiones activas del ganadero para que el viejo dispositivo este logged out.
      */
     @Transactional
     public void confirmReset(String token, String newPassword) {

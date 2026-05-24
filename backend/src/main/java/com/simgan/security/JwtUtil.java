@@ -11,6 +11,18 @@ import java.time.ZoneId;
 import java.util.Date;
 
 @Component
+/**
+ * Utilidad para generar y validar JWT (JSON Web Token).
+ *
+ * Valores relevantes:
+ * - jwt.secret: clave secreta usada para firmar tokens con HS256.
+ * - EXPIRATION_TIME: duración del token en milisegundos (86400000 = 24h).
+ *
+ * Uso:
+ * - generateToken(username): crea un token con subject=username.
+ * - extractUsername(token): lee el subject del token.
+ * - isTokenValid(token, username): valida firma, expiración y coincidencia de subject.
+ */
 public class JwtUtil {
 
     @Value("${jwt.secret:mySecretKeyForJwtTokenGenerationThatIsLongEnough}")
