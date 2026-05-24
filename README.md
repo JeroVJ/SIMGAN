@@ -1,4 +1,4 @@
-# 🐄 SIMGAN Demo — Sistema de Gestión Ganadera
+#  SIMGA
 
 Demo funcional para registrar fincas, dibujar terrenos sobre imagen satelital, calcular áreas, subdividir en parcelas y gestionar rotación de pastoreo.
 
@@ -125,7 +125,7 @@ PATCH /api/parcels/1/status
 
 ---
 
-## 🗂️ Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 simgan-demo/
@@ -188,33 +188,13 @@ simgan-demo/
 > Esto permitirá análisis automático de salud vegetacional y recomendaciones inteligentes de rotación."
 
 ### Funcionalidades planeadas:
-- 🛰️ Integración Planet Labs (premium)
-- 📊 Análisis NDVI / vegetación espectral
-- 🤖 Generación automática de parcelas
-- 📈 Dashboard de métricas por parcela
-- 🔔 Alertas de rotación
+-  Integración Planet Labs (premium)
+-  Análisis NDVI / vegetación espectral
+-  Generación automática de parcelas
+-  Dashboard de métricas por parcela
+-  Alertas de rotación
 
 ---
 
-## 💡 Tips para la Demo
-
-1. **GPS de ejemplo para Colombia (zona ganadera):**
-   - Montería, Córdoba: `8.7479, -75.8814`
-   - Sincelejo, Sucre: `9.3047, -75.3978`
-   - Villavicencio, Meta: `4.1420, -73.6266`
-
-2. **Flujo de demo sugerido:**
-   - Crear finca → Dibujar terreno sobre satélite → Crear 3 parcelas → Ir a vista de rotación → Alternar estados
-
-3. **El mapa usa Esri World Imagery** (gratuito, no necesita API key)
-
-
-## Diagrama de clase v4 
-
-![Diagrama de clases SIMGAN](diagramaClaseSimganV3.jpg)  
-
-
-
-## Diagrama de ER v2
-![Diagrama ER SIMGAN](diagrama_er_v2_Simgan.jpg) 
+ 
 
