@@ -1,4 +1,4 @@
-#  SIMGAn
+#  SIMGAN
 
 Demo funcional para registrar fincas, dibujar terrenos sobre imagen satelital, calcular áreas, subdividir en parcelas y gestionar rotación de pastoreo.
 
