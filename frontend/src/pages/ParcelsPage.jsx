@@ -538,54 +538,56 @@ export default function ParcelsPage() {
                     </span>
                     <span className="area">{p.areaHectares?.toFixed(2)} ha</span>
                   </div>
-                  <select
-                    value={p.status || 'DISPONIBLE'}
-                    onChange={(e) => handleStatusChange(p.id, e.target.value)}
-                    style={{ fontSize: 11, padding: '4px 6px' }}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <option value="DISPONIBLE">Disponible</option>
-                    <option value="EN_USO">En Uso</option>
-                    <option value="EN_DESCANSO">En Descanso</option>
-                  </select>
-                  <button
-                    className="comp-btn comp-btn--sm comp-btn--outline"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      if (!farm?.iotEnabled) {
-                        toast.error('IoT deshabilitado para esta finca')
-                        return
-                      }
-                      navigate(`/parcels/${p.id}/sensors`)
-                    }}
-                    disabled={!farm?.iotEnabled}
-                    title={farm?.iotEnabled ? 'Ver sensores' : 'IoT deshabilitado'}
-                  >
-                    <Cpu size={12} strokeWidth={1.9} />
-                    {farm?.iotEnabled ? 'Sensores' : 'IoT off'}
-                  </button>
-                  <button
-                    className="comp-btn comp-btn--sm comp-btn--outline"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      navigate(`/parcels/${p.id}/monitoring`)
-                    }}
-                    title="Monitoreo NDVI semanal"
-                  >
-                    Monitoreo
-                  </button>
-                  <button
-                    className="comp-btn comp-btn--sm comp-btn--icon-only"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleDeleteParcel(p.id)
-                    }}
-                    title="Eliminar potrero"
-                    aria-label="Eliminar potrero"
-                    style={{ color: 'var(--color-danger)' }}
-                  >
-                    <Trash2 size={13} strokeWidth={1.9} />
-                  </button>
+                  <div className="parcel-item__controls">
+                    <select
+                      value={p.status || 'DISPONIBLE'}
+                      onChange={(e) => handleStatusChange(p.id, e.target.value)}
+                      style={{ fontSize: 11, padding: '4px 6px' }}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <option value="DISPONIBLE">Disponible</option>
+                      <option value="EN_USO">En Uso</option>
+                      <option value="EN_DESCANSO">En Descanso</option>
+                    </select>
+                    <button
+                      className="comp-btn comp-btn--sm comp-btn--outline"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        if (!farm?.iotEnabled) {
+                          toast.error('IoT deshabilitado para esta finca')
+                          return
+                        }
+                        navigate(`/parcels/${p.id}/sensors`)
+                      }}
+                      disabled={!farm?.iotEnabled}
+                      title={farm?.iotEnabled ? 'Ver sensores' : 'IoT deshabilitado'}
+                    >
+                      <Cpu size={12} strokeWidth={1.9} />
+                      {farm?.iotEnabled ? 'Sensores' : 'IoT off'}
+                    </button>
+                    <button
+                      className="comp-btn comp-btn--sm comp-btn--outline"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        navigate(`/parcels/${p.id}/monitoring`)
+                      }}
+                      title="Monitoreo NDVI semanal"
+                    >
+                      Monitoreo
+                    </button>
+                    <button
+                      className="comp-btn comp-btn--sm comp-btn--icon-only"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteParcel(p.id)
+                      }}
+                      title="Eliminar potrero"
+                      aria-label="Eliminar potrero"
+                      style={{ color: 'var(--color-danger)' }}
+                    >
+                      <Trash2 size={13} strokeWidth={1.9} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>

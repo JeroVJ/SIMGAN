@@ -453,7 +453,7 @@ table tr:hover td { background: var(--color-surface-2); }
   font-weight: 700;
   font-size: 13px;
 }
-.sidebar-ctx__farm-info { flex: 1; min-width: 0; }
+.sidebar-ctx__farm-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .sidebar-ctx__farm-name {
   font-size: 13px;
   font-weight: 600;
@@ -1013,6 +1013,26 @@ table tr:hover td { background: var(--color-surface-2); }
 .parcel-item:hover {
   border-color: var(--color-border-light);
   background: var(--color-surface-3);
+}
+/* Narrow side panel: stack name/area over the controls and let the
+   status select + action buttons wrap instead of overflowing the card. */
+.parcel-item {
+  flex-wrap: wrap;
+  align-items: stretch;
+}
+.parcel-item .info {
+  flex: 1 1 100%;
+}
+.parcel-item__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+.parcel-item__controls > select {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* ================================================================

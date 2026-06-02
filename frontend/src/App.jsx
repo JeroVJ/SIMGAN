@@ -15,6 +15,7 @@ import SensorPage        from './pages/SensorPage'
 import SensorSessionPage from './pages/SensorSessionPage'
 import RotationPage      from './pages/RotationPage'
 import NdviDashboardPage from './pages/NdviDashboardPage'
+import NdviTimelinePage from './pages/NdviTimelinePage'
 import CalibrationNdviOptimPage from './pages/CalibrationNdviOptimPage'
 import CalibrationNdviAlertPage from './pages/CalibrationNdviAlertPage'
 import CalibrationBiomassPage from './pages/CalibrationBiomassPage'
@@ -193,6 +194,8 @@ export default function App() {
               <Route path="/terrains/:terrainId/rotation" element={<RotationPage />} />
 
               <Route path="/terrains/:terrainId/ndvi" element={<NdviDashboardPage />} />
+
+              <Route path="/terrains/:terrainId/ndvi/timeline" element={<NdviTimelinePage />} />
   <Route path="/reportes" element={<ReportesPage />} />
 
               <Route path="/alertas" element={<AlertasPage />} />

@@ -1,5 +1,5 @@
 import { NavLink, Link } from 'react-router-dom'
-import { Map, Users, Activity, Shuffle, ChevronLeft, Sliders } from 'lucide-react'
+import { Map, Users, Activity, Shuffle, ChevronLeft, Sliders, TrendingUp } from 'lucide-react'
 
 /**
  * Quick-switch tabs for a single terrain.
@@ -14,10 +14,11 @@ import { Map, Users, Activity, Shuffle, ChevronLeft, Sliders } from 'lucide-reac
  *   areaHa    - optional, shown as a pill
  */
 const TABS = [
-  { path: 'parcels',  label: 'Potreros',     Icon: Map },
-  { path: 'lotes',    label: 'Ganado',       Icon: Users },
-  { path: 'ndvi',     label: 'NDVI & Salud', Icon: Activity },
-  { path: 'rotation', label: 'Pastoreo',     Icon: Shuffle },
+  { path: 'parcels',       label: 'Potreros',     Icon: Map },
+  { path: 'lotes',         label: 'Ganado',       Icon: Users },
+  { path: 'ndvi',          label: 'NDVI & Salud', Icon: Activity, end: true },
+  { path: 'ndvi/timeline', label: 'Línea NDVI',   Icon: TrendingUp },
+  { path: 'rotation',      label: 'Pastoreo',     Icon: Shuffle },
 ]
 
 export default function TerrainTabs({
@@ -75,12 +76,13 @@ export default function TerrainTabs({
 
       {/* Tabs */}
       <div className="terrain-tabs" role="tablist" aria-label="Secciones del terreno">
-        {TABS.map(({ path, label, Icon }) => {
+        {TABS.map(({ path, label, Icon, end }) => {
           const to = `/terrains/${terrainId}/${path}`
           return (
             <NavLink
               key={path}
               to={to}
+              end={end}
               className={({ isActive }) =>
                 `terrain-tab${isActive ? ' terrain-tab--active' : ''}`
               }

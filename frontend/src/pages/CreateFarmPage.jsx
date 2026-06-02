@@ -19,6 +19,7 @@ export default function CreateFarmPage() {
 
   const navigate = useNavigate()
   const [loading, setLoading] = useState(false)
+  const [locating, setLocating] = useState(false)
 
   const [form, setForm] = useState({
     name: '',
@@ -40,6 +41,36 @@ export default function CreateFarmPage() {
       ...prev,
       [name]: type === 'checkbox' ? checked : value
     }))
+  }
+
+  function handleUseMyLocation() {
+    if (!('geolocation' in navigator)) {
+      toast.error('Tu navegador no soporta geolocalización')
+      return
+    }
+
+    setLocating(true)
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords
+        setForm(prev => ({
+          ...prev,
+          centerLat: latitude.toFixed(6),
+          centerLng: longitude.toFixed(6),
+        }))
+        setErrors(prev => ({ ...prev, centerLat: undefined, centerLng: undefined }))
+        setLocating(false)
+        toast.success('Coordenadas tomadas de tu ubicación actual')
+      },
+      (err) => {
+        setLocating(false)
+        const msg = err.code === err.PERMISSION_DENIED
+          ? 'Permiso de ubicación denegado. Actívalo o escribe las coordenadas a mano.'
+          : 'No se pudo obtener tu ubicación. Inténtalo de nuevo.'
+        toast.error(msg)
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
   }
 
   function validate() {
@@ -156,6 +187,24 @@ export default function CreateFarmPage() {
                 placeholder="Ej: Montería"
               />
               {errors.municipality && <span style={{ color: 'red', fontSize: '12px' }}>{errors.municipality}</span>}
+            </div>
+
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label>Ubicación del centro de la finca</label>
+              <button
+                type="button"
+                className="action-btn"
+                onClick={handleUseMyLocation}
+                disabled={locating}
+                style={{ width: 'fit-content' }}
+              >
+                {locating
+                  ? <><span className="spinner" /> Obteniendo ubicación...</>
+                  : '📍 Estoy en la finca (usar mi ubicación)'}
+              </button>
+              <p style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px' }}>
+                Si estás en la finca, toma las coordenadas automáticamente. También puedes escribirlas a mano.
+              </p>
             </div>
 
             <div className="form-group">
