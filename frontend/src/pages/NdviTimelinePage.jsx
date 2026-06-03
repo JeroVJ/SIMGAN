@@ -46,7 +46,8 @@ export default function NdviTimelinePage() {
   const [source, setSource]         = useState(null) // 'calibration' | 'analysis' | null
   const [loading, setLoading]       = useState(true)
   const [checking, setChecking]     = useState(false)
-  const [range, setRange]           = useState('12m')
+  // Default to "Todo" so the full series (incl. ranges >12 months) is visible.
+  const [range, setRange]           = useState('all')
 
   // Terrain meta for the breadcrumb / tabs header.
   useEffect(() => {
