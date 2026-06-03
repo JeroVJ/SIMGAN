@@ -12,6 +12,8 @@ export default function MonitoringPage() {
   const [loading, setLoading] = useState(true)
   const [toggling, setToggling] = useState(false)
   const [fetching, setFetching] = useState(false)
+  // When a fetch finds no usable scene, holds the next week offset to try.
+  const [prevWeekOffset, setPrevWeekOffset] = useState(null)
 
   const reload = useCallback(async () => {
     try {
@@ -44,16 +46,24 @@ export default function MonitoringPage() {
     }
   }
 
-  async function handleFetchNow() {
+  const MAX_WEEKS_BACK = 8
+
+  async function handleFetchNow(weeksBack = 0) {
     setFetching(true)
     try {
-      const result = await monitoringApi.fetchNow(parcelId)
-      if (result.error) {
-        toast.error(result.error)
-      } else {
+      const result = await monitoringApi.fetchNow(parcelId, weeksBack)
+      const records = result?.recordsProcessed ?? 0
+
+      if (records > 0) {
         toast.success(result.message || 'Imagen procesada')
+        setPrevWeekOffset(null)
+        await reload()
+      } else {
+        // No usable scene that week — offer to look one week further back.
+        const weekLabel = weeksBack === 0 ? 'esta semana' : `${weeksBack} semana(s) atrás`
+        toast(`No hubo imagen Sentinel utilizable ${weekLabel} (nubes o sin paso del satélite).`, { icon: '🛰️' })
+        setPrevWeekOffset(weeksBack + 1 <= MAX_WEEKS_BACK ? weeksBack + 1 : null)
       }
-      await reload()
     } catch (err) {
       toast.error('Error: ' + (err.response?.data?.error || err.message))
     } finally {
@@ -153,12 +163,33 @@ export default function MonitoringPage() {
             </div>
             <button
               className="action-btn action-btn--primary"
-              onClick={handleFetchNow}
+              onClick={() => handleFetchNow(0)}
               disabled={fetching}
             >
               {fetching ? <><span className="spinner" /> Procesando...</> : 'Procesar ahora'}
             </button>
           </div>
+
+          {prevWeekOffset != null && (
+            <div style={{
+              marginTop: 12, padding: '12px 14px', borderRadius: 'var(--radius-sm)',
+              background: 'var(--color-bg)', border: '1px solid var(--color-border)',
+              display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap',
+            }}>
+              <div style={{ fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                No se encontró imagen en esa semana. ¿Buscar en la semana anterior?
+              </div>
+              <button
+                className="action-btn action-btn--outline"
+                onClick={() => handleFetchNow(prevWeekOffset)}
+                disabled={fetching}
+              >
+                {fetching
+                  ? <><span className="spinner" /> Buscando...</>
+                  : `Mirar semana anterior (−${prevWeekOffset})`}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

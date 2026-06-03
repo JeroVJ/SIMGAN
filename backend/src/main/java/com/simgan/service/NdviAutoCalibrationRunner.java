@@ -48,7 +48,6 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class NdviAutoCalibrationRunner {
 
-    private static final int CALIBRATION_WEEKS = 52;
     private static final String SOURCE_AUTO = "SENTINEL_AUTO";
     private static final double MAX_CLOUD_COVER = 0.30;
 
@@ -74,8 +73,11 @@ public class NdviAutoCalibrationRunner {
         LocalDate cursor = rangeStart.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
         int weeksDone = 0;
         int scenesProcessed = 0;
+        // Cover the whole configured range (which may exceed 12 months); +2 as a
+        // safety margin. The loop also stops naturally when cursor passes rangeEnd.
+        int maxWeeks = (int) java.time.temporal.ChronoUnit.WEEKS.between(cursor, rangeEnd) + 2;
 
-        while (!cursor.isAfter(rangeEnd) && weeksDone < CALIBRATION_WEEKS) {
+        while (!cursor.isAfter(rangeEnd) && weeksDone < maxWeeks) {
             LocalDate weekStart = cursor;
             LocalDate weekEnd = cursor.plusDays(6).isBefore(rangeEnd) ? cursor.plusDays(6) : rangeEnd;
 

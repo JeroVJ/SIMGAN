@@ -22,7 +22,9 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 public class NdviAutoCalibrationService {
 
-    private static final int CALIBRATION_WEEKS = 52;
+    private static final int DEFAULT_MONTHS = 12;
+    private static final int MIN_MONTHS = 1;
+    private static final int MAX_MONTHS = 60; // up to 5 years back
 
     private final TerrainRepository terrainRepository;
     private final NdviCalibrationJobRepository jobRepository;
@@ -30,6 +32,15 @@ public class NdviAutoCalibrationService {
 
     @Transactional
     public NdviCalibrationJob startJob(Long terrainId) {
+        return startJob(terrainId, DEFAULT_MONTHS);
+    }
+
+    /**
+     * Starts an auto-calibration over the past {@code months} months. The range
+     * is configurable so the user can look further back than the default 12.
+     */
+    @Transactional
+    public NdviCalibrationJob startJob(Long terrainId, int months) {
         Terrain terrain = terrainRepository.findById(terrainId)
                 .orElseThrow(() -> new RuntimeException("Terreno no encontrado: " + terrainId));
 
@@ -39,14 +50,16 @@ public class NdviAutoCalibrationService {
             return existing.get();
         }
 
+        int safeMonths = Math.max(MIN_MONTHS, Math.min(MAX_MONTHS, months));
         LocalDate today = LocalDate.now();
         LocalDate end = today;
-        LocalDate start = today.minusWeeks(CALIBRATION_WEEKS);
+        LocalDate start = today.minusMonths(safeMonths);
+        int weeksTotal = (int) Math.ceil(java.time.temporal.ChronoUnit.DAYS.between(start, end) / 7.0);
 
         NdviCalibrationJob job = NdviCalibrationJob.builder()
                 .terrain(terrain)
                 .status(NdviCalibrationJob.Status.RUNNING)
-                .weeksTotal(CALIBRATION_WEEKS)
+                .weeksTotal(weeksTotal)
                 .weeksCompleted(0)
                 .scenesProcessed(0)
                 .rangeStart(start)
@@ -54,6 +67,8 @@ public class NdviAutoCalibrationService {
                 .build();
         job = jobRepository.save(job);
 
+        log.info("Auto-calibración terreno={} job={} rango={} meses ({} -> {}, {} semanas)",
+                terrainId, job.getId(), safeMonths, start, end, weeksTotal);
         runner.runJob(job.getId(), terrainId, start, end);
         return job;
     }

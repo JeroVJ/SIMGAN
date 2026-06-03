@@ -13,6 +13,7 @@ export default function CalibrationAutoPage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
+  const [months, setMonths] = useState(12)
   const pollRef = useRef(null)
 
   const fetchStatus = useCallback(async () => {
@@ -54,8 +55,8 @@ export default function CalibrationAutoPage() {
   async function handleStart() {
     setStarting(true)
     try {
-      await autoCalibrationApi.start(terrainId)
-      toast.success('Calibración automática iniciada. Esto puede tardar varias horas.')
+      await autoCalibrationApi.start(terrainId, months)
+      toast.success(`Calibración iniciada sobre los últimos ${months} meses. Puede tardar varias horas.`)
       await fetchStatus()
       schedulePoll()
     } catch (err) {
@@ -103,13 +104,25 @@ export default function CalibrationAutoPage() {
           <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 16 }}>
             Tiempo estimado: 1–4 horas dependiendo de la disponibilidad de imágenes y tu conexión con Copernicus.
           </p>
-          <button
-            className="action-btn action-btn--primary"
-            onClick={handleStart}
-            disabled={starting}
-          >
-            {starting ? <><span className="spinner" /> Iniciando...</> : 'Iniciar calibración (12 meses)'}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label>Rango a analizar</label>
+              <select value={months} onChange={(e) => setMonths(Number(e.target.value))} disabled={starting}>
+                <option value={6}>Últimos 6 meses</option>
+                <option value={12}>Últimos 12 meses</option>
+                <option value={18}>Últimos 18 meses</option>
+                <option value={24}>Últimos 24 meses</option>
+                <option value={36}>Últimos 36 meses</option>
+              </select>
+            </div>
+            <button
+              className="action-btn action-btn--primary"
+              onClick={handleStart}
+              disabled={starting}
+            >
+              {starting ? <><span className="spinner" /> Iniciando...</> : `Iniciar calibración (${months} meses)`}
+            </button>
+          </div>
         </div>
       )}
 
@@ -214,15 +227,27 @@ export default function CalibrationAutoPage() {
       )}
 
       {/* Actions */}
-      <div className="flex gap-12">
+      <div className="flex gap-12" style={{ alignItems: 'flex-end', flexWrap: 'wrap' }}>
         {(completed || failed) && (
-          <button
-            className="action-btn action-btn--primary"
-            onClick={handleStart}
-            disabled={starting}
-          >
-            {starting ? 'Iniciando...' : 'Recalibrar (otros 12 meses)'}
-          </button>
+          <>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label>Rango a analizar</label>
+              <select value={months} onChange={(e) => setMonths(Number(e.target.value))} disabled={starting}>
+                <option value={6}>Últimos 6 meses</option>
+                <option value={12}>Últimos 12 meses</option>
+                <option value={18}>Últimos 18 meses</option>
+                <option value={24}>Últimos 24 meses</option>
+                <option value={36}>Últimos 36 meses</option>
+              </select>
+            </div>
+            <button
+              className="action-btn action-btn--primary"
+              onClick={handleStart}
+              disabled={starting}
+            >
+              {starting ? 'Iniciando...' : `Recalibrar (${months} meses)`}
+            </button>
+          </>
         )}
         <button
           className="action-btn"

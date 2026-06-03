@@ -84,10 +84,15 @@ public class MonitoringController {
         ));
     }
 
-    /** "Pedir imagen ahora" — manual current-week fetch. */
+    /**
+     * "Pedir imagen ahora" — manual fetch. {@code weeksBack} (default 0) lets the
+     * user look at a previous week when the current one has no usable scene.
+     */
     @PostMapping("/{parcelId}/fetch-now")
-    public ResponseEntity<Map<String, Object>> fetchNow(@PathVariable Long parcelId) {
-        Map<String, Object> result = monitoringService.fetchCurrentWeek(parcelId);
+    public ResponseEntity<Map<String, Object>> fetchNow(
+            @PathVariable Long parcelId,
+            @RequestParam(defaultValue = "0") int weeksBack) {
+        Map<String, Object> result = monitoringService.fetchCurrentWeek(parcelId, weeksBack);
         if (result != null && result.get("error") != null) {
             return ResponseEntity.badRequest().body(result);
         }

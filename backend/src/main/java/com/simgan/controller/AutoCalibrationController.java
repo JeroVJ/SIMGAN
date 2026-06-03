@@ -26,10 +26,16 @@ public class AutoCalibrationController {
     private final NdviCalibrationJobRepository jobRepository;
     private final NdviTerrainRecordRepository terrainRecordRepository;
 
-    /** Start (or resume) a 12-month auto-calibration job. Returns immediately. */
+    /**
+     * Start (or resume) an auto-calibration job over the past {@code months}
+     * months (default 12). The range is configurable so the user can look
+     * further back. Returns immediately; the job runs asynchronously.
+     */
     @PostMapping("/{terrainId}")
-    public ResponseEntity<Map<String, Object>> start(@PathVariable Long terrainId) {
-        NdviCalibrationJob job = autoCalibrationService.startJob(terrainId);
+    public ResponseEntity<Map<String, Object>> start(
+            @PathVariable Long terrainId,
+            @RequestParam(defaultValue = "12") int months) {
+        NdviCalibrationJob job = autoCalibrationService.startJob(terrainId, months);
         return ResponseEntity.ok(toJobMap(job));
     }
 

@@ -129,7 +129,7 @@ export const calibrationApi = {
 
 // ===== CALIBRACIÓN AUTOMÁTICA NDVI (12 meses) =====
 export const autoCalibrationApi = {
-  start: (terrainId) => api.post(`/ndvi/calibration/auto/${terrainId}`).then(r => r.data),
+  start: (terrainId, months = 12) => api.post(`/ndvi/calibration/auto/${terrainId}?months=${months}`).then(r => r.data),
   status: (terrainId) => api.get(`/ndvi/calibration/auto/${terrainId}/status`).then(r => r.data),
 }
 
@@ -137,7 +137,8 @@ export const autoCalibrationApi = {
 export const monitoringApi = {
   get: (parcelId) => api.get(`/ndvi/monitoring/${parcelId}`).then(r => r.data),
   toggle: (parcelId, enabled) => api.put(`/ndvi/monitoring/${parcelId}`, { enabled }).then(r => r.data),
-  fetchNow: (parcelId) => api.post(`/ndvi/monitoring/${parcelId}/fetch-now`).then(r => r.data),
+  // weeksBack=0 = current week; >0 looks at a previous week (fallback when no scene).
+  fetchNow: (parcelId, weeksBack = 0) => api.post(`/ndvi/monitoring/${parcelId}/fetch-now?weeksBack=${weeksBack}`).then(r => r.data),
   // On-demand full weekly run for a terrain (chart + alerts + email).
   fetchTerrainWeek: (terrainId) => api.post(`/ndvi/monitoring/terrain/${terrainId}/fetch-week`).then(r => r.data),
 }

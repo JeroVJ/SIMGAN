@@ -49,16 +49,27 @@ public class NdviMonitoringService {
         return parcelRepository.save(parcel);
     }
 
-    /** Manual one-shot fetch — used by the "Pedir imagen ahora" button. */
+    /** Manual one-shot fetch of the current week — used by "Pedir imagen ahora". */
     public Map<String, Object> fetchCurrentWeek(Long parcelId) {
+        return fetchCurrentWeek(parcelId, 0);
+    }
+
+    /**
+     * Manual one-shot fetch for a week {@code weeksBack} weeks before the current
+     * one. Lets the user look at a previous week when the current week has no
+     * usable Sentinel scene (very common — revisit timing + cloud cover).
+     */
+    public Map<String, Object> fetchCurrentWeek(Long parcelId, int weeksBack) {
         Parcel parcel = parcelRepository.findById(parcelId)
                 .orElseThrow(() -> new RuntimeException("Potrero no encontrado: " + parcelId));
         Long terrainId = parcel.getTerrain().getId();
 
-        LocalDate today = LocalDate.now();
-        LocalDate weekStart = today.minusDays(6);
-        log.info("Fetch manual NDVI parcelId={} terrainId={} rango={} -> {}", parcelId, terrainId, weekStart, today);
-        return analysisOrchestrator.runAnalysis(terrainId, weekStart, today, "DEFAULT");
+        int back = Math.max(0, weeksBack);
+        LocalDate weekEnd = LocalDate.now().minusDays(7L * back);
+        LocalDate weekStart = weekEnd.minusDays(6);
+        log.info("Fetch manual NDVI parcelId={} terrainId={} semanasAtras={} rango={} -> {}",
+                parcelId, terrainId, back, weekStart, weekEnd);
+        return analysisOrchestrator.runAnalysis(terrainId, weekStart, weekEnd, "DEFAULT");
     }
 
     /**
