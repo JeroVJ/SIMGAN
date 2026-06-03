@@ -1,7 +1,9 @@
 package com.simgan.service;
 
+import com.simgan.dto.NdviDto;
 import com.simgan.entity.Alert;
 import com.simgan.entity.NdviCalibrationJob;
+import com.simgan.entity.Parcel;
 import com.simgan.entity.Terrain;
 import com.simgan.repository.AlertRepository;
 import com.simgan.repository.GanaderoRepository;
@@ -29,10 +31,12 @@ import java.util.Map;
 public class EmailAlertService {
 
   private final ObjectProvider<JavaMailSender> mailSenderProvider;
+    private final BrevoMailClient brevoMailClient;
     private final GanaderoRepository ganaderoRepository;
   private final AlertRepository alertRepository;
     private final NdviCalibrationJobRepository calibrationJobRepository;
     private final TerrainRepository terrainRepository;
+    private final NdviRecommendationService recommendationService;
 
     @Value("${spring.mail.from:SIMGAN <no-reply@simgan.local>}")
     private String fromAddress;
@@ -50,9 +54,8 @@ public class EmailAlertService {
      */
     @Async
     public void sendAlertEmail(Alert alert) {
-        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
-        if (mailSender == null) {
-            log.warn("SMTP not configured (JavaMailSender unavailable). Skipping alert email for alertId={}",
+        if (!isDeliveryConfigured()) {
+            log.warn("No email transport configured (no BREVO_API_KEY and no SMTP). Skipping alert email for alertId={}",
                     alert != null ? alert.getId() : null);
             return;
         }
@@ -81,21 +84,12 @@ public class EmailAlertService {
             return;
         }
 
-        try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromAddress);
-            helper.setTo(recipientEmail);
-            helper.setSubject(buildSubject(fullAlert));
-            helper.setText(buildHtmlBody(fullAlert), true);
-
-            mailSender.send(message);
+        boolean sent = deliver(recipientEmail, buildSubject(fullAlert), buildHtmlBody(fullAlert));
+        if (sent) {
             log.info("Alert email sent to {} for alert {} (parcel: {})",
                     recipientEmail, fullAlert.getId(), fullAlert.getParcel().getName());
-
-        } catch (Exception e) {
-            log.error("Failed to send alert email to {}: {}", recipientEmail, e.getMessage());
+        } else {
+            log.error("Failed to send alert email to {} for alert {}", recipientEmail, fullAlert.getId());
         }
     }
 
@@ -304,9 +298,8 @@ public class EmailAlertService {
     @Async
     public void sendAutoCalibrationCompletedEmail(Long jobId) {
         if (jobId == null) return;
-        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
-        if (mailSender == null) {
-            log.warn("SMTP not configured. Skipping auto-calibration email for jobId={}", jobId);
+        if (!isDeliveryConfigured()) {
+            log.warn("No email transport configured. Skipping auto-calibration email for jobId={}", jobId);
             return;
         }
 
@@ -328,7 +321,7 @@ public class EmailAlertService {
                 ? String.format("[SIMGAN] ✅ Auto-calibración NDVI completada — %s", terrain.getName())
                 : String.format("[SIMGAN] ⚠ Auto-calibración NDVI falló — %s", terrain.getName());
 
-        sendHtml(mailSender, recipient.trim(), subject, buildAutoCalibrationHtml(job));
+        deliver(recipient.trim(), subject, buildAutoCalibrationHtml(job));
     }
 
     private String buildAutoCalibrationHtml(NdviCalibrationJob job) {
@@ -415,9 +408,8 @@ public class EmailAlertService {
             return;
         }
 
-        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
-        if (mailSender == null) {
-            log.warn("SMTP not configured. Skipping weekly NDVI email for terrainId={}", terrainId);
+        if (!isDeliveryConfigured()) {
+            log.warn("No email transport configured. Skipping weekly NDVI email for terrainId={}", terrainId);
             return;
         }
 
@@ -434,11 +426,22 @@ public class EmailAlertService {
             return;
         }
 
+        // Rotation recommendations are computed from the freshly stored NDVI records
+        // and included in this same email so the owner gets the full weekly picture.
+        List<NdviDto.RotationRecommendation> recommendations;
+        try {
+            recommendations = recommendationService.getRotationRecommendations(terrainId);
+        } catch (Exception e) {
+            log.warn("Could not load rotation recommendations for terrain {}: {}", terrainId, e.getMessage());
+            recommendations = List.of();
+        }
+
         String subject = String.format("[SIMGAN] 🛰 Análisis NDVI semanal — %s", terrain.getName());
-        sendHtml(mailSender, recipient.trim(), subject, buildWeeklyNdviHtml(terrain, result));
+        deliver(recipient.trim(), subject, buildWeeklyNdviHtml(terrain, result, recommendations));
     }
 
-    private String buildWeeklyNdviHtml(Terrain terrain, Map<String, Object> result) {
+    private String buildWeeklyNdviHtml(Terrain terrain, Map<String, Object> result,
+                                       List<NdviDto.RotationRecommendation> recommendations) {
         String farmName = terrain.getFarm() != null ? terrain.getFarm().getName() : "—";
         String source = String.valueOf(result.getOrDefault("source", "—"));
         int records = ((Number) result.getOrDefault("recordsProcessed", 0)).intValue();
@@ -446,6 +449,7 @@ public class EmailAlertService {
         int dates = ((Number) result.getOrDefault("datesProcessed", 0)).intValue();
         String today = LocalDate.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
         String dashboardUrl = appBaseUrl + "/terrains/" + terrain.getId() + "/ndvi";
+        String rotationHtml = buildRotationSectionHtml(recommendations);
 
         return """
                 <!DOCTYPE html>
@@ -492,6 +496,7 @@ public class EmailAlertService {
                             <p style="margin:0 0 24px;color:#374151;font-size:14px;">
                               Si algún potrero queda por debajo del umbral de alerta, recibirás un correo aparte. Revisa el dashboard para ver el NDVI y la biomasa por potrero.
                             </p>
+                            %s
                             <p style="margin:24px 0 0;text-align:center;">
                               <a href="%s" style="display:inline-block;background:#15532e;color:#ffffff;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Ver dashboard NDVI →</a>
                             </p>
@@ -506,11 +511,102 @@ public class EmailAlertService {
                     </td></tr>
                   </table>
                 </body></html>
-                """.formatted(terrain.getName(), farmName, today, records, scenes, dates, source, dashboardUrl);
+                """.formatted(terrain.getName(), farmName, today, records, scenes, dates, source, rotationHtml, dashboardUrl);
     }
 
-    /** Generic HTML mail sender shared by alert and notification methods. */
-    private void sendHtml(JavaMailSender mailSender, String to, String subject, String htmlBody) {
+    /**
+     * Builds the "Recomendaciones de rotación" block for the weekly NDVI email.
+     * Returns a friendly note when there are no changes to recommend.
+     */
+    private String buildRotationSectionHtml(List<NdviDto.RotationRecommendation> recommendations) {
+        if (recommendations == null || recommendations.isEmpty()) {
+            return """
+                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 16px;margin-bottom:8px;">
+                      <p style="margin:0;color:#15803d;font-size:13px;">✓ Sin cambios de rotación recomendados esta semana. Los potreros están dentro de sus umbrales.</p>
+                    </div>
+                    """;
+        }
+
+        StringBuilder rows = new StringBuilder();
+        for (NdviDto.RotationRecommendation r : recommendations) {
+            String urgencyColor = switch (r.getUrgency() == null ? "" : r.getUrgency()) {
+                case "URGENTE" -> "#dc2626";
+                case "ALTA"    -> "#f97316";
+                case "MEDIA"   -> "#2563eb";
+                default         -> "#6b7280";
+            };
+            String ndvi = r.getCurrentNdvi() != null ? String.format("%.2f", r.getCurrentNdvi()) : "—";
+            rows.append(String.format("""
+                    <tr>
+                      <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#111827;font-weight:600;">%s</td>
+                      <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#374151;">%s → <strong>%s</strong></td>
+                      <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;text-align:center;">
+                        <span style="background:%s;color:#ffffff;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;">%s</span>
+                      </td>
+                      <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;font-size:12px;color:#6b7280;">NDVI %s · %s</td>
+                    </tr>
+                    """,
+                    r.getParcelName(),
+                    statusLabel(r.getCurrentStatus()),
+                    statusLabel(r.getRecommendedStatus()),
+                    urgencyColor,
+                    r.getUrgency() == null ? "—" : r.getUrgency(),
+                    ndvi,
+                    r.getReason() == null ? "" : r.getReason()));
+        }
+
+        return """
+                <div style="margin-bottom:20px;">
+                  <p style="margin:0 0 8px;color:#111827;font-size:14px;font-weight:700;">🔄 Recomendaciones de rotación</p>
+                  <table width="100%%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+                    <tr style="background:#f9fafb;">
+                      <td style="padding:8px 10px;font-size:11px;color:#6b7280;text-transform:uppercase;">Potrero</td>
+                      <td style="padding:8px 10px;font-size:11px;color:#6b7280;text-transform:uppercase;">Acción</td>
+                      <td style="padding:8px 10px;font-size:11px;color:#6b7280;text-transform:uppercase;text-align:center;">Urgencia</td>
+                      <td style="padding:8px 10px;font-size:11px;color:#6b7280;text-transform:uppercase;">Motivo</td>
+                    </tr>
+                    %s
+                  </table>
+                </div>
+                """.formatted(rows.toString());
+    }
+
+    private String statusLabel(Parcel.ParcelStatus status) {
+        if (status == null) return "—";
+        return switch (status) {
+            case DISPONIBLE  -> "Disponible";
+            case EN_USO      -> "En uso";
+            case EN_DESCANSO -> "En descanso";
+        };
+    }
+
+    // ===========================================================================
+    // Email delivery (Brevo HTTP API preferred, SMTP fallback for local dev)
+    // ===========================================================================
+
+    /** True when at least one email transport is available. */
+    private boolean isDeliveryConfigured() {
+        return brevoMailClient.isConfigured() || mailSenderProvider.getIfAvailable() != null;
+    }
+
+    /**
+     * Delivers one HTML email. Uses the Brevo HTTP API when configured
+     * (works on Railway, which blocks SMTP); otherwise falls back to SMTP
+     * for local development. Never throws — returns false on failure.
+     */
+    private boolean deliver(String to, String subject, String htmlBody) {
+        String[] from = parseFrom(fromAddress);
+
+        if (brevoMailClient.isConfigured()) {
+            return brevoMailClient.send(from[0], from[1], to, subject, htmlBody);
+        }
+
+        JavaMailSender mailSender = mailSenderProvider.getIfAvailable();
+        if (mailSender == null) {
+            log.warn("No email transport configured. Skipping email to {} subject='{}'", to, subject);
+            return false;
+        }
+
         try {
             MimeMessage message = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
@@ -519,9 +615,26 @@ public class EmailAlertService {
             helper.setSubject(subject);
             helper.setText(htmlBody, true);
             mailSender.send(message);
-            log.info("Notification email sent to {} subject='{}'", to, subject);
+            log.info("SMTP email sent to {} subject='{}'", to, subject);
+            return true;
         } catch (Exception e) {
-            log.error("Failed to send notification email to {}: {}", to, e.getMessage());
+            log.error("SMTP email to {} failed: {}", to, e.getMessage());
+            return false;
         }
+    }
+
+    /** Splits a "Name &lt;email&gt;" string into [name, email]; name is null when absent. */
+    private String[] parseFrom(String raw) {
+        if (raw == null) {
+            return new String[]{ null, "no-reply@simgan.local" };
+        }
+        int lt = raw.indexOf('<');
+        int gt = raw.indexOf('>');
+        if (lt >= 0 && gt > lt) {
+            String name = raw.substring(0, lt).trim();
+            String email = raw.substring(lt + 1, gt).trim();
+            return new String[]{ name.isEmpty() ? null : name, email };
+        }
+        return new String[]{ null, raw.trim() };
     }
 }
