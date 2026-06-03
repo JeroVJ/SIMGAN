@@ -34,6 +34,7 @@ public class NdviMonitoringService {
     private final ParcelRepository parcelRepository;
     private final AnalysisOrchestrator analysisOrchestrator;
     private final EmailAlertService emailAlertService;
+    private final NdviAutoCalibrationRunner autoCalibrationRunner;
 
     /**
      * Toggle monitoring for a single parcel. The terrain-level scheduler is
@@ -58,6 +59,29 @@ public class NdviMonitoringService {
         LocalDate weekStart = today.minusDays(6);
         log.info("Fetch manual NDVI parcelId={} terrainId={} rango={} -> {}", parcelId, terrainId, weekStart, today);
         return analysisOrchestrator.runAnalysis(terrainId, weekStart, today, "DEFAULT");
+    }
+
+    /**
+     * Runs the full weekly NDVI flow for a terrain on demand — the "Revisar NDVI
+     * de esta semana" button. Computes the terrain-level NDVI (updates the Línea
+     * NDVI chart), runs the per-parcel analysis (creating NdviRecords and firing
+     * alerts when a parcel is below threshold), and sends the weekly summary email
+     * with rotation recommendations. Lets the user anticipate the Monday run.
+     */
+    public Map<String, Object> fetchCurrentWeekForTerrain(Long terrainId) {
+        LocalDate today = LocalDate.now();
+        LocalDate weekStart = today.minusDays(6);
+        log.info("Revisión NDVI semanal a demanda terreno={} rango={} -> {}", terrainId, weekStart, today);
+
+        // Terrain-level NDVI for the chart (dedup by date inside the runner).
+        Integer terrainScenes = autoCalibrationRunner.fetchTerrainWeek(terrainId, weekStart, today);
+
+        // Per-parcel analysis + alerts, then the weekly summary email.
+        Map<String, Object> result = analysisOrchestrator.runAnalysis(terrainId, weekStart, today, "DEFAULT");
+        emailAlertService.sendWeeklyNdviSummaryEmail(terrainId, result);
+
+        result.put("terrainScenesAdded", terrainScenes);
+        return result;
     }
 
     @Scheduled(cron = "${ndvi.monitoring.cron:0 0 6 * * MON}")

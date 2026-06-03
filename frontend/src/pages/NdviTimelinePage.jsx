@@ -1,15 +1,16 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer, ReferenceLine,
 } from 'recharts'
-import { TrendingUp } from 'lucide-react'
+import { TrendingUp, RefreshCw, Loader2 } from 'lucide-react'
+import toast from 'react-hot-toast'
 
 import Spinner from '../components/Spinner'
 import EmptyState from '../components/EmptyState'
 import TerrainTabs from '../components/TerrainTabs'
-import { autoCalibrationApi, ndviApi, terrainApi } from '../services/api'
+import { autoCalibrationApi, ndviApi, monitoringApi, terrainApi } from '../services/api'
 
 const DEFAULT_ALERT_NDVI = 0.3
 const DEFAULT_OPTIM_NDVI = 0.6
@@ -44,6 +45,7 @@ export default function NdviTimelinePage() {
   const [thresholds, setThresholds] = useState({ alert: DEFAULT_ALERT_NDVI, optim: DEFAULT_OPTIM_NDVI })
   const [source, setSource]         = useState(null) // 'calibration' | 'analysis' | null
   const [loading, setLoading]       = useState(true)
+  const [checking, setChecking]     = useState(false)
   const [range, setRange]           = useState('12m')
 
   // Terrain meta for the breadcrumb / tabs header.
@@ -57,50 +59,69 @@ export default function NdviTimelinePage() {
 
   // Load the NDVI series. Prefer the 12-month auto-calibration (terrain-level
   // records + calibrated thresholds); fall back to per-parcel analysis records.
+  const load = useCallback(async () => {
+    let points = []
+    let alert = DEFAULT_ALERT_NDVI
+    let optim = DEFAULT_OPTIM_NDVI
+    let src = null
+
+    try {
+      const auto = await autoCalibrationApi.status(terrainId)
+      if (auto?.thresholdLow != null) alert = auto.thresholdLow
+      if (auto?.thresholdHigh != null) optim = auto.thresholdHigh
+      if (Array.isArray(auto?.timeline) && auto.timeline.length) {
+        points = auto.timeline
+        src = 'calibration'
+      }
+    } catch { /* no calibration job yet */ }
+
+    if (points.length === 0) {
+      try {
+        const tl = await ndviApi.getTimeline(terrainId)
+        if (Array.isArray(tl) && tl.length) {
+          points = tl
+          src = 'analysis'
+        }
+      } catch { /* no analysis records either */ }
+    }
+
+    setTimeline(
+      points
+        .filter(p => p.meanNdvi != null)
+        .map(p => ({ date: p.date, ndvi: Number(Number(p.meanNdvi).toFixed(3)) }))
+    )
+    setThresholds({ alert, optim })
+    setSource(src)
+  }, [terrainId])
+
   useEffect(() => {
     let active = true
     setLoading(true)
-
-    async function load() {
-      let points = []
-      let alert = DEFAULT_ALERT_NDVI
-      let optim = DEFAULT_OPTIM_NDVI
-      let src = null
-
-      try {
-        const auto = await autoCalibrationApi.status(terrainId)
-        if (auto?.thresholdLow != null) alert = auto.thresholdLow
-        if (auto?.thresholdHigh != null) optim = auto.thresholdHigh
-        if (Array.isArray(auto?.timeline) && auto.timeline.length) {
-          points = auto.timeline
-          src = 'calibration'
-        }
-      } catch { /* no calibration job yet */ }
-
-      if (points.length === 0) {
-        try {
-          const tl = await ndviApi.getTimeline(terrainId)
-          if (Array.isArray(tl) && tl.length) {
-            points = tl
-            src = 'analysis'
-          }
-        } catch { /* no analysis records either */ }
-      }
-
-      if (!active) return
-      setTimeline(
-        points
-          .filter(p => p.meanNdvi != null)
-          .map(p => ({ date: p.date, ndvi: Number(Number(p.meanNdvi).toFixed(3)) }))
-      )
-      setThresholds({ alert, optim })
-      setSource(src)
-      setLoading(false)
-    }
-
-    load()
+    load().finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [terrainId])
+  }, [load])
+
+  // "Revisar NDVI de esta semana": runs the full weekly flow on demand
+  // (terrain NDVI for the chart + per-parcel alerts + summary email).
+  async function handleCheckWeek() {
+    setChecking(true)
+    const t = toast.loading('Buscando la imagen Sentinel de esta semana… puede tardar un poco.')
+    try {
+      const result = await monitoringApi.fetchTerrainWeek(terrainId)
+      await load()
+      const added = result?.terrainScenesAdded ?? 0
+      toast.success(
+        added > 0
+          ? 'NDVI de la semana agregado. Si algún potrero quedó bajo umbral, se envió la alerta por correo.'
+          : 'Listo. No había una escena nueva esta semana (o ya estaba registrada).',
+        { id: t }
+      )
+    } catch (err) {
+      toast.error('No se pudo revisar el NDVI de la semana: ' + (err.response?.data?.error || err.message), { id: t })
+    } finally {
+      setChecking(false)
+    }
+  }
 
   const chartData = useMemo(() => {
     const months = RANGES.find(r => r.key === range)?.months
@@ -148,16 +169,28 @@ export default function NdviTimelinePage() {
               {source === 'analysis' && ' Fuente: análisis NDVI del terreno.'}
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            {RANGES.map(r => (
-              <button
-                key={r.key}
-                className={`comp-btn comp-btn--sm ${range === r.key ? 'comp-btn--primary' : 'comp-btn--outline'}`}
-                onClick={() => setRange(r.key)}
-              >
-                {r.label}
-              </button>
-            ))}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-end' }}>
+            <button
+              className="comp-btn comp-btn--primary comp-btn--sm"
+              onClick={handleCheckWeek}
+              disabled={checking}
+              title="Calcula el NDVI de esta semana sin esperar al análisis automático del lunes"
+            >
+              {checking
+                ? <><Loader2 size={14} style={{ animation: 'spin 0.7s linear infinite' }} /> Revisando…</>
+                : <><RefreshCw size={14} strokeWidth={2} /> Revisar NDVI de esta semana</>}
+            </button>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {RANGES.map(r => (
+                <button
+                  key={r.key}
+                  className={`comp-btn comp-btn--sm ${range === r.key ? 'comp-btn--primary' : 'comp-btn--outline'}`}
+                  onClick={() => setRange(r.key)}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

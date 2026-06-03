@@ -13,6 +13,10 @@ public interface NdviTerrainRecordRepository extends JpaRepository<NdviTerrainRe
 
     List<NdviTerrainRecord> findByJobIdOrderByCaptureDate(Long jobId);
 
+    List<NdviTerrainRecord> findByTerrainIdOrderByCaptureDate(Long terrainId);
+
+    boolean existsByTerrainIdAndCaptureDate(Long terrainId, LocalDate captureDate);
+
     List<NdviTerrainRecord> findByTerrainIdAndCaptureDateBetweenOrderByCaptureDate(
             Long terrainId, LocalDate start, LocalDate end);
 

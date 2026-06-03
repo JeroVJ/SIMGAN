@@ -138,6 +138,8 @@ export const monitoringApi = {
   get: (parcelId) => api.get(`/ndvi/monitoring/${parcelId}`).then(r => r.data),
   toggle: (parcelId, enabled) => api.put(`/ndvi/monitoring/${parcelId}`, { enabled }).then(r => r.data),
   fetchNow: (parcelId) => api.post(`/ndvi/monitoring/${parcelId}/fetch-now`).then(r => r.data),
+  // On-demand full weekly run for a terrain (chart + alerts + email).
+  fetchTerrainWeek: (terrainId) => api.post(`/ndvi/monitoring/terrain/${terrainId}/fetch-week`).then(r => r.data),
 }
 
 // ===== CALIBRACIÓN BIOMASA =====

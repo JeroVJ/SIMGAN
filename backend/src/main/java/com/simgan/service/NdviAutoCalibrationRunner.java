@@ -103,6 +103,26 @@ public class NdviAutoCalibrationRunner {
     }
 
     /**
+     * Computes the terrain-level NDVI for one week on demand (not tied to a
+     * calibration job) and persists it, skipping the date if it already exists.
+     * Returns the number of scenes added (0 or 1). Used by the manual
+     * "Revisar NDVI de esta semana" action so the terrain timeline updates.
+     */
+    public Integer fetchTerrainWeek(Long terrainId, LocalDate weekStart, LocalDate weekEnd) {
+        Terrain terrain = terrainRepository.findById(terrainId).orElse(null);
+        if (terrain == null) {
+            log.warn("fetchTerrainWeek: terreno {} no encontrado", terrainId);
+            return 0;
+        }
+        try {
+            return processWeek(null, terrainId, terrain.getGeoJson(), weekStart, weekEnd);
+        } catch (Exception ex) {
+            log.warn("fetchTerrainWeek terreno={} semana={} falló: {}", terrainId, weekStart, ex.getMessage());
+            return 0;
+        }
+    }
+
+    /**
      * Searches Sentinel for the week, picks the best (lowest-cloud) scene,
      * asks processing-api for the terrain-level NDVI, persists it.
      * Returns the number of scenes successfully processed (0 or 1).
@@ -124,6 +144,13 @@ public class NdviAutoCalibrationRunner {
         }
         LocalDate captureDate = extractCaptureDate(best, weekStart);
 
+        // Incremental: if this terrain already has a record for this capture date,
+        // skip it — don't re-download or recompute. Only genuinely new dates are added.
+        if (terrainRecordRepository.existsByTerrainIdAndCaptureDate(terrainId, captureDate)) {
+            log.info("Auto-calibración terreno={} fecha={} ya existe, se salta (incremental)", terrainId, captureDate);
+            return 0;
+        }
+
         Terrain terrain = terrainRepository.findById(terrainId).orElseThrow();
         SentinelTerrainAnalyzeResponse response = imageProcessingClientService.processTerrainScene(
                 terrain, best, captureDate, sceneId, cloudCover);
@@ -143,7 +170,7 @@ public class NdviAutoCalibrationRunner {
     @Transactional
     public void persistTerrainRecord(Long jobId, Terrain terrain, LocalDate captureDate, String sceneId,
                                      Double cloudCover, SentinelTerrainAnalyzeResponse response) {
-        NdviCalibrationJob job = jobRepository.findById(jobId).orElse(null);
+        NdviCalibrationJob job = jobId != null ? jobRepository.findById(jobId).orElse(null) : null;
         NdviTerrainRecord record = NdviTerrainRecord.builder()
                 .terrain(terrain)
                 .job(job)
@@ -176,7 +203,10 @@ public class NdviAutoCalibrationRunner {
     public void finalizeJob(Long jobId, Long terrainId, int weeksDone, int scenesProcessed) {
         NdviCalibrationJob job = jobRepository.findById(jobId).orElseThrow();
 
-        List<NdviTerrainRecord> records = terrainRecordRepository.findByJobIdOrderByCaptureDate(jobId);
+        // Thresholds are computed over the FULL terrain series (across runs), so an
+        // incremental re-run recalibrates from all accumulated scenes, not just the
+        // few new dates added this run.
+        List<NdviTerrainRecord> records = terrainRecordRepository.findByTerrainIdOrderByCaptureDate(terrainId);
 
         List<Double> values = new ArrayList<>();
         for (NdviTerrainRecord r : records) {

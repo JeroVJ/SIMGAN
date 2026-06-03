@@ -93,4 +93,19 @@ public class MonitoringController {
         }
         return ResponseEntity.ok(result);
     }
+
+    /**
+     * "Revisar NDVI de esta semana" — on-demand full weekly run for a terrain:
+     * terrain-level NDVI (updates the Línea NDVI chart), per-parcel analysis +
+     * alerts, and the weekly summary email. Lets the user anticipate the
+     * scheduled Monday run.
+     */
+    @PostMapping("/terrain/{terrainId}/fetch-week")
+    public ResponseEntity<Map<String, Object>> fetchTerrainWeek(@PathVariable Long terrainId) {
+        Map<String, Object> result = monitoringService.fetchCurrentWeekForTerrain(terrainId);
+        if (result != null && result.get("error") != null) {
+            return ResponseEntity.badRequest().body(result);
+        }
+        return ResponseEntity.ok(result);
+    }
 }

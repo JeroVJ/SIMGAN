@@ -53,9 +53,9 @@ public class AutoCalibrationController {
         response.put("hasJob", true);
         response.putAll(toJobMap(job));
 
-        // Timeline comes from terrain-level records produced by the runner —
-        // one row per scene processed, already aggregated over the polygon.
-        List<NdviTerrainRecord> records = terrainRecordRepository.findByJobIdOrderByCaptureDate(job.getId());
+        // Timeline is the full terrain-level series (across all runs + on-demand
+        // weekly fetches), so re-running calibration accumulates instead of resetting.
+        List<NdviTerrainRecord> records = terrainRecordRepository.findByTerrainIdOrderByCaptureDate(terrainId);
         List<Map<String, Object>> timeline = new ArrayList<>();
         for (NdviTerrainRecord r : records) {
             if (r.getMeanNdvi() == null) continue;
