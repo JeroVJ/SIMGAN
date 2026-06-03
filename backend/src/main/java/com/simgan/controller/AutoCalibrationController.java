@@ -3,6 +3,7 @@ package com.simgan.controller;
 import com.simgan.entity.NdviCalibrationJob;
 import com.simgan.entity.NdviTerrainRecord;
 import com.simgan.repository.NdviCalibrationJobRepository;
+import com.simgan.repository.NdviCalibrationRepository;
 import com.simgan.repository.NdviTerrainRecordRepository;
 import com.simgan.service.NdviAutoCalibrationService;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class AutoCalibrationController {
     private final NdviAutoCalibrationService autoCalibrationService;
     private final NdviCalibrationJobRepository jobRepository;
     private final NdviTerrainRecordRepository terrainRecordRepository;
+    private final NdviCalibrationRepository calibrationRepository;
 
     /**
      * Start (or resume) an auto-calibration job over the past {@code months}
@@ -58,6 +60,16 @@ public class AutoCalibrationController {
         NdviCalibrationJob job = jobOpt.get();
         response.put("hasJob", true);
         response.putAll(toJobMap(job));
+
+        // Authoritative thresholds come from the applied NDVI calibrations
+        // (OPTIM/ALERT), not from a specific job. This is robust to duplicated
+        // farms (where copied jobs lose their original startedAt ordering).
+        calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "OPTIM")
+                .map(c -> c.getReferenceNdvi())
+                .ifPresent(v -> response.put("thresholdHigh", v));
+        calibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "ALERT")
+                .map(c -> c.getReferenceNdvi())
+                .ifPresent(v -> response.put("thresholdLow", v));
 
         // Timeline is the full terrain-level series (across all runs + on-demand
         // weekly fetches), so re-running calibration accumulates instead of resetting.
