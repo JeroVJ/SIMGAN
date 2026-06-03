@@ -39,6 +39,9 @@ public class AnalysisOrchestrator {
 
     @Value("${ndvi.alert.threshold:0.1}")
     private double defaultAlertThreshold;
+
+    @Value("${ndvi.optimal.threshold:0.6}")
+    private double defaultOptimalThreshold;
     
 
 
@@ -419,8 +422,35 @@ public class AnalysisOrchestrator {
                         .message("estado de forraje en mal estado, riesgo de sobrepastoreo.")
                         .build());
                 emailAlertService.sendAlertEmail(savedAlert);
+
+            } else if (record.getParcel().getStatus() == Parcel.ParcelStatus.EN_DESCANSO) {
+                // Recovery: a resting parcel whose NDVI climbed back to optimal is
+                // ready for grazing again — notify the owner.
+                double optimalThreshold = resolveOptimalThreshold(record.getParcel().getId(), terrainId);
+                if (record.getMeanNdvi() >= optimalThreshold) {
+                    if (existsAlertTypeToday(record.getParcel().getId(), Alert.AlertType.POTRERO_RECUPERADO)) {
+                        continue;
+                    }
+                    Alert savedAlert = alertRepository.save(Alert.builder()
+                            .parcel(record.getParcel())
+                            .alertType(Alert.AlertType.POTRERO_RECUPERADO)
+                            .message(String.format(
+                                    "El potrero se recuperó (NDVI %.2f ≥ óptimo %.2f). Ya está listo para volver a pastoreo.",
+                                    record.getMeanNdvi(), optimalThreshold))
+                            .build());
+                    emailAlertService.sendAlertEmail(savedAlert);
+                }
             }
         }
+    }
+
+    private double resolveOptimalThreshold(Long parcelId, Long terrainId) {
+        return ndviCalibrationRepository
+                .findByParcelIdAndCalibrationType(parcelId, "OPTIM")
+                .map(NdviCalibration::getReferenceNdvi)
+                .or(() -> ndviCalibrationRepository.findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrainId, "OPTIM")
+                        .map(NdviCalibration::getReferenceNdvi))
+                .orElse(defaultOptimalThreshold);
     }
 
     private boolean existsAlertTypeToday(Long parcelId, Alert.AlertType alertType) {

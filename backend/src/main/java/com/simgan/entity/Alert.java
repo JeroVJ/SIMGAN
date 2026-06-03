@@ -36,7 +36,8 @@ public class Alert {
     public enum AlertType {
         ESTADO_FORRAJE_BAJO_O_EN_UMBRAL,
         POTRERO_ENCHARCADO,
-        POTRERO_CON_ESTRES_HIDRICO
+        POTRERO_CON_ESTRES_HIDRICO,
+        POTRERO_RECUPERADO
     }
 
    

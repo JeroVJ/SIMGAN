@@ -49,7 +49,7 @@ public class AlertTestController {
             alertType = Alert.AlertType.valueOf(type);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Tipo inválido. Usa: ESTADO_FORRAJE_BAJO_O_EN_UMBRAL, POTRERO_ENCHARCADO o POTRERO_CON_ESTRES_HIDRICO"));
+                    .body(Map.of("error", "Tipo inválido. Usa: ESTADO_FORRAJE_BAJO_O_EN_UMBRAL, POTRERO_ENCHARCADO, POTRERO_CON_ESTRES_HIDRICO o POTRERO_RECUPERADO"));
         }
 
         Alert alert = alertRepository.save(Alert.builder()

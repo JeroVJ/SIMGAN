@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { Bell, ChevronDown, ChevronRight, AlertTriangle, RefreshCw, Droplets, TrendingDown, Waves } from 'lucide-react'
+import { Bell, ChevronDown, ChevronRight, AlertTriangle, RefreshCw, Droplets, TrendingDown, Waves, Sprout } from 'lucide-react'
 import { farmApi, terrainApi, alertApi } from '../services/api'
 import Spinner from '../components/Spinner'
 import EmptyState from '../components/EmptyState'
@@ -27,6 +27,13 @@ const TYPE_CONFIG = {
     bg: 'rgba(239,68,68,0.10)',
     border: 'rgba(239,68,68,0.25)',
     Icon: Droplets,
+  },
+  POTRERO_RECUPERADO: {
+    label: 'Potrero recuperado',
+    color: '#16a34a',
+    bg: 'rgba(22,163,74,0.10)',
+    border: 'rgba(22,163,74,0.25)',
+    Icon: Sprout,
   },
 }
 

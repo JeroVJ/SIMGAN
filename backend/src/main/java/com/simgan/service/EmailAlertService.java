@@ -139,6 +139,7 @@ public class EmailAlertService {
             case ESTADO_FORRAJE_BAJO_O_EN_UMBRAL -> "🔴";
             case POTRERO_ENCHARCADO -> "🔵";
             case POTRERO_CON_ESTRES_HIDRICO -> "🟠";
+            case POTRERO_RECUPERADO -> "🟢";
         };
           return String.format("[SIMGAN] %s Alerta %s - Potrero %s",
               typeEmoji, alertTypeLabel(alert), alert.getParcel().getName());
@@ -155,6 +156,7 @@ public class EmailAlertService {
             case ESTADO_FORRAJE_BAJO_O_EN_UMBRAL -> "#ef4444";
             case POTRERO_ENCHARCADO -> "#3b82f6";
             case POTRERO_CON_ESTRES_HIDRICO -> "#f97316";
+            case POTRERO_RECUPERADO -> "#16a34a";
         };
 
         String createdAt = alert.getCreatedAt() != null
@@ -287,6 +289,7 @@ public class EmailAlertService {
               case ESTADO_FORRAJE_BAJO_O_EN_UMBRAL -> "Estado de forraje bajo o en umbral";
               case POTRERO_ENCHARCADO -> "Potrero encharcado";
               case POTRERO_CON_ESTRES_HIDRICO -> "Potrero con estrés hídrico";
+              case POTRERO_RECUPERADO -> "Potrero recuperado";
             };
           }
 

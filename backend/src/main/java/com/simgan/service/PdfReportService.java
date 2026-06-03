@@ -944,11 +944,13 @@ public class PdfReportService {
             case ESTADO_FORRAJE_BAJO_O_EN_UMBRAL -> C_RED;
             case POTRERO_ENCHARCADO              -> C_BLUE;
             case POTRERO_CON_ESTRES_HIDRICO      -> C_ORANGE;
+            case POTRERO_RECUPERADO              -> C_MID_GREEN;
         };
         String typeLabel = switch (alert.getAlertType()) {
             case ESTADO_FORRAJE_BAJO_O_EN_UMBRAL -> "FORRAJE BAJO";
             case POTRERO_ENCHARCADO              -> "ENCHARCADO";
             case POTRERO_CON_ESTRES_HIDRICO      -> "ESTRÉS HÍDRICO";
+            case POTRERO_RECUPERADO              -> "RECUPERADO";
         };
         String parcelName = alert.getParcel() != null ? alert.getParcel().getName() : "—";
         String msg = nvl(alert.getMessage());
