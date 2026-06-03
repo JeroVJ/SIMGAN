@@ -9,8 +9,7 @@ import { TrendingUp } from 'lucide-react'
 import Spinner from '../components/Spinner'
 import EmptyState from '../components/EmptyState'
 import TerrainTabs from '../components/TerrainTabs'
-import { ndviApi, terrainApi } from '../services/api'
-import { useCalibration } from '../hooks'
+import { autoCalibrationApi, ndviApi, terrainApi } from '../services/api'
 
 const DEFAULT_ALERT_NDVI = 0.3
 const DEFAULT_OPTIM_NDVI = 0.6
@@ -28,31 +27,26 @@ function isoMonthsAgo(months) {
   return d.toISOString().slice(0, 10)
 }
 
-/** Average of the reference NDVI values stored in a calibration status. */
-function avgReferenceNdvi(status, fallback) {
-  const vals = status?.calibrations?.map(c => c.referenceNdvi).filter(Boolean) ?? []
-  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : fallback
-}
-
 /**
  * Dedicated NDVI timeline page for a terrain.
  *
- * Shows the terrain-level mean NDVI over time with the calibrated
- * alert (p25) and optimal (p75) thresholds overlaid as reference lines.
- * Separate from the 12-month auto-calibration page.
+ * Shows the terrain-level mean NDVI over time with the calibrated alert (p25)
+ * and optimal (p75) thresholds overlaid. Data comes from the 12-month
+ * auto-calibration (NdviTerrainRecord, terrain-level), which is where the real
+ * NDVI series lives; it falls back to the per-parcel analysis timeline when no
+ * calibration job exists. Separate from the auto-calibration page itself.
  */
 export default function NdviTimelinePage() {
   const { terrainId } = useParams()
 
-  const [terrain, setTerrain]   = useState(null)
-  const [timeline, setTimeline] = useState([])
-  const [loading, setLoading]   = useState(true)
-  const [range, setRange]       = useState('12m')
+  const [terrain, setTerrain]       = useState(null)
+  const [timeline, setTimeline]     = useState([])   // [{ date, ndvi }]
+  const [thresholds, setThresholds] = useState({ alert: DEFAULT_ALERT_NDVI, optim: DEFAULT_OPTIM_NDVI })
+  const [source, setSource]         = useState(null) // 'calibration' | 'analysis' | null
+  const [loading, setLoading]       = useState(true)
+  const [range, setRange]           = useState('12m')
 
-  const { status: calOptim } = useCalibration(terrainId, 'OPTIM')
-  const { status: calAlert } = useCalibration(terrainId, 'ALERT')
-
-  // Terrain meta (for the breadcrumb / tabs header).
+  // Terrain meta for the breadcrumb / tabs header.
   useEffect(() => {
     let active = true
     terrainApi.getById(terrainId)
@@ -61,35 +55,59 @@ export default function NdviTimelinePage() {
     return () => { active = false }
   }, [terrainId])
 
-  // Terrain-level timeline, re-fetched whenever the date range changes.
+  // Load the NDVI series. Prefer the 12-month auto-calibration (terrain-level
+  // records + calibrated thresholds); fall back to per-parcel analysis records.
   useEffect(() => {
     let active = true
     setLoading(true)
-    const months = RANGES.find(r => r.key === range)?.months
-    const start = months ? isoMonthsAgo(months) : undefined
-    const end = months ? new Date().toISOString().slice(0, 10) : undefined
-    ndviApi.getTimeline(terrainId, start, end)
-      .then(data => { if (active) setTimeline(Array.isArray(data) ? data : []) })
-      .catch(() => { if (active) setTimeline([]) })
-      .finally(() => { if (active) setLoading(false) })
+
+    async function load() {
+      let points = []
+      let alert = DEFAULT_ALERT_NDVI
+      let optim = DEFAULT_OPTIM_NDVI
+      let src = null
+
+      try {
+        const auto = await autoCalibrationApi.status(terrainId)
+        if (auto?.thresholdLow != null) alert = auto.thresholdLow
+        if (auto?.thresholdHigh != null) optim = auto.thresholdHigh
+        if (Array.isArray(auto?.timeline) && auto.timeline.length) {
+          points = auto.timeline
+          src = 'calibration'
+        }
+      } catch { /* no calibration job yet */ }
+
+      if (points.length === 0) {
+        try {
+          const tl = await ndviApi.getTimeline(terrainId)
+          if (Array.isArray(tl) && tl.length) {
+            points = tl
+            src = 'analysis'
+          }
+        } catch { /* no analysis records either */ }
+      }
+
+      if (!active) return
+      setTimeline(
+        points
+          .filter(p => p.meanNdvi != null)
+          .map(p => ({ date: p.date, ndvi: Number(Number(p.meanNdvi).toFixed(3)) }))
+      )
+      setThresholds({ alert, optim })
+      setSource(src)
+      setLoading(false)
+    }
+
+    load()
     return () => { active = false }
-  }, [terrainId, range])
+  }, [terrainId])
 
-  const optimNdvi = useMemo(
-    () => avgReferenceNdvi(calOptim, DEFAULT_OPTIM_NDVI),
-    [calOptim]
-  )
-  const alertNdvi = useMemo(
-    () => avgReferenceNdvi(calAlert, DEFAULT_ALERT_NDVI),
-    [calAlert]
-  )
-
-  const chartData = useMemo(
-    () => (timeline || [])
-      .filter(p => p.meanNdvi != null)
-      .map(p => ({ date: p.date, ndvi: Number(p.meanNdvi.toFixed(3)) })),
-    [timeline]
-  )
+  const chartData = useMemo(() => {
+    const months = RANGES.find(r => r.key === range)?.months
+    if (!months) return timeline
+    const cutoff = isoMonthsAgo(months)
+    return timeline.filter(p => p.date >= cutoff)
+  }, [timeline, range])
 
   const stats = useMemo(() => {
     if (!chartData.length) return null
@@ -101,9 +119,9 @@ export default function NdviTimelinePage() {
       max: Math.max(...vals),
       avg: vals.reduce((a, b) => a + b, 0) / vals.length,
       count: vals.length,
-      belowAlert: latest < alertNdvi,
+      belowAlert: latest < thresholds.alert,
     }
-  }, [chartData, alertNdvi])
+  }, [chartData, thresholds])
 
   return (
     <div className="page-container">
@@ -125,7 +143,9 @@ export default function NdviTimelinePage() {
               <TrendingUp size={18} strokeWidth={2} /> Línea de tiempo NDVI — Terreno
             </h3>
             <p style={{ fontSize: 12, color: 'var(--color-text-muted)', margin: '4px 0 0' }}>
-              NDVI promedio del terreno con los umbrales de alerta y óptimo de la calibración.
+              NDVI promedio del terreno con los umbrales de alerta y óptimo.
+              {source === 'calibration' && ' Fuente: calibración automática de 12 meses.'}
+              {source === 'analysis' && ' Fuente: análisis NDVI del terreno.'}
             </p>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -147,7 +167,11 @@ export default function NdviTimelinePage() {
           <EmptyState
             icon="🛰"
             title="Sin datos NDVI"
-            description="Aún no hay capturas NDVI para este terreno en el rango seleccionado. Ejecuta un análisis o espera la captura semanal."
+            description={
+              timeline.length === 0
+                ? 'Este terreno aún no tiene serie NDVI. Corre la calibración automática de 12 meses o un análisis NDVI para generar datos.'
+                : 'No hay capturas NDVI en el rango seleccionado. Prueba el rango "Todo".'
+            }
           />
         ) : (
           <>
@@ -172,16 +196,16 @@ export default function NdviTimelinePage() {
                 />
                 <Legend />
                 <ReferenceLine
-                  y={alertNdvi}
+                  y={thresholds.alert}
                   stroke="#ef4444"
                   strokeDasharray="5 5"
-                  label={{ value: `Umbral alerta (${alertNdvi.toFixed(2)})`, fill: '#ef4444', fontSize: 11, position: 'insideTopRight' }}
+                  label={{ value: `Umbral alerta (${thresholds.alert.toFixed(2)})`, fill: '#ef4444', fontSize: 11, position: 'insideTopRight' }}
                 />
                 <ReferenceLine
-                  y={optimNdvi}
+                  y={thresholds.optim}
                   stroke="#4ade80"
                   strokeDasharray="5 5"
-                  label={{ value: `Óptimo (${optimNdvi.toFixed(2)})`, fill: '#4ade80', fontSize: 11, position: 'insideBottomRight' }}
+                  label={{ value: `Óptimo (${thresholds.optim.toFixed(2)})`, fill: '#4ade80', fontSize: 11, position: 'insideBottomRight' }}
                 />
                 <Line type="monotone" dataKey="ndvi" name="NDVI terreno" stroke="#3b82f6" strokeWidth={2.5} dot={{ r: 3 }} connectNulls />
               </LineChart>
