@@ -44,6 +44,10 @@ public class EmailAlertService {
     @Value("${app.base-url:http://localhost:5173}")
     private String appBaseUrl;
 
+    /** When false, the same-day duplicate-alert guard is bypassed (handy for testing). */
+    @Value("${app.alerts.dedup-enabled:true}")
+    private boolean dedupEnabled;
+
     /**
      * Sends an HTML alert email to the farm owner.
      * Called asynchronously so it never blocks the alert-creation request.
@@ -72,7 +76,7 @@ public class EmailAlertService {
             return;
         }
 
-        if (isDuplicateTypeForToday(fullAlert)) {
+        if (dedupEnabled && isDuplicateTypeForToday(fullAlert)) {
             log.info("Duplicate alert email skipped for parcel {} and type {} (alertId={})",
                     fullAlert.getParcel().getId(), fullAlert.getAlertType(), fullAlert.getId());
             return;
