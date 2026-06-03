@@ -1,7 +1,7 @@
 import { NavLink, Link, useLocation } from 'react-router-dom'
 import {
   LayoutGrid, Plus, Leaf, X, LogOut, FileText, Bell,
-  Map, Users, Activity, Shuffle, Settings2, Home,
+  Map, Users, Activity, Shuffle, Settings2, Home, TrendingUp,
 } from 'lucide-react'
 import { useNavContext } from '../hooks'
 
@@ -22,10 +22,11 @@ const TOP_NAV = [
 ]
 
 const TERRAIN_SECTIONS = [
-  { key: 'parcels',  path: 'parcels',  label: 'Potreros',     Icon: Map },
-  { key: 'lotes',    path: 'lotes',    label: 'Ganado',       Icon: Users },
-  { key: 'ndvi',     path: 'ndvi',     label: 'NDVI & Salud', Icon: Activity },
-  { key: 'rotation', path: 'rotation', label: 'Pastoreo',     Icon: Shuffle },
+  { key: 'parcels',       path: 'parcels',       label: 'Potreros',     Icon: Map },
+  { key: 'lotes',         path: 'lotes',         label: 'Ganado',       Icon: Users },
+  { key: 'ndvi',          path: 'ndvi',          label: 'NDVI & Salud', Icon: Activity },
+  { key: 'ndvi-timeline', path: 'ndvi/timeline', label: 'Línea NDVI',   Icon: TrendingUp },
+  { key: 'rotation',      path: 'rotation',      label: 'Pastoreo',     Icon: Shuffle },
 ]
 
 function initialOf(name) {
