@@ -4,6 +4,7 @@ import com.simgan.entity.*;
 import com.simgan.repository.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,9 +47,16 @@ public class FarmDuplicationService {
     private final LoteParcelHistoryRepository loteParcelHistoryRepository;
 
     @Transactional
-    public Map<String, Object> duplicate(Long farmId) {
+    public Map<String, Object> duplicate(Long farmId, String email) {
         Farm oldFarm = farmRepository.findById(farmId)
                 .orElseThrow(() -> new RuntimeException("Finca no encontrada: " + farmId));
+
+        // Only the owner may duplicate their own farm.
+        if (oldFarm.getGanadero() == null
+                || oldFarm.getGanadero().getCorreo() == null
+                || !oldFarm.getGanadero().getCorreo().equalsIgnoreCase(email)) {
+            throw new AccessDeniedException("No tienes acceso a esta finca");
+        }
 
         // 1) Farm
         Farm newFarm = new Farm();

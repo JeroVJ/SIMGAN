@@ -50,7 +50,7 @@ public class FarmController {
      * testing rotation/low-NDVI scenarios without touching real data.
      */
     @PostMapping("/{id}/duplicate")
-    public ResponseEntity<Map<String, Object>> duplicate(@PathVariable Long id) {
-        return ResponseEntity.ok(farmDuplicationService.duplicate(id));
+    public ResponseEntity<Map<String, Object>> duplicate(@PathVariable Long id, Authentication authentication) {
+        return ResponseEntity.ok(farmDuplicationService.duplicate(id, authentication.getName()));
     }
 }
