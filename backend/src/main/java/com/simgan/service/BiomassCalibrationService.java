@@ -26,7 +26,7 @@ public class BiomassCalibrationService {
     private final ParcelRepository parcelRepository;
     private final ImageProcessingClientService imageProcessingClient;
 
-    private static final int MIN_POINTS = 4;
+    private static final int MIN_POINTS = 7;
 
     /**
      * Returns the biomass calibration status for all parcels in a terrain.
