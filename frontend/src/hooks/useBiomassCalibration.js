@@ -4,6 +4,7 @@ import { biomassCalibrationApi } from '../services/api'
 
 export function useBiomassCalibration(terrainId) {
   const [status, setStatus]         = useState(null)
+  const [scenes, setScenes]         = useState([])
   const [loading, setLoading]       = useState(true)
   const [calibrating, setCalibrating] = useState(false)
 
@@ -11,8 +12,12 @@ export function useBiomassCalibration(terrainId) {
     if (!terrainId) return
     setLoading(true)
     try {
-      const data = await biomassCalibrationApi.getStatus(terrainId)
+      const [data, sceneList] = await Promise.all([
+        biomassCalibrationApi.getStatus(terrainId),
+        biomassCalibrationApi.getScenes(terrainId).catch(() => []),
+      ])
       setStatus(data)
+      setScenes(sceneList || [])
     } catch {
       toast.error('Error cargando estado de calibración de biomasa')
     } finally {
@@ -24,10 +29,10 @@ export function useBiomassCalibration(terrainId) {
     loadStatus()
   }, [loadStatus])
 
-  const calibrateParcel = useCallback(async (parcelId, points) => {
+  const calibrateParcel = useCallback(async (parcelId, points, sceneId) => {
     setCalibrating(true)
     try {
-      const result = await biomassCalibrationApi.calibrateParcel(terrainId, parcelId, points)
+      const result = await biomassCalibrationApi.calibrateParcel(terrainId, parcelId, points, sceneId)
       if (result.error) {
         toast.error(result.error)
       } else {
@@ -44,5 +49,5 @@ export function useBiomassCalibration(terrainId) {
     }
   }, [terrainId, loadStatus])
 
-  return { status, loading, calibrating, calibrateParcel, reload: loadStatus }
+  return { status, scenes, loading, calibrating, calibrateParcel, reload: loadStatus }
 }

@@ -157,7 +157,7 @@ function BiomassChart({ points, model }) {
 export default function CalibrationBiomassPage() {
   const { terrainId } = useParams()
   const navigate = useNavigate()
-  const { status, loading, calibrating, calibrateParcel } = useBiomassCalibration(terrainId)
+  const { status, scenes, loading, calibrating, calibrateParcel } = useBiomassCalibration(terrainId)
   const { status: optimStatus, loading: optimLoading } = useCalibration(terrainId, 'OPTIM')
   const { status: alertStatus, loading: alertLoading } = useCalibration(terrainId, 'ALERT')
 
@@ -166,6 +166,14 @@ export default function CalibrationBiomassPage() {
   const [parcelPoints, setParcelPoints] = useState({}) // { parcelId: [{lat, lng, cutAreaM2, greenWeightKg}] }
   const [placingPoints, setPlacingPoints] = useState(false)
   const [recalibratingIds, setRecalibratingIds] = useState(new Set()) // parcels being recalibrated
+  const [selectedSceneId, setSelectedSceneId] = useState('') // reference scene chosen from the timeline
+
+  // Default to the most recent available scene once they load
+  useEffect(() => {
+    if (scenes.length > 0 && !selectedSceneId) {
+      setSelectedSceneId(scenes[0].sceneId)
+    }
+  }, [scenes, selectedSceneId])
 
   // Initialize points from existing data
   useEffect(() => {
@@ -276,6 +284,10 @@ export default function CalibrationBiomassPage() {
 
   async function handleCalibrate() {
     if (!activeParcelId) return
+    if (scenes.length > 0 && !selectedSceneId) {
+      toast.error('Selecciona una fecha de la línea de tiempo antes de calibrar.')
+      return
+    }
     const pts = parcelPoints[activeParcelId] || []
     if (pts.length < MIN_POINTS) {
       toast.error(`Se requieren al menos ${MIN_POINTS} puntos. Tienes ${pts.length}.`)
@@ -298,7 +310,7 @@ export default function CalibrationBiomassPage() {
       greenWeightKg: Number(p.greenWeightKg),
     }))
 
-    await calibrateParcel(activeParcelId, points)
+    await calibrateParcel(activeParcelId, points, selectedSceneId || undefined)
     setPlacingPoints(false)
     setRecalibratingIds(prev => { const next = new Set(prev); next.delete(activeParcelId); return next })
   }
@@ -401,12 +413,40 @@ export default function CalibrationBiomassPage() {
             </div>
           ) : (
             <div>
+              {/* Reference scene selector (timeline) */}
+              {scenes.length > 0 && (
+                <div className="card mb-24" style={{ borderLeft: '4px solid #f59e0b' }}>
+                  <div className="card-header">
+                    <h3>1. Elige la fecha de la imagen de referencia</h3>
+                  </div>
+                  <p style={{ color: 'var(--color-text-secondary)', fontSize: 13, marginBottom: 12 }}>
+                    El NDVI de tus puntos de muestreo se calculará con la imagen satelital de esta fecha.
+                    Elige la más cercana al día en que hiciste los cortes de pasto en campo.
+                  </p>
+                  <select
+                    value={selectedSceneId}
+                    onChange={e => setSelectedSceneId(e.target.value)}
+                    style={{ ...inputStyle, maxWidth: 420 }}
+                  >
+                    <option value="">— Selecciona una fecha —</option>
+                    {scenes.map(s => (
+                      <option key={s.sceneId} value={s.sceneId}>
+                        {fmtSceneDate(s.captureDate)}
+                        {s.meanNdvi != null ? ` · NDVI ${s.meanNdvi.toFixed(2)}` : ''}
+                        {s.cloudCoverPercent != null ? ` · nubes ${Math.round(s.cloudCoverPercent)}%` : ''}
+                        {s.source ? ` · ${s.source}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               {/* Map */}
               <div className="card mb-24" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <h3 style={{ fontSize: 14, margin: 0 }}>
-                      {activeParcel?.parcelName} — Puntos de Muestreo
+                      {scenes.length > 0 ? '2. ' : ''}{activeParcel?.parcelName} — Puntos de Muestreo
                     </h3>
                     <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                       {currentPoints.length} puntos marcados (mínimo {MIN_POINTS})
@@ -416,6 +456,8 @@ export default function CalibrationBiomassPage() {
                     <button
                       className={`action-btn ${placingPoints ? 'action-btn--danger' : 'action-btn--primary'}`}
                       onClick={() => setPlacingPoints(!placingPoints)}
+                      disabled={scenes.length > 0 && !selectedSceneId}
+                      title={scenes.length > 0 && !selectedSceneId ? 'Primero elige una fecha de referencia' : ''}
                       style={{ fontSize: 12, padding: '6px 12px' }}
                     >
                       {placingPoints ? 'Dejar de marcar' : 'Marcar puntos en mapa'}
@@ -688,6 +730,15 @@ function ParcelGeoJsonLayer({ geoJson }) {
       style={{ color: '#3b82f6', weight: 2, fillColor: '#3b82f680', fillOpacity: 0.15 }}
     />
   )
+}
+
+function fmtSceneDate(value) {
+  if (!value) return '—'
+  try {
+    return new Date(value + 'T00:00:00').toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })
+  } catch {
+    return String(value)
+  }
 }
 
 const thStyle = { textAlign: 'left', padding: '8px 10px', fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 600 }

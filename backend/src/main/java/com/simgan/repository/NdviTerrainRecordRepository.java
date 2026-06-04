@@ -25,5 +25,11 @@ public interface NdviTerrainRecordRepository extends JpaRepository<NdviTerrainRe
     /** Escena más reciente con sceneId, usada como referencia para la biomasa tras la auto-calibración. */
     Optional<NdviTerrainRecord> findFirstByTerrainIdAndSceneIdIsNotNullOrderByCaptureDateDesc(Long terrainId);
 
+    /** Escenas disponibles (con sceneId) para elegir como referencia, de más reciente a más antigua. */
+    List<NdviTerrainRecord> findByTerrainIdAndSceneIdIsNotNullOrderByCaptureDateDesc(Long terrainId);
+
+    /** Escena concreta elegida por el usuario. */
+    Optional<NdviTerrainRecord> findFirstByTerrainIdAndSceneId(Long terrainId, String sceneId);
+
     void deleteByTerrainId(Long terrainId);
 }

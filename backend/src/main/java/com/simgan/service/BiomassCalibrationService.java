@@ -115,6 +115,32 @@ public class BiomassCalibrationService {
     public BiomassCalibrationDto.CalibrateBiomassResponse calibrateParcel(
             Long terrainId, Long parcelId,
             List<BiomassCalibrationDto.SamplePointInput> inputPoints) {
+        return calibrateParcel(terrainId, parcelId, inputPoints, null);
+    }
+
+    /**
+     * Lista las escenas disponibles (línea de tiempo) que el usuario puede elegir
+     * como referencia para calcular el NDVI de los puntos de muestreo.
+     */
+    public List<BiomassCalibrationDto.ReferenceSceneResponse> listReferenceScenes(Long terrainId) {
+        return ndviTerrainRecordRepository
+                .findByTerrainIdAndSceneIdIsNotNullOrderByCaptureDateDesc(terrainId)
+                .stream()
+                .map(r -> BiomassCalibrationDto.ReferenceSceneResponse.builder()
+                        .sceneId(r.getSceneId())
+                        .captureDate(r.getCaptureDate())
+                        .source(r.getSource())
+                        .meanNdvi(r.getMeanNdvi())
+                        .cloudCoverPercent(r.getCloudCoverPercent())
+                        .build())
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public BiomassCalibrationDto.CalibrateBiomassResponse calibrateParcel(
+            Long terrainId, Long parcelId,
+            List<BiomassCalibrationDto.SamplePointInput> inputPoints,
+            String selectedSceneId) {
 
         Terrain terrain = terrainRepository.findById(terrainId)
                 .orElseThrow(() -> new RuntimeException("Terreno no encontrado: " + terrainId));
@@ -135,8 +161,20 @@ public class BiomassCalibrationService {
         String downloadUrl = null;
         LocalDate calibrationDate = null;
 
+        // Prioridad 1: escena elegida por el usuario en la línea de tiempo.
+        if (selectedSceneId != null && !selectedSceneId.isBlank()) {
+            var chosen = ndviTerrainRecordRepository
+                    .findFirstByTerrainIdAndSceneId(terrainId, selectedSceneId);
+            if (chosen.isEmpty()) {
+                throw new RuntimeException("La escena seleccionada no está disponible para este terreno.");
+            }
+            sceneId = chosen.get().getSceneId();
+            calibrationDate = chosen.get().getCaptureDate();
+        }
+
         // Try parcel-specific calibration first, then terrain-level
         for (NdviCalibration cal : optimCalibrations) {
+            if (sceneId != null) break;
             if (cal.getParcel() != null && cal.getParcel().getId().equals(parcelId)) {
                 sceneId = cal.getSceneId();
                 calibrationDate = cal.getCalibrationDate();
@@ -170,9 +208,11 @@ public class BiomassCalibrationService {
         }
 
         // ─── Reuse existing NDVI values by coordinate ─────────────────────────────
+        // Solo se reutiliza si el punto se calculó con LA MISMA escena; si el usuario
+        // cambió la fecha de referencia, hay que recalcular el NDVI con la escena nueva.
         Map<String, Double> cachedNdvi = new HashMap<>();
         for (BiomassCalibrationPoint existing : pointRepository.findByParcelIdOrderByPointIndex(parcelId)) {
-            if (existing.getNdviAtPoint() != null) {
+            if (existing.getNdviAtPoint() != null && sceneId.equals(existing.getSceneId())) {
                 String key = String.format("%.6f,%.6f", existing.getLatitude(), existing.getLongitude());
                 cachedNdvi.put(key, existing.getNdviAtPoint());
             }

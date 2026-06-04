@@ -28,6 +28,16 @@ public class BiomassCalibrationController {
     }
 
     /**
+     * GET /api/ndvi/biomass-calibration/{terrainId}/scenes
+     * Lista las escenas disponibles (línea de tiempo) para elegir como referencia.
+     */
+    @GetMapping("/{terrainId}/scenes")
+    public ResponseEntity<java.util.List<BiomassCalibrationDto.ReferenceSceneResponse>> getScenes(
+            @PathVariable Long terrainId) {
+        return ResponseEntity.ok(biomassCalibrationService.listReferenceScenes(terrainId));
+    }
+
+    /**
      * POST /api/ndvi/biomass-calibration/{terrainId}/{parcelId}
      * Runs biomass calibration for a specific parcel using field sample points.
      */
@@ -43,7 +53,8 @@ public class BiomassCalibrationController {
                     request.getPoints() != null ? request.getPoints().size() : 0);
 
             BiomassCalibrationDto.CalibrateBiomassResponse result =
-                    biomassCalibrationService.calibrateParcel(terrainId, parcelId, request.getPoints());
+                    biomassCalibrationService.calibrateParcel(
+                            terrainId, parcelId, request.getPoints(), request.getSceneId());
 
             return ResponseEntity.ok(result);
         } catch (RuntimeException e) {

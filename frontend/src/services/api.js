@@ -147,8 +147,11 @@ export const monitoringApi = {
 export const biomassCalibrationApi = {
   getStatus: (terrainId) =>
     api.get(`/ndvi/biomass-calibration/status/${terrainId}`).then(r => r.data),
-  calibrateParcel: (terrainId, parcelId, points) =>
-    api.post(`/ndvi/biomass-calibration/${terrainId}/${parcelId}`, { terrainId, parcelId, points }).then(r => r.data),
+  // Escenas disponibles (línea de tiempo) para elegir como referencia.
+  getScenes: (terrainId) =>
+    api.get(`/ndvi/biomass-calibration/${terrainId}/scenes`).then(r => r.data),
+  calibrateParcel: (terrainId, parcelId, points, sceneId) =>
+    api.post(`/ndvi/biomass-calibration/${terrainId}/${parcelId}`, { terrainId, parcelId, points, sceneId }).then(r => r.data),
 }
 
 // ===== LOTES (GANADO) =====

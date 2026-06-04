@@ -23,6 +23,17 @@ public class BiomassCalibrationDto {
         private Long terrainId;
         private Long parcelId;
         private List<SamplePointInput> points;
+        /** Escena de referencia elegida por el usuario en la línea de tiempo (opcional). */
+        private String sceneId;
+    }
+
+    @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+    public static class ReferenceSceneResponse {
+        private String sceneId;
+        private LocalDate captureDate;
+        private String source;
+        private Double meanNdvi;
+        private Double cloudCoverPercent;
     }
 
     // ========== RESPONSE ==========
