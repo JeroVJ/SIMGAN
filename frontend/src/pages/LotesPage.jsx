@@ -1,13 +1,14 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { MapContainer, TileLayer, GeoJSON, useMap, Tooltip, Marker } from 'react-leaflet'
 import * as turf from '@turf/turf'
 import L from 'leaflet'
 import { Plus, X } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useTerrain } from '../hooks'
 import { getBiomassColor, getBiomassLabel, getDailyConsumption } from '../utils/grazing'
 import { centroidOf } from '../utils/geo'
-import { parcelApi, loteApi } from '../services/api'
+import { parcelApi, loteApi, terrainApi } from '../services/api'
 import Spinner from '../components/Spinner'
 import ConfirmDialog from '../components/ConfirmDialog'
 import TerrainTabs from '../components/TerrainTabs'
@@ -57,6 +58,25 @@ export default function LotesPage() {
 
   const [showCreate, setShowCreate] = useState(false)
   const [showAssign, setShowAssign] = useState(null)
+  // Potreros de TODA la finca (los lotes pueden moverse a cualquier terreno).
+  const [farmParcels, setFarmParcels] = useState([])
+
+  const loadFarmParcels = useCallback(async () => {
+    const farmId = terrain?.farmId
+    if (!farmId) return
+    try {
+      const terrains = await terrainApi.getByFarm(farmId)
+      const lists = await Promise.all(
+        terrains.map(async t => {
+          const ps = await parcelApi.getByTerrain(t.id).catch(() => [])
+          return ps.map(p => ({ ...p, terrainId: t.id, terrainName: t.name }))
+        })
+      )
+      setFarmParcels(lists.flat())
+    } catch { /* ignore */ }
+  }, [terrain?.farmId])
+
+  useEffect(() => { loadFarmParcels() }, [loadFarmParcels])
   const [form, setForm] = useState({ name: '', fechaIngreso: new Date().toISOString().split('T')[0] })
   const [closingLote, setClosingLote] = useState(null)
   const [closeFecha, setCloseFecha] = useState(new Date().toISOString().split('T')[0])
@@ -248,8 +268,16 @@ export default function LotesPage() {
   }
 
   async function handleAssign(loteId, parcelId) {
-    try { await assignParcel(loteId, parcelId); setShowAssign(null) }
-    catch { /* toast shown in hook */ }
+    try {
+      await assignParcel(loteId, parcelId)
+      setShowAssign(null)
+      loadFarmParcels()
+      // If moved to another terrain, the lote leaves this terrain's list — make it clear.
+      const target = farmParcels.find(p => p.id === parcelId)
+      if (target && terrain?.id && target.terrainId !== terrain.id) {
+        toast(`Lote movido a "${target.terrainName}". Lo verás en el ganado de ese terreno.`, { icon: '🐄', duration: 5000 })
+      }
+    } catch { /* toast shown in hook */ }
   }
 
   function handleUnassign(loteId) {
@@ -259,7 +287,7 @@ export default function LotesPage() {
       confirmLabel: 'Retirar',
       variant: 'warning',
       onConfirm: async () => {
-        try { await unassignParcel(loteId) } catch { /* toast shown in hook */ }
+        try { await unassignParcel(loteId); loadFarmParcels() } catch { /* toast shown in hook */ }
       },
     })
   }
@@ -293,7 +321,26 @@ export default function LotesPage() {
     })
   }
 
+  // Para la ROTACIÓN (planificación por terreno): solo potreros del terreno actual.
   const availableParcels = parcels.filter(p => p.status === 'DISPONIBLE' || p.status === 'EN_DESCANSO')
+  // Para "Asignar a potrero": potreros disponibles de CUALQUIER terreno de la finca,
+  // agrupados por terreno. Fallback a los del terreno actual si aún no cargan.
+  const farmAvailableByTerrain = useMemo(() => {
+    const source = farmParcels.length > 0
+      ? farmParcels
+      : parcels.map(p => ({ ...p, terrainId: terrain?.id, terrainName: terrain?.name }))
+    const avail = source.filter(p => p.status === 'DISPONIBLE' || p.status === 'EN_DESCANSO')
+    const groups = new Map()
+    for (const p of avail) {
+      const key = p.terrainId
+      if (!groups.has(key)) groups.set(key, { terrainId: key, terrainName: p.terrainName || 'Terreno', parcels: [] })
+      groups.get(key).parcels.push(p)
+    }
+    // Terreno actual primero
+    return [...groups.values()].sort((a, b) =>
+      a.terrainId === terrain?.id ? -1 : b.terrainId === terrain?.id ? 1 : 0)
+  }, [farmParcels, parcels, terrain?.id, terrain?.name])
+  const farmAvailableCount = farmAvailableByTerrain.reduce((n, g) => n + g.parcels.length, 0)
   const activeLotes = lotes.filter(l => !l.fechaSalida)
   const closedLotes = lotes.filter(l => l.fechaSalida)
 
@@ -664,29 +711,38 @@ export default function LotesPage() {
                 {showAssign === lote.id && (
                   <div className="assign-dropdown">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 600 }}>Selecciona un potrero</span>
+                      <span style={{ fontSize: 12, color: 'var(--color-text-muted)', fontWeight: 600 }}>Selecciona un potrero (cualquier terreno de la finca)</span>
                       <button onClick={() => setShowAssign(null)}
                         style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--color-text-muted)', lineHeight: 1 }}>×</button>
                     </div>
-                    {availableParcels.length === 0
-                      ? <p style={{ color: 'var(--color-danger)', fontSize: 13, margin: 0 }}>No hay potreros disponibles</p>
-                      : <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {availableParcels.map(p => {
-                          const pInfo = parcelInfo[p.id] || {}
-                          return (
-                            <button key={p.id} className="action-btn action-btn--outline"
-                              onClick={() => handleAssign(lote.id, p.id)}
-                              style={{ fontSize: 13, padding: '8px 14px' }}>
-                              <span className="legend-dot" style={{ background: STATUS_COLORS_HEX[p.status], width: 10, height: 10 }} />
-                              {p.name}
-                              {pInfo.biomass != null && (
-                                <span style={{ color: getBiomassColor(pInfo.biomass), fontSize: 11, marginLeft: 6 }}>
-                                  {Math.round(pInfo.biomass)} kg/ha
-                                </span>
-                              )}
-                            </button>
-                          )
-                        })}
+                    {farmAvailableCount === 0
+                      ? <p style={{ color: 'var(--color-danger)', fontSize: 13, margin: 0 }}>No hay potreros disponibles en la finca</p>
+                      : <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {farmAvailableByTerrain.map(group => (
+                          <div key={group.terrainId}>
+                            <div style={{ fontSize: 11, color: 'var(--color-text-muted)', fontWeight: 600, marginBottom: 4 }}>
+                              {group.terrainName}{group.terrainId === terrain?.id ? ' (actual)' : ''}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                              {group.parcels.map(p => {
+                                const pInfo = parcelInfo[p.id] || {}
+                                return (
+                                  <button key={p.id} className="action-btn action-btn--outline"
+                                    onClick={() => handleAssign(lote.id, p.id)}
+                                    style={{ fontSize: 13, padding: '8px 14px' }}>
+                                    <span className="legend-dot" style={{ background: STATUS_COLORS_HEX[p.status], width: 10, height: 10 }} />
+                                    {p.name}
+                                    {pInfo.biomass != null && (
+                                      <span style={{ color: getBiomassColor(pInfo.biomass), fontSize: 11, marginLeft: 6 }}>
+                                        {Math.round(pInfo.biomass)} kg/ha
+                                      </span>
+                                    )}
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     }
                   </div>

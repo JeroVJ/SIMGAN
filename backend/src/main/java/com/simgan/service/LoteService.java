@@ -123,9 +123,12 @@ public class LoteService {
         Parcel newParcel = parcelRepository.findById(req.getParcelId())
                 .orElseThrow(() -> new RuntimeException("Parcela no encontrada"));
 
-        // Check parcel belongs to same terrain
-        if (!newParcel.getTerrain().getId().equals(lote.getTerrain().getId())) {
-            throw new RuntimeException("La parcela no pertenece al mismo terreno del lote");
+        // Los lotes son a nivel finca: pueden moverse a cualquier potrero de cualquier
+        // terreno de la MISMA finca. (Antes se restringía al terreno donde se creó.)
+        Long loteFarmId = lote.getTerrain().getFarm().getId();
+        Long parcelFarmId = newParcel.getTerrain().getFarm().getId();
+        if (!parcelFarmId.equals(loteFarmId)) {
+            throw new RuntimeException("La parcela no pertenece a la misma finca del lote");
         }
 
         // Check parcel is available
@@ -149,8 +152,10 @@ public class LoteService {
             unassignFromCurrentParcel(lote);
         }
 
-        // Assign to new parcel
+        // Assign to new parcel. The lote "moves" to that parcel's terrain so it
+        // shows up under the terrain where it is currently grazing.
         lote.setCurrentParcel(newParcel);
+        lote.setTerrain(newParcel.getTerrain());
         newParcel.setStatus(Parcel.ParcelStatus.EN_USO);
         parcelRepository.save(newParcel);
 
@@ -215,8 +220,8 @@ public class LoteService {
         for (LoteDto.RotationAssignmentEntry entry : req.getEntries()) {
             Parcel parcel = parcelRepository.findById(entry.getParcelId())
                     .orElseThrow(() -> new RuntimeException("Parcela no encontrada: " + entry.getParcelId()));
-            if (!parcel.getTerrain().getId().equals(lote.getTerrain().getId())) {
-                throw new RuntimeException("Parcela " + entry.getParcelId() + " no pertenece al terreno del lote");
+            if (!parcel.getTerrain().getFarm().getId().equals(lote.getTerrain().getFarm().getId())) {
+                throw new RuntimeException("Parcela " + entry.getParcelId() + " no pertenece a la finca del lote");
             }
             if (entry.getDiasOcupacion() != null) {
                 parcel.setDiasOcupacion(entry.getDiasOcupacion());
