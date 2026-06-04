@@ -123,14 +123,14 @@ public class NdviRecommendationService {
             double biomass = resolveCurrentBiomassKgPerHa(parcel, latest);
             latestBiomass = biomass;
             builder.latestNdvi(latest.getMeanNdvi())
-                    .latestDate(latest.getCaptureDate().format(FMT))
+                    .latestDate(latest.getCaptureDate() != null ? latest.getCaptureDate().format(FMT) : null)
                     .latestBiomass(biomass);
         }
 
         if (!history.isEmpty()) {
-            double avgNdvi = history.stream().mapToDouble(NdviRecord::getMeanNdvi).average().orElse(0);
-            double avgMin = history.stream().mapToDouble(NdviRecord::getMinNdvi).average().orElse(0);
-            double avgMax = history.stream().mapToDouble(NdviRecord::getMaxNdvi).average().orElse(0);
+            double avgNdvi = history.stream().map(NdviRecord::getMeanNdvi).filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
+            double avgMin = history.stream().map(NdviRecord::getMinNdvi).filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
+            double avgMax = history.stream().map(NdviRecord::getMaxNdvi).filter(Objects::nonNull).mapToDouble(Double::doubleValue).average().orElse(0);
 
             builder.avgNdvi(Math.round(avgNdvi * 1000.0) / 1000.0)
                     .avgMinNdvi(Math.round(avgMin * 1000.0) / 1000.0)
@@ -195,7 +195,7 @@ public class NdviRecommendationService {
         for (Parcel parcel : parcels) {
             Optional<NdviRecord> latest = ndviRecordRepository.findFirstByParcelIdOrderByCaptureDateDesc(parcel.getId());
 
-            if (latest.isEmpty()) continue;
+            if (latest.isEmpty() || latest.get().getMeanNdvi() == null) continue;
 
             double ndvi = latest.get().getMeanNdvi();
             double biomass = resolveCurrentBiomassKgPerHa(parcel, latest.get());
@@ -271,7 +271,9 @@ public class NdviRecommendationService {
     public List<NdviDto.TimelinePoint> getTerrainTimeline(Long terrainId) {
         List<NdviRecord> records = ndviRecordRepository.findByTerrainIdOrderByCaptureDate(terrainId);
 
-        return records.stream().map(r -> NdviDto.TimelinePoint.builder()
+        return records.stream()
+                .filter(r -> r.getCaptureDate() != null)
+                .map(r -> NdviDto.TimelinePoint.builder()
                 .date(r.getCaptureDate().format(FMT))
                 .meanNdvi(r.getMeanNdvi())
             .biomassKgPerHa(resolveCurrentBiomassKgPerHa(r.getParcel(), r))
@@ -328,10 +330,12 @@ public class NdviRecommendationService {
     private double resolveCurrentBiomassKgPerHa(Parcel parcel, NdviRecord record) {
         if (record == null) return 0.0;
 
-        Optional<BiomassCalibrationModel> calibModel = biomassModelRepository.findByParcelId(parcel.getId());
-        if (calibModel.isPresent() && calibModel.get().getCoefficientA() != null && record.getMeanNdvi() != null) {
-            double biomass = Math.max(0.0, calibModel.get().getCoefficientA() * record.getMeanNdvi());
-            return Math.round(biomass * 100.0) / 100.0;
+        if (parcel != null) {
+            Optional<BiomassCalibrationModel> calibModel = biomassModelRepository.findByParcelId(parcel.getId());
+            if (calibModel.isPresent() && calibModel.get().getCoefficientA() != null && record.getMeanNdvi() != null) {
+                double biomass = Math.max(0.0, calibModel.get().getCoefficientA() * record.getMeanNdvi());
+                return Math.round(biomass * 100.0) / 100.0;
+            }
         }
 
         if (record.getBiomassKgPerHa() != null) {
@@ -375,15 +379,20 @@ public class NdviRecommendationService {
    }
 
     private double calculateTrend(List<NdviRecord> history) {
-        if (history.size() < 2) return 0;
+        // Only consider records with a non-null NDVI
+        List<Double> values = history.stream()
+                .map(NdviRecord::getMeanNdvi)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toList());
+        if (values.size() < 2) return 0;
 
         // Simple linear regression on NDVI over time
-        int n = history.size();
+        int n = values.size();
         double sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
         for (int i = 0; i < n; i++) {
             sumX += i;
-            sumY += history.get(i).getMeanNdvi();
-            sumXY += i * history.get(i).getMeanNdvi();
+            sumY += values.get(i);
+            sumXY += i * values.get(i);
             sumX2 += i * i;
         }
         double denom = n * sumX2 - sumX * sumX;

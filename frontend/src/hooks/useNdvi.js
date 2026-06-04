@@ -41,22 +41,23 @@ export function useNdvi(terrainId) {
   const reload = useCallback(async () => {
     if (!terrainId) return
     setLoading(true)
-    try {
-      const [dash, comp, recs, hist] = await Promise.all([
-        ndviApi.getDashboard(terrainId),
-        ndviApi.getComparison(terrainId),
-        ndviApi.getRecommendations(terrainId),
-        ndviApi.getRotationHistory(terrainId),
-      ])
-      setDashboard(dash)
-      setComparison(comp)
-      setRecommendations(recs)
-      setHistory(hist)
-    } catch {
+    // allSettled so that one failing endpoint doesn't blank the whole panel.
+    const [dash, comp, recs, hist] = await Promise.allSettled([
+      ndviApi.getDashboard(terrainId),
+      ndviApi.getComparison(terrainId),
+      ndviApi.getRecommendations(terrainId),
+      ndviApi.getRotationHistory(terrainId),
+    ])
+    if (dash.status === 'fulfilled') {
+      setDashboard(dash.value)
+    } else {
+      setDashboard(null)
       toast.error('Error cargando dashboard NDVI')
-    } finally {
-      setLoading(false)
     }
+    setComparison(comp.status === 'fulfilled' ? comp.value : [])
+    setRecommendations(recs.status === 'fulfilled' ? recs.value : [])
+    setHistory(hist.status === 'fulfilled' ? hist.value : [])
+    setLoading(false)
   }, [terrainId])
 
   useEffect(() => {
