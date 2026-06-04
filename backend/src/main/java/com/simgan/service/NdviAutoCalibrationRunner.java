@@ -238,8 +238,24 @@ public class NdviAutoCalibrationRunner {
         Terrain terrain = terrainRepository.findById(terrainId).orElseThrow();
         LocalDate today = LocalDate.now();
 
-        upsertCalibration(terrain, "OPTIM", p75, today, scenesProcessed);
-        upsertCalibration(terrain, "ALERT", p25, today, scenesProcessed);
+        // Escena de referencia para la calibración de biomasa: la más reciente
+        // procesada (records viene ordenado ascendente por fecha de captura). Sin
+        // ella, la calibración de biomasa no puede calcular NDVI en los puntos.
+        String referenceSceneId = null;
+        LocalDate referenceDate = null;
+        Double referenceCloud = null;
+        for (NdviTerrainRecord r : records) {
+            if (r.getSceneId() != null && !r.getSceneId().isBlank()) {
+                referenceSceneId = r.getSceneId();
+                referenceDate = r.getCaptureDate();
+                referenceCloud = r.getCloudCoverPercent();
+            }
+        }
+
+        upsertCalibration(terrain, "OPTIM", p75,
+                referenceDate != null ? referenceDate : today,
+                referenceSceneId, referenceCloud, scenesProcessed);
+        upsertCalibration(terrain, "ALERT", p25, today, null, null, scenesProcessed);
 
         job.setStatus(NdviCalibrationJob.Status.COMPLETED);
         job.setWeeksCompleted(weeksDone);
@@ -253,7 +269,8 @@ public class NdviAutoCalibrationRunner {
         emailAlertService.sendAutoCalibrationCompletedEmail(jobId);
     }
 
-    private void upsertCalibration(Terrain terrain, String type, double value, LocalDate date, int scenesProcessed) {
+    private void upsertCalibration(Terrain terrain, String type, double value, LocalDate date,
+                                   String sceneId, Double cloudCover, int scenesProcessed) {
         NdviCalibration row = calibrationRepository
                 .findByTerrainIdAndParcelIdIsNullAndCalibrationType(terrain.getId(), type)
                 .orElseGet(() -> NdviCalibration.builder()
@@ -263,8 +280,8 @@ public class NdviAutoCalibrationRunner {
         row.setReferenceNdvi(value);
         row.setCalibrationDate(date);
         row.setSource(SOURCE_AUTO);
-        row.setSceneId(null);
-        row.setCloudCoverPercent(null);
+        row.setSceneId(sceneId);
+        row.setCloudCoverPercent(cloudCover);
         row.setPixelCount(scenesProcessed);
         calibrationRepository.save(row);
     }

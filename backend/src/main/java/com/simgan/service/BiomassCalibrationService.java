@@ -22,6 +22,7 @@ public class BiomassCalibrationService {
     private final BiomassCalibrationModelRepository modelRepository;
     private final NdviRecordRepository ndviRecordRepository;
     private final NdviCalibrationRepository ndviCalibrationRepository;
+    private final NdviTerrainRecordRepository ndviTerrainRecordRepository;
     private final TerrainRepository terrainRepository;
     private final ParcelRepository parcelRepository;
     private final ImageProcessingClientService imageProcessingClient;
@@ -149,6 +150,18 @@ public class BiomassCalibrationService {
                     calibrationDate = cal.getCalibrationDate();
                     break;
                 }
+            }
+        }
+
+        // Fallback: la calibración automática deja la fila OPTIM sin sceneId (usa muchas
+        // escenas). En ese caso usamos la escena más reciente que procesó como referencia
+        // para calcular el NDVI en los puntos de muestreo.
+        if (sceneId == null && !optimCalibrations.isEmpty()) {
+            var latest = ndviTerrainRecordRepository
+                    .findFirstByTerrainIdAndSceneIdIsNotNullOrderByCaptureDateDesc(terrainId);
+            if (latest.isPresent()) {
+                sceneId = latest.get().getSceneId();
+                calibrationDate = latest.get().getCaptureDate();
             }
         }
 
