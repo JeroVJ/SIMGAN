@@ -13,7 +13,7 @@ export default function CalibrationAutoPage() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
-  const [months, setMonths] = useState(12)
+  const [months, setMonths] = useState(36)
   const pollRef = useRef(null)
 
   const fetchStatus = useCallback(async () => {
@@ -113,7 +113,7 @@ export default function CalibrationAutoPage() {
                 <option value={12}>Últimos 12 meses</option>
                 <option value={18}>Últimos 18 meses</option>
                 <option value={24}>Últimos 24 meses</option>
-                <option value={36}>Últimos 36 meses</option>
+                <option value={36}>Últimos 36 meses (recomendado)</option>
               </select>
             </div>
             <button
@@ -238,7 +238,7 @@ export default function CalibrationAutoPage() {
                 <option value={12}>Últimos 12 meses</option>
                 <option value={18}>Últimos 18 meses</option>
                 <option value={24}>Últimos 24 meses</option>
-                <option value={36}>Últimos 36 meses</option>
+                <option value={36}>Últimos 36 meses (recomendado)</option>
               </select>
             </div>
             <button
