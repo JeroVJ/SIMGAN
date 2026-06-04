@@ -82,11 +82,11 @@ export default function CalibrationAutoPage() {
           <span>›</span>
           <Link to={`/terrains/${terrainId}/parcels`}>Terreno</Link>
           <span>›</span>
-          <span>Calibración Automática (12 meses)</span>
+          <span>Calibración Automática</span>
         </div>
-        <h2>Calibración Automática NDVI — 12 meses</h2>
+        <h2>Calibración Automática NDVI</h2>
         <p>
-          Procesa una imagen Sentinel por semana del último año y deriva los umbrales óptimo (p75) y de
+          Procesa una imagen Sentinel por semana del rango que elijas y deriva los umbrales óptimo (p75) y de
           alerta (p25) automáticamente. Es una calibración a nivel de terreno: aplica a todos los potreros.
         </p>
       </div>
@@ -98,8 +98,9 @@ export default function CalibrationAutoPage() {
             <h3>Iniciar calibración</h3>
           </div>
           <p style={{ color: 'var(--color-text-secondary)', marginBottom: 16 }}>
-            El proceso descarga ~52 imágenes Sentinel-2 (una por semana) y calcula NDVI para todos los
-            potreros. Se ejecuta en segundo plano — puedes cerrar esta página y la calibración sigue corriendo.
+            El proceso descarga ~{Math.round(months * 4.345)} imágenes Sentinel-2 (una por semana, según el
+            rango elegido) y calcula NDVI para todos los potreros. Se ejecuta en segundo plano — puedes cerrar
+            esta página y la calibración sigue corriendo.
           </p>
           <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 16 }}>
             Tiempo estimado: 1–4 horas dependiendo de la disponibilidad de imágenes y tu conexión con Copernicus.

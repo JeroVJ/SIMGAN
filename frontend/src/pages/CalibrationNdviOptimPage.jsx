@@ -48,9 +48,9 @@ export default function CalibrationNdviOptimPage() {
           <button
             className="action-btn"
             onClick={() => navigate(`/terrains/${terrainId}/ndvi/calibration-auto`)}
-            title="Procesa una imagen por semana del último año y deriva los umbrales p25/p75 automáticamente"
+            title="Procesa una imagen por semana del rango que elijas y deriva los umbrales p25/p75 automáticamente"
           >
-            ⚡ Calibración Automática (12 meses)
+            ⚡ Calibración Automática
           </button>
         </div>
         <OperationProgress
