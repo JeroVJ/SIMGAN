@@ -26,4 +26,6 @@ public interface NdviCalibrationJobRepository extends JpaRepository<NdviCalibrat
             WHERE j.id = :id
             """)
     Optional<NdviCalibrationJob> findByIdWithFullGraph(@Param("id") Long id);
+
+    void deleteByTerrainId(Long terrainId);
 }

@@ -1,17 +1,40 @@
+import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   MapPin, Layers, LayoutGrid, Tractor, Beef, Plus,
-  Map, Users, Activity, Shuffle, ArrowRight,
+  Map, Users, Activity, Shuffle, ArrowRight, Trash2,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useFarm } from '../hooks'
+import { terrainApi } from '../services/api'
 import StatCard from '../components/StatCard'
 import Spinner from '../components/Spinner'
 import EmptyState from '../components/EmptyState'
+import ConfirmDialog from '../components/ConfirmDialog'
 
 export default function FarmDashboardPage() {
   const { farmId } = useParams()
   const navigate = useNavigate()
-  const { farm, terrains, terrainData, stats, loading } = useFarm(farmId)
+  const { farm, terrains, terrainData, stats, loading, reload } = useFarm(farmId)
+  const [confirm, setConfirm] = useState(null)
+
+  function handleDeleteTerrain(e, terrain) {
+    e.stopPropagation()
+    setConfirm({
+      title: 'Eliminar terreno',
+      message: `¿Eliminar "${terrain.name || `Terreno ${terrain.id}`}" con todos sus potreros, lotes, ganado, sensores e historial NDVI? Esta acción no se puede deshacer.`,
+      confirmLabel: 'Eliminar',
+      onConfirm: async () => {
+        try {
+          await terrainApi.delete(terrain.id)
+          toast.success('Terreno eliminado')
+          reload()
+        } catch (err) {
+          toast.error(err.response?.data?.message || 'Error eliminando terreno')
+        }
+      },
+    })
+  }
 
   if (loading) return <Spinner page label="Cargando finca..." />
   if (!farm) return null
@@ -179,6 +202,14 @@ export default function FarmDashboardPage() {
                     <span className="terrain-card__area">
                       {t.areaHectares?.toFixed(1)} ha
                     </span>
+                    <button
+                      className="comp-btn comp-btn--ghost comp-btn--sm comp-btn--icon-only"
+                      onClick={(e) => handleDeleteTerrain(e, t)}
+                      title="Eliminar terreno"
+                      aria-label="Eliminar terreno"
+                    >
+                      <Trash2 size={14} strokeWidth={1.9} />
+                    </button>
                   </div>
 
                   {data.parcels.length > 0 && (
@@ -275,6 +306,19 @@ export default function FarmDashboardPage() {
           </div>
         </>
       )}
+
+      <ConfirmDialog
+        open={!!confirm}
+        title={confirm?.title}
+        message={confirm?.message}
+        confirmLabel={confirm?.confirmLabel || 'Confirmar'}
+        variant="danger"
+        onConfirm={() => {
+          confirm?.onConfirm?.()
+          setConfirm(null)
+        }}
+        onCancel={() => setConfirm(null)}
+      />
     </div>
   )
 }

@@ -23,4 +23,6 @@ public interface NdviCalibrationRepository extends JpaRepository<NdviCalibration
     Optional<NdviCalibration> findByParcelIdAndCalibrationType(Long parcelId, String calibrationType);
 
     boolean existsByTerrainId(Long terrainId);
+
+    void deleteByTerrainId(Long terrainId);
 }

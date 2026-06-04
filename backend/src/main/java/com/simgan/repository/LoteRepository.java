@@ -13,4 +13,7 @@ public interface LoteRepository extends JpaRepository<Lote, Long> {
     List<Lote> findByTerrainIdAndFechaSalidaIsNullOrderByCreatedAtDesc(Long terrainId);
     List<Lote> findByCurrentParcelId(Long parcelId);
     List<Lote> findByFechaSalidaIsNull();
+
+    /** Carga y elimina los lotes del terreno (cascada a ganado e historial de parcelas). */
+    void deleteByTerrainId(Long terrainId);
 }

@@ -14,4 +14,6 @@ public interface BiomassCalibrationPointRepository extends JpaRepository<Biomass
     List<BiomassCalibrationPoint> findByTerrainId(Long terrainId);
 
     void deleteByParcelId(Long parcelId);
+
+    void deleteByTerrainId(Long terrainId);
 }

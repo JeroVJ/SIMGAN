@@ -21,4 +21,6 @@ public interface NdviTerrainRecordRepository extends JpaRepository<NdviTerrainRe
             Long terrainId, LocalDate start, LocalDate end);
 
     Optional<NdviTerrainRecord> findFirstByTerrainIdAndCaptureDate(Long terrainId, LocalDate captureDate);
+
+    void deleteByTerrainId(Long terrainId);
 }

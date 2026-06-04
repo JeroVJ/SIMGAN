@@ -2,6 +2,7 @@ package com.simgan.repository;
 
 import com.simgan.entity.NdviRecord;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -41,4 +42,8 @@ public interface NdviRecordRepository extends JpaRepository<NdviRecord, Long> {
     boolean existsByParcelIdAndCaptureDate(Long parcelId, LocalDate captureDate);
 
     long countByTerrainId(Long terrainId);
+
+    @Modifying
+    @Query("DELETE FROM NdviRecord n WHERE n.terrain.id = :terrainId OR n.parcel.terrain.id = :terrainId")
+    void deleteByTerrainOrParcelTerrainId(@Param("terrainId") Long terrainId);
 }

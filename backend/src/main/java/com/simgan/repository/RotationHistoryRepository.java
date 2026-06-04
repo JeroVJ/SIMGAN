@@ -12,4 +12,6 @@ public interface RotationHistoryRepository extends JpaRepository<RotationHistory
     List<RotationHistory> findByParcelIdOrderByChangedAtDesc(Long parcelId);
 
     List<RotationHistory> findByParcelTerrainIdOrderByChangedAtDesc(Long terrainId);
+
+    void deleteByParcelTerrainId(Long terrainId);
 }
