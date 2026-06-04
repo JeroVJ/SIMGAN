@@ -18,7 +18,7 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 })
 
-const MIN_POINTS = 7
+const MIN_POINTS = 4
 
 function extractRSquared(model) {
   if (!model) return null
