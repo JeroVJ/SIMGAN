@@ -47,11 +47,17 @@ WHERE name='P1' AND terrain_id IN (SELECT id FROM terrains WHERE farm_id=15);
 DELETE FROM ndvi_records WHERE capture_date >= CURRENT_DATE
   AND parcel_id IN (SELECT id FROM parcels WHERE name='P1' AND terrain_id IN (SELECT id FROM terrains WHERE farm_id=15));
 
-INSERT INTO ndvi_records (parcel_id, terrain_id, capture_date, mean_ndvi, source, created_at)
-SELECT id, terrain_id, CURRENT_DATE, 0.12, 'MANUAL', NOW()
+INSERT INTO ndvi_records
+  (parcel_id, terrain_id, capture_date, mean_ndvi, min_ndvi, max_ndvi, median_ndvi,
+   vegetation_cover_percent, biomass_kg_per_ha, source, created_at)
+SELECT id, terrain_id, CURRENT_DATE, 0.12, 0.05, 0.20, 0.12,
+   16, GREATEST(0, (0.12 - 0.1) * 12000), 'MANUAL', NOW()
 FROM parcels WHERE name='P1' AND terrain_id IN (SELECT id FROM terrains WHERE farm_id=15);
 ```
 → Recomienda **P1 → En Descanso**, urgencia **URGENTE** *(NDVI 0.12 < 0.15)*.
+
+> ⚠️ Llena `min_ndvi`/`max_ndvi`/etc. (no solo `mean_ndvi`). Insertar un registro con
+> esas columnas en null ya **no** tumba el panel de NDVI, pero deja la demo más completa.
 
 ### 🟠 Meter NDVI BAJO — urgencia ALTA
 Igual que el anterior pero cambia `0.12` por **`0.25`** *(entre 0.15 y el umbral 0.39)* → urgencia **ALTA**.
@@ -64,8 +70,11 @@ WHERE name='P1' AND terrain_id IN (SELECT id FROM terrains WHERE farm_id=15);
 DELETE FROM ndvi_records WHERE capture_date >= CURRENT_DATE
   AND parcel_id IN (SELECT id FROM parcels WHERE name='P1' AND terrain_id IN (SELECT id FROM terrains WHERE farm_id=15));
 
-INSERT INTO ndvi_records (parcel_id, terrain_id, capture_date, mean_ndvi, source, created_at)
-SELECT id, terrain_id, CURRENT_DATE, 0.55, 'MANUAL', NOW()
+INSERT INTO ndvi_records
+  (parcel_id, terrain_id, capture_date, mean_ndvi, min_ndvi, max_ndvi, median_ndvi,
+   vegetation_cover_percent, biomass_kg_per_ha, source, created_at)
+SELECT id, terrain_id, CURRENT_DATE, 0.55, 0.45, 0.68, 0.55,
+   72, GREATEST(0, (0.55 - 0.1) * 12000), 'MANUAL', NOW()
 FROM parcels WHERE name='P1' AND terrain_id IN (SELECT id FROM terrains WHERE farm_id=15);
 ```
 → Recomienda **P1 → Disponible**, urgencia MEDIA *(pasto recuperado, NDVI 0.55 ≥ 0.45)*.
