@@ -35,6 +35,7 @@ public class AnalysisOrchestrator {
     private final BiomassCalibrationModelRepository biomassModelRepository;
     private final NdviCalibrationRepository ndviCalibrationRepository;
     private final AlertRepository alertRepository;
+    private final RotationHistoryRepository rotationHistoryRepository;
     private final EmailAlertService emailAlertService;
 
     @Value("${ndvi.alert.threshold:0.1}")
@@ -425,17 +426,35 @@ public class AnalysisOrchestrator {
 
             } else if (record.getParcel().getStatus() == Parcel.ParcelStatus.EN_DESCANSO) {
                 // Recovery: a resting parcel whose NDVI climbed back to optimal is
-                // ready for grazing again — notify the owner.
+                // ready for grazing again — pass it to DISPONIBLE automatically and
+                // notify the owner.
                 double optimalThreshold = resolveOptimalThreshold(record.getParcel().getId(), terrainId);
                 if (record.getMeanNdvi() >= optimalThreshold) {
-                    if (existsAlertTypeToday(record.getParcel().getId(), Alert.AlertType.POTRERO_RECUPERADO)) {
+                    // Auto-transition EN_DESCANSO → DISPONIBLE and log the change.
+                    Parcel recoveredParcel = record.getParcel();
+                    Parcel.ParcelStatus previousStatus = recoveredParcel.getStatus();
+                    recoveredParcel.setStatus(Parcel.ParcelStatus.DISPONIBLE);
+                    parcelRepository.save(recoveredParcel);
+
+                    rotationHistoryRepository.save(RotationHistory.builder()
+                            .parcel(recoveredParcel)
+                            .previousStatus(previousStatus)
+                            .newStatus(Parcel.ParcelStatus.DISPONIBLE)
+                            .ndviAtChange(record.getMeanNdvi())
+                            .biomassAtChange(record.getBiomassKgPerHa())
+                            .note(String.format(
+                                    "Recuperación automática: NDVI %.2f ≥ óptimo %.2f.",
+                                    record.getMeanNdvi(), optimalThreshold))
+                            .build());
+
+                    if (existsAlertTypeToday(recoveredParcel.getId(), Alert.AlertType.POTRERO_RECUPERADO)) {
                         continue;
                     }
                     Alert savedAlert = alertRepository.save(Alert.builder()
-                            .parcel(record.getParcel())
+                            .parcel(recoveredParcel)
                             .alertType(Alert.AlertType.POTRERO_RECUPERADO)
                             .message(String.format(
-                                    "El potrero se recuperó (NDVI %.2f ≥ óptimo %.2f). Ya está listo para volver a pastoreo.",
+                                    "El potrero se recuperó (NDVI %.2f ≥ óptimo %.2f). Pasó automáticamente a DISPONIBLE y está listo para volver a pastoreo.",
                                     record.getMeanNdvi(), optimalThreshold))
                             .build());
                     emailAlertService.sendAlertEmail(savedAlert);
